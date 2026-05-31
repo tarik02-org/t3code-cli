@@ -1,3 +1,4 @@
+import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 
@@ -10,6 +11,7 @@ import { waitForShellSequence } from "./shell-sequence.ts";
 
 export const makeProjectApplication = Effect.fn("makeProjectApplication")(function* () {
   const orchestration = yield* T3Orchestration;
+  const crypto = yield* Crypto.Crypto;
   const path = yield* Path.Path;
   const environment = yield* Environment;
   const loadShell = Effect.fn("T3ApplicationLive.loadShell")(function* () {
@@ -19,7 +21,11 @@ export const makeProjectApplication = Effect.fn("makeProjectApplication")(functi
     readonly path: string;
     readonly title?: string;
   }) {
-    const command = makeProjectCreateCommand(projectInput, path, environment.cwd);
+    const command = yield* makeProjectCreateCommand(projectInput).pipe(
+      Effect.provideService(Path.Path, path),
+      Effect.provideService(Crypto.Crypto, crypto),
+      Effect.provideService(Environment, environment),
+    );
     const dispatch = yield* orchestration.dispatch(command);
     const snapshot = yield* waitForShellSequence({
       orchestration,

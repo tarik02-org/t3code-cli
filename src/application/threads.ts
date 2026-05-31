@@ -1,3 +1,4 @@
+import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 
@@ -19,6 +20,7 @@ import { waitForShellSequence } from "./shell-sequence.ts";
 
 export const makeThreadApplication = Effect.fn("makeThreadApplication")(function* () {
   const orchestration = yield* T3Orchestration;
+  const crypto = yield* Crypto.Crypto;
   const path = yield* Path.Path;
   const environment = yield* Environment;
   const listThreads = Effect.fn("T3ApplicationLive.listThreads")(function* (projectRef: string) {
@@ -35,7 +37,10 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     return yield* orchestration.getThreadSnapshot(threadId);
   });
   const archiveThread = Effect.fn("T3ApplicationLive.archiveThread")(function* (threadId: string) {
-    return yield* orchestration.dispatch(makeThreadArchiveCommand(threadId));
+    const command = yield* makeThreadArchiveCommand(threadId).pipe(
+      Effect.provideService(Crypto.Crypto, crypto),
+    );
+    return yield* orchestration.dispatch(command);
   });
   const startThread = Effect.fn("T3ApplicationLive.startThread")(function* (
     startInput: StartThreadInput,
@@ -50,7 +55,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
       start: startInput,
       project,
       serverConfig,
-    });
+    }).pipe(Effect.provideService(Crypto.Crypto, crypto));
     const dispatch = yield* orchestration.dispatch(command);
     const threadId = command.threadId;
     const until = policy?.until ?? "dispatch";
@@ -86,7 +91,9 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
       readonly until: "dispatch" | "visible" | "complete";
     },
   ) {
-    const command = makeThreadTurnContinueCommand(input);
+    const command = yield* makeThreadTurnContinueCommand(input).pipe(
+      Effect.provideService(Crypto.Crypto, crypto),
+    );
     const dispatch = yield* orchestration.dispatch(command);
     const until = policy?.until ?? "dispatch";
     if (until === "dispatch") {

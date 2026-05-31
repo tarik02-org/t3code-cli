@@ -10,13 +10,17 @@ export const makeT3Input = Effect.fn("makeT3Input")(function* () {
   const stdio = yield* Stdio.Stdio;
 
   const readStdin = Effect.fn("T3InputLive.readStdin")(function* () {
-    const chunks = yield* Stream.runCollect(stdio.stdin).pipe(
+    return yield* stdio.stdin.pipe(
+      Stream.decodeText(),
+      Stream.runFold(
+        () => "",
+        (acc, chunk) => acc + chunk,
+      ),
       Effect.catchTags({
         PlatformError: (error) =>
           Effect.fail(new InputError({ message: "failed to read stdin", cause: error })),
       }),
     );
-    return Buffer.concat([...chunks]).toString("utf8");
   });
 
   return {
