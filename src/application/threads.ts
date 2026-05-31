@@ -15,6 +15,7 @@ import {
   waitForThread as waitForThreadUntilComplete,
   watchThread as watchThreadEvents,
 } from "./thread-wait.ts";
+import { waitForShellSequence } from "./shell-sequence.ts";
 
 export const makeThreadApplication = Effect.fn("makeThreadApplication")(function* () {
   const orchestration = yield* T3Orchestration;
@@ -56,6 +57,10 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     if (until === "dispatch") {
       return { dispatch, project, threadId };
     }
+    yield* waitForShellSequence({
+      orchestration,
+      sequence: dispatch.sequence,
+    });
     if (until === "visible") {
       const thread = yield* Effect.scoped(
         Effect.gen(function* () {
@@ -87,6 +92,10 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     if (until === "dispatch") {
       return { dispatch, threadId: input.threadId };
     }
+    yield* waitForShellSequence({
+      orchestration,
+      sequence: dispatch.sequence,
+    });
     if (until === "visible") {
       const thread = yield* Effect.scoped(
         Effect.gen(function* () {

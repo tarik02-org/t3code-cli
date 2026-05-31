@@ -123,10 +123,39 @@ export const ServerConfigSchema = Schema.Struct({
 });
 export type ServerConfig = typeof ServerConfigSchema.Type;
 
-export const ThreadEventSchema = Schema.Struct({
+export const ThreadMessageSentEventSchema = Schema.Struct({
+  type: Schema.Literal("thread.message-sent"),
+  payload: Schema.Struct({
+    messageId: Schema.String,
+    role: Schema.Literals(["user", "assistant", "system"]),
+    text: Schema.String,
+    turnId: Schema.NullOr(Schema.String),
+    streaming: Schema.optionalKey(Schema.Boolean),
+    createdAt: Schema.String,
+    updatedAt: Schema.String,
+  }),
+});
+export type ThreadMessageSentEvent = typeof ThreadMessageSentEventSchema.Type;
+
+export const ThreadSessionSetEventSchema = Schema.Struct({
+  type: Schema.Literal("thread.session-set"),
+  payload: Schema.Struct({
+    session: Schema.NullOr(ThreadSessionSchema),
+  }),
+});
+export type ThreadSessionSetEvent = typeof ThreadSessionSetEventSchema.Type;
+
+export const UnknownThreadEventSchema = Schema.Struct({
   type: Schema.String,
   payload: Schema.Record(Schema.String, Schema.Unknown),
 });
+export type UnknownThreadEvent = typeof UnknownThreadEventSchema.Type;
+
+export const ThreadEventSchema = Schema.Union([
+  ThreadMessageSentEventSchema,
+  ThreadSessionSetEventSchema,
+  UnknownThreadEventSchema,
+]);
 export type ThreadEvent = typeof ThreadEventSchema.Type;
 
 export const decodeModelSelection = Schema.decodeUnknownSync(ModelSelectionSchema);

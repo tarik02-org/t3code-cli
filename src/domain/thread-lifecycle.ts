@@ -6,9 +6,12 @@ import {
   type ThreadMessage,
   type ThreadShell,
   ThreadMessageSchema,
-  ThreadSessionSchema,
+  ThreadMessageSentEventSchema,
+  ThreadSessionSetEventSchema,
 } from "./schema.ts";
-import { ThreadEventError } from "./error.ts";
+
+const isThreadMessageSentEvent = Schema.is(ThreadMessageSentEventSchema);
+const isThreadSessionSetEvent = Schema.is(ThreadSessionSetEventSchema);
 
 export function isThreadActive(thread: ThreadShell | ThreadDetail) {
   return (
@@ -51,12 +54,10 @@ export function applyThreadEvent(
     messages.set(messageKey(message), message);
     return { ...current, messages: [...messages.values()] };
   }
-  if (event.type === "thread.session-set") {
+  if (isThreadSessionSetEvent(event)) {
     return {
       ...current,
-      session: Schema.decodeUnknownSync(Schema.NullOr(ThreadSessionSchema))(
-        event.payload["session"],
-      ),
+      session: event.payload.session,
     };
   }
   return current;
@@ -66,21 +67,21 @@ export function messageFromEvent(
   event: ThreadEvent,
   existingMessages: Map<string, ThreadMessage> = new Map(),
 ): ThreadMessage | null {
-  if (event.type !== "thread.message-sent") {
+  if (!isThreadMessageSentEvent(event)) {
     return null;
   }
   const payload = event.payload;
-  const id = payloadString(payload["messageId"]);
+  const id = payload.messageId;
   const previous = existingMessages.get(id);
-  const text = payloadString(payload["text"]);
+  const text = payload.text;
   return Schema.decodeUnknownSync(ThreadMessageSchema)({
     id,
-    role: payload["role"],
+    role: payload.role,
     text: text.length > 0 || previous === undefined ? text : previous.text,
-    turnId: payload["turnId"] === null ? null : payloadString(payload["turnId"]),
-    streaming: payload["streaming"],
-    createdAt: payloadString(payload["createdAt"]),
-    updatedAt: payloadString(payload["updatedAt"]),
+    turnId: payload.turnId,
+    ...(payload.streaming !== undefined ? { streaming: payload.streaming } : {}),
+    createdAt: payload.createdAt,
+    updatedAt: payload.updatedAt,
   });
 }
 
@@ -93,11 +94,4 @@ function isPendingStart(thread: ThreadShell | ThreadDetail) {
     return false;
   }
   return thread.messages.at(-1)?.role === "user";
-}
-
-function payloadString(value: unknown) {
-  if (typeof value !== "string") {
-    throw new ThreadEventError({ message: "invalid thread message event" });
-  }
-  return value;
 }

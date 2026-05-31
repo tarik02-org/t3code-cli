@@ -6,6 +6,7 @@ import { T3Orchestration } from "../orchestration/service.ts";
 import { ProjectCreateVisibilityError } from "../domain/error.ts";
 import { findProjectById } from "../domain/helpers.ts";
 import { makeProjectCreateCommand } from "./project-commands.ts";
+import { waitForShellSequence } from "./shell-sequence.ts";
 
 export const makeProjectApplication = Effect.fn("makeProjectApplication")(function* () {
   const orchestration = yield* T3Orchestration;
@@ -20,7 +21,10 @@ export const makeProjectApplication = Effect.fn("makeProjectApplication")(functi
   }) {
     const command = makeProjectCreateCommand(projectInput, path, environment.cwd);
     const dispatch = yield* orchestration.dispatch(command);
-    const snapshot = yield* loadShell();
+    const snapshot = yield* waitForShellSequence({
+      orchestration,
+      sequence: dispatch.sequence,
+    });
     const project = findProjectById(snapshot, command.projectId);
     if (project === null) {
       return yield* Effect.fail(
