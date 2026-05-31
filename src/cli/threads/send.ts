@@ -3,11 +3,16 @@ import * as Option from "effect/Option";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
 import { readInitialMessage } from "../message-input.ts";
-import { formatWaitDoneHuman } from "../thread-format.ts";
-import { printWaitEventsNdjson } from "../wait-events.ts";
 import { T3Application } from "../../application/service.ts";
+import { Environment } from "../../environment/service.ts";
 import { T3Input } from "../input/service.ts";
+import {
+  canRenderLiveTerminal,
+  humanJsonNdjsonFormatChoices,
+  resolveOutputFormat,
+} from "../output-format.ts";
 import { T3Output } from "../output/service.ts";
+import { printWaitEventsHuman, printWaitEventsNdjson } from "../wait-events.ts";
 
 export const sendThreadCommand = Command.make(
   "send",
@@ -16,9 +21,7 @@ export const sendThreadCommand = Command.make(
     message: Argument.string("message").pipe(Argument.optional),
     stdin: Flag.boolean("stdin"),
     wait: Flag.boolean("wait"),
-    format: Flag.choice("format", ["human", "json", "ndjson"] as const).pipe(
-      Flag.withDefault("human"),
-    ),
+    format: Flag.choice("format", humanJsonNdjsonFormatChoices).pipe(Flag.withDefault("auto")),
   },
   ({ thread, message, stdin, wait, format }) =>
     Effect.gen(function* () {
@@ -29,9 +32,11 @@ export const sendThreadCommand = Command.make(
         readStdin: inputService.readStdin,
       });
       const application = yield* T3Application;
+      const environment = yield* Environment;
       const output = yield* T3Output;
+      const resolvedFormat = resolveOutputFormat(format, environment, wait ? "ndjson" : "json");
 
-      if (format === "ndjson") {
+      if (resolvedFormat === "ndjson") {
         const sent = yield* application.sendThread(
           { message: text, threadId: thread },
           { until: wait ? "dispatch" : "visible" },
@@ -48,9 +53,19 @@ export const sendThreadCommand = Command.make(
           { message: text, threadId: thread },
           { until: "dispatch" },
         );
-        yield* output.printInfo(`waiting for ${sent.threadId}...`);
-        const finalThread = yield* application.waitForThread(sent.threadId);
-        yield* output.writeStdout(formatWaitDoneHuman(finalThread));
+        if (resolvedFormat === "json") {
+          const finalThread = yield* application.waitForThread(sent.threadId);
+          yield* output.printJson({
+            dispatch: sent.dispatch,
+            threadId: sent.threadId,
+            thread: finalThread,
+          });
+          return;
+        }
+        yield* printWaitEventsHuman(output, application.watchThread(sent.threadId), {
+          threadId: sent.threadId,
+          live: canRenderLiveTerminal(environment),
+        });
         return;
       }
 
@@ -58,7 +73,7 @@ export const sendThreadCommand = Command.make(
         { message: text, threadId: thread },
         { until: "visible" },
       );
-      if (format === "json") {
+      if (resolvedFormat === "json") {
         yield* output.printJson(result);
       } else {
         yield* output.printInfo(`message sent: ${result.threadId}`);

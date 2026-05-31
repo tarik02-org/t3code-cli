@@ -33,8 +33,9 @@ export const makeT3RpcLayer = Effect.fn("makeT3RpcLayer")(function* () {
     const scope = yield* Scope.fork(parentScope);
     return yield* Effect.gen(function* () {
       const url = yield* makeWsUrl({ auth, config });
+      const protocol = yield* Layer.buildWithScope(makeProtocolLayer(url), scope);
       const client = yield* makeClient.pipe(
-        Effect.provide(makeProtocolLayer(url)),
+        Effect.provide(protocol),
         Effect.provideService(Scope.Scope, scope),
       );
       return { scope, client } satisfies Connection;

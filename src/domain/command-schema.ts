@@ -17,6 +17,21 @@ export const ProjectCreateCommandSchema = Schema.Struct({
 });
 export type ProjectCreateCommand = typeof ProjectCreateCommandSchema.Type;
 
+export const ThreadCreateCommandSchema = Schema.Struct({
+  type: Schema.Literal("thread.create"),
+  commandId: Schema.String,
+  threadId: Schema.String,
+  projectId: Schema.String,
+  title: Schema.String,
+  modelSelection: ModelSelectionSchema,
+  runtimeMode: Schema.Literal("full-access"),
+  interactionMode: Schema.Literal("default"),
+  branch: Schema.Null,
+  worktreePath: Schema.NullOr(Schema.String),
+  createdAt: Schema.String,
+});
+export type ThreadCreateCommand = typeof ThreadCreateCommandSchema.Type;
+
 export const ThreadTurnStartCommandSchema = Schema.Struct({
   type: Schema.Literal("thread.turn.start"),
   commandId: Schema.String,
@@ -61,6 +76,7 @@ export type ThreadArchiveCommand = typeof ThreadArchiveCommandSchema.Type;
 export const ClientOrchestrationCommandSchema = Schema.Union([
   ProjectCreateCommandSchema,
   ThreadArchiveCommandSchema,
+  ThreadCreateCommandSchema,
   ThreadTurnStartCommandSchema,
 ]);
 export type ClientOrchestrationCommand = typeof ClientOrchestrationCommandSchema.Type;

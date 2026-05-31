@@ -9,8 +9,8 @@ import { resolveProject } from "../domain/helpers.ts";
 import { type StartThreadInput } from "./service.ts";
 import {
   makeThreadArchiveCommand,
+  makeThreadStartCommands,
   makeThreadTurnContinueCommand,
-  makeThreadTurnStartCommand,
 } from "./thread-commands.ts";
 import {
   waitForThread as waitForThreadUntilComplete,
@@ -51,13 +51,18 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     const snapshot = yield* orchestration.getShellSnapshot();
     const project = resolveProject(snapshot, startInput.projectRef, path, environment.cwd);
     const serverConfig = yield* orchestration.getServerConfig();
-    const command = yield* makeThreadTurnStartCommand({
+    const commands = yield* makeThreadStartCommands({
       start: startInput,
       project,
       serverConfig,
     }).pipe(Effect.provideService(Crypto.Crypto, crypto));
-    const dispatch = yield* orchestration.dispatch(command);
-    const threadId = command.threadId;
+    const createDispatch = yield* orchestration.dispatch(commands.createCommand);
+    yield* waitForShellSequence({
+      orchestration,
+      sequence: createDispatch.sequence,
+    });
+    const dispatch = yield* orchestration.dispatch(commands.turnCommand);
+    const threadId = commands.threadId;
     const until = policy?.until ?? "dispatch";
     if (until === "dispatch") {
       return { dispatch, project, threadId };

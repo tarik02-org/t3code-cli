@@ -10,6 +10,12 @@ export function resolveModelSelection(input: {
   readonly serverConfig: ServerConfig;
 }) {
   return Effect.gen(function* () {
+    if (input.start.provider !== undefined && input.start.model !== undefined) {
+      return decodeModelSelection({
+        instanceId: input.start.provider,
+        model: input.start.model,
+      });
+    }
     if (input.start.provider !== undefined || input.start.model !== undefined) {
       const base =
         input.project.defaultModelSelection ?? (yield* firstAvailableModel(input.serverConfig));

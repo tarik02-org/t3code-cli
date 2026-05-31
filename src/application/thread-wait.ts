@@ -45,30 +45,10 @@ export function watchThread(input: {
         let current: ThreadDetail = opened.snapshot;
         return Stream.concat(
           Stream.fromIterable(initialEvents),
-          Stream.merge(
-            opened.events.pipe(Stream.map((event) => ({ type: "event" as const, event }))),
-            Stream.tick("5 seconds").pipe(
-              Stream.mapEffect(() => input.orchestration.getThreadSnapshot(input.threadId)),
-              Stream.map((thread) => ({ type: "snapshot" as const, thread })),
-            ),
-          ).pipe(
-            Stream.flatMap((item) => {
-              if (item.type === "snapshot") {
-                current = item.thread;
-                for (const message of current.messages) {
-                  messages.set(messageKey(message), message);
-                }
-                const events: Array<WaitEvent> = [
-                  { type: "thread", thread: current },
-                  { type: "status", status: threadStatus(current), threadId: current.id },
-                ];
-                if (!isThreadActive(current) && isThreadCompleteEnough(current)) {
-                  events.push({ type: "done", thread: current });
-                }
-                return Stream.fromIterable(events);
-              }
-              current = applyThreadEvent(current, item.event, messages);
-              const message = messageFromEvent(item.event, messages);
+          opened.events.pipe(
+            Stream.flatMap((event) => {
+              current = applyThreadEvent(current, event, messages);
+              const message = messageFromEvent(event, messages);
               const events: Array<WaitEvent> =
                 message !== null ? [{ type: "message", message }] : [];
               events.push({ type: "status", status: threadStatus(current), threadId: current.id });

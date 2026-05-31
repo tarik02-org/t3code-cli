@@ -6,10 +6,12 @@ import {
   DispatchResultSchema,
 } from "../domain/command-schema.ts";
 import {
+  ProjectShellSchema,
   ServerConfigSchema,
   ShellSnapshotSchema,
   ThreadDetailSchema,
   ThreadEventSchema,
+  ThreadShellSchema,
 } from "../domain/schema.ts";
 import { RpcError } from "../rpc/error.ts";
 
@@ -41,8 +43,24 @@ export const ShellStreamItemSchema = Schema.Union([
     snapshot: ShellSnapshotSchema,
   }),
   Schema.Struct({
-    kind: Schema.Literal("event"),
-    event: Schema.Unknown,
+    kind: Schema.Literal("project-upserted"),
+    sequence: Schema.Number,
+    project: ProjectShellSchema,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("project-removed"),
+    sequence: Schema.Number,
+    projectId: Schema.String,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("thread-upserted"),
+    sequence: Schema.Number,
+    thread: ThreadShellSchema,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("thread-removed"),
+    sequence: Schema.Number,
+    threadId: Schema.String,
   }),
 ]);
 export type ShellStreamItem = typeof ShellStreamItemSchema.Type;

@@ -21,6 +21,7 @@ export type Orchestration = {
   readonly getServerConfig: () => Effect.Effect<ServerConfig, OrchestrationError>;
   readonly getShellSnapshot: () => Effect.Effect<ShellSnapshot, OrchestrationError>;
   readonly getThreadSnapshot: (threadId: string) => Effect.Effect<ThreadDetail, OrchestrationError>;
+  readonly watchShellSequence: () => Stream.Stream<number, OrchestrationError, Scope.Scope>;
   readonly openThread: (
     threadId: string,
   ) => Effect.Effect<OpenThread, OrchestrationError, Scope.Scope>;

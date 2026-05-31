@@ -4,11 +4,17 @@ import * as Stream from "effect/Stream";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
 import { readInitialMessage } from "../message-input.ts";
-import { formatThreadStartedHuman, formatWaitDoneHuman } from "../thread-format.ts";
-import { printWaitEventsNdjson } from "../wait-events.ts";
+import { formatThreadStartedHuman } from "../thread-format.ts";
 import { T3Application } from "../../application/service.ts";
+import { Environment } from "../../environment/service.ts";
 import { T3Input } from "../input/service.ts";
+import {
+  canRenderLiveTerminal,
+  humanJsonNdjsonFormatChoices,
+  resolveOutputFormat,
+} from "../output-format.ts";
 import { T3Output } from "../output/service.ts";
+import { printWaitEventsHuman, printWaitEventsNdjson } from "../wait-events.ts";
 
 export const startThreadCommand = Command.make(
   "start",
@@ -21,9 +27,7 @@ export const startThreadCommand = Command.make(
     provider: Flag.string("provider").pipe(Flag.optional),
     model: Flag.string("model").pipe(Flag.optional),
     wait: Flag.boolean("wait"),
-    format: Flag.choice("format", ["human", "json", "ndjson"] as const).pipe(
-      Flag.withDefault("human"),
-    ),
+    format: Flag.choice("format", humanJsonNdjsonFormatChoices).pipe(Flag.withDefault("auto")),
   },
   ({ project, message, stdin, title, worktree, provider, model, wait, format }) =>
     Effect.gen(function* () {
@@ -50,9 +54,11 @@ export const startThreadCommand = Command.make(
         ...(modelValue !== undefined && modelValue.length > 0 ? { model: modelValue } : {}),
       };
       const application = yield* T3Application;
+      const environment = yield* Environment;
       const output = yield* T3Output;
+      const resolvedFormat = resolveOutputFormat(format, environment, wait ? "ndjson" : "json");
 
-      if (format === "ndjson") {
+      if (resolvedFormat === "ndjson") {
         const started = yield* application.startThread(input, {
           until: wait ? "dispatch" : "visible",
         });
@@ -70,14 +76,24 @@ export const startThreadCommand = Command.make(
 
       if (wait) {
         const started = yield* application.startThread(input, { until: "dispatch" });
-        yield* output.printInfo(`waiting for ${started.threadId}...`);
-        const thread = yield* application.waitForThread(started.threadId);
-        yield* output.writeStdout(formatWaitDoneHuman(thread));
+        if (resolvedFormat === "json") {
+          const thread = yield* application.waitForThread(started.threadId);
+          yield* output.printJson({
+            dispatch: started.dispatch,
+            threadId: started.threadId,
+            thread,
+          });
+          return;
+        }
+        yield* printWaitEventsHuman(output, application.watchThread(started.threadId), {
+          threadId: started.threadId,
+          live: canRenderLiveTerminal(environment),
+        });
         return;
       }
 
       const result = yield* application.startThread(input, { until: "visible" });
-      if (format === "json") {
+      if (resolvedFormat === "json") {
         yield* output.printJson(result);
       } else {
         yield* output.printInfo(
