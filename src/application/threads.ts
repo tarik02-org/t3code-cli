@@ -1,32 +1,45 @@
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 
 import { Environment } from "../environment/service.ts";
-import { ProjectCreateVisibilityError, ThreadSessionError } from "./error.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
+import { ThreadSessionError } from "../domain/error.ts";
+import { resolveProject } from "../domain/helpers.ts";
+import { type StartThreadInput } from "./service.ts";
 import {
-  makeProjectCreateCommand,
   makeThreadArchiveCommand,
   makeThreadTurnContinueCommand,
   makeThreadTurnStartCommand,
-} from "./commands.ts";
-import { findProjectById, resolveProject } from "./helpers.ts";
-import { type StartThreadInput, T3Domain, type WaitEvent } from "./service.ts";
-import { waitForThread as waitForThreadUntilComplete } from "./thread-wait.ts";
+} from "./thread-commands.ts";
+import {
+  waitForThread as waitForThreadUntilComplete,
+  watchThread as watchThreadEvents,
+} from "./thread-wait.ts";
 
-export const makeT3Domain = Effect.fn("makeT3Domain")(function* () {
+export const makeThreadApplication = Effect.fn("makeThreadApplication")(function* () {
   const orchestration = yield* T3Orchestration;
   const path = yield* Path.Path;
   const environment = yield* Environment;
-  const loadShell = Effect.fn("T3DomainLive.loadShell")(function* () {
-    return yield* orchestration.getShellSnapshot();
+  const listThreads = Effect.fn("T3ApplicationLive.listThreads")(function* (projectRef: string) {
+    const snapshot = yield* orchestration.getShellSnapshot();
+    const project = resolveProject(snapshot, projectRef, path, environment.cwd);
+    return {
+      project,
+      threads: snapshot.threads.filter((thread) => thread.projectId === project.id),
+    };
   });
-  const startThread = Effect.fn("T3DomainLive.startThread")(function* <E = never, R = never>(
+  const getThreadMessages = Effect.fn("T3ApplicationLive.getThreadMessages")(function* (
+    threadId: string,
+  ) {
+    return yield* orchestration.getThreadSnapshot(threadId);
+  });
+  const archiveThread = Effect.fn("T3ApplicationLive.archiveThread")(function* (threadId: string) {
+    return yield* orchestration.dispatch(makeThreadArchiveCommand(threadId));
+  });
+  const startThread = Effect.fn("T3ApplicationLive.startThread")(function* (
     startInput: StartThreadInput,
     policy?: {
       readonly until: "dispatch" | "visible" | "complete";
-      readonly onEvent?: (event: WaitEvent) => Effect.Effect<void, E, R>;
     },
   ) {
     const snapshot = yield* orchestration.getShellSnapshot();
@@ -40,7 +53,9 @@ export const makeT3Domain = Effect.fn("makeT3Domain")(function* () {
     const dispatch = yield* orchestration.dispatch(command);
     const threadId = command.threadId;
     const until = policy?.until ?? "dispatch";
-    if (until === "dispatch") return { dispatch, project, threadId };
+    if (until === "dispatch") {
+      return { dispatch, project, threadId };
+    }
     if (until === "visible") {
       const thread = yield* Effect.scoped(
         Effect.gen(function* () {
@@ -53,59 +68,25 @@ export const makeT3Domain = Effect.fn("makeT3Domain")(function* () {
     const thread = yield* waitForThreadUntilComplete({
       orchestration,
       threadId,
-      ...(policy?.onEvent ? { onEvent: policy.onEvent } : {}),
     });
     yield* failIfThreadError(thread);
     return { dispatch, project, threadId, thread };
   });
-  const addProject = Effect.fn("T3DomainLive.addProject")(function* (projectInput: {
-    readonly path: string;
-    readonly title?: string;
-  }) {
-    const command = makeProjectCreateCommand(projectInput, path, environment.cwd);
-    const dispatch = yield* orchestration.dispatch(command);
-    const snapshot = yield* loadShell();
-    const project = findProjectById(snapshot, command.projectId);
-    if (!project) {
-      return yield* Effect.fail(
-        new ProjectCreateVisibilityError({
-          message: `project created but not visible in shell snapshot: ${command.projectId}`,
-          projectId: command.projectId,
-        }),
-      );
-    }
-    return { dispatch, project };
-  });
-  const listThreads = Effect.fn("T3DomainLive.listThreads")(function* (projectRef: string) {
-    const snapshot = yield* loadShell();
-    const project = resolveProject(snapshot, projectRef, path, environment.cwd);
-    return {
-      project,
-      threads: snapshot.threads.filter((thread) => thread.projectId === project.id),
-    };
-  });
-  const getThreadMessages = Effect.fn("T3DomainLive.getThreadMessages")(function* (
-    threadId: string,
-  ) {
-    return yield* orchestration.getThreadSnapshot(threadId);
-  });
-  const archiveThread = Effect.fn("T3DomainLive.archiveThread")(function* (threadId: string) {
-    return yield* orchestration.dispatch(makeThreadArchiveCommand(threadId));
-  });
-  const sendThread = Effect.fn("T3DomainLive.sendThread")(function* <E = never, R = never>(
+  const sendThread = Effect.fn("T3ApplicationLive.sendThread")(function* (
     input: {
       readonly threadId: string;
       readonly message: string;
     },
     policy?: {
       readonly until: "dispatch" | "visible" | "complete";
-      readonly onEvent?: (event: WaitEvent) => Effect.Effect<void, E, R>;
     },
   ) {
     const command = makeThreadTurnContinueCommand(input);
     const dispatch = yield* orchestration.dispatch(command);
     const until = policy?.until ?? "dispatch";
-    if (until === "dispatch") return { dispatch, threadId: input.threadId };
+    if (until === "dispatch") {
+      return { dispatch, threadId: input.threadId };
+    }
     if (until === "visible") {
       const thread = yield* Effect.scoped(
         Effect.gen(function* () {
@@ -118,43 +99,42 @@ export const makeT3Domain = Effect.fn("makeT3Domain")(function* () {
     const thread = yield* waitForThreadUntilComplete({
       orchestration,
       threadId: input.threadId,
-      ...(policy?.onEvent ? { onEvent: policy.onEvent } : {}),
     });
     yield* failIfThreadError(thread);
     return { dispatch, threadId: input.threadId, thread };
   });
-  const waitForThread = Effect.fn("T3DomainLive.waitForThread")(function* <E = never, R = never>(
-    threadId: string,
-    onEvent?: (event: WaitEvent) => Effect.Effect<void, E, R>,
-  ) {
+  const watchThread = (threadId: string) =>
+    watchThreadEvents({
+      orchestration,
+      threadId,
+    });
+  const waitForThread = Effect.fn("T3ApplicationLive.waitForThread")(function* (threadId: string) {
     const thread = yield* waitForThreadUntilComplete({
       orchestration,
       threadId,
-      ...(onEvent ? { onEvent } : {}),
     });
     yield* failIfThreadError(thread);
     return thread;
   });
 
   return {
-    loadShell,
-    addProject,
     archiveThread,
     listThreads,
     getThreadMessages,
     sendThread,
     startThread,
+    watchThread,
     waitForThread,
   };
 });
-
-export const T3DomainLive = Layer.effect(T3Domain, makeT3Domain());
 
 function failIfThreadError(thread: {
   readonly id: string;
   readonly session: { readonly status: string; readonly lastError: string | null } | null;
 }) {
-  if (thread.session?.status !== "error") return Effect.void;
+  if (thread.session?.status !== "error") {
+    return Effect.void;
+  }
   return Effect.fail(
     new ThreadSessionError({
       threadId: thread.id,

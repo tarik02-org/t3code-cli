@@ -1,14 +1,5 @@
 import * as Schema from "effect/Schema";
 
-import type { OrchestrationError } from "../orchestration/error.ts";
-
-export class MessageInputError extends Schema.TaggedErrorClass<MessageInputError>()(
-  "MessageInputError",
-  {
-    message: Schema.String,
-  },
-) {}
-
 export class ProjectLookupError extends Schema.TaggedErrorClass<ProjectLookupError>()(
   "ProjectLookupError",
   {
@@ -39,14 +30,6 @@ export class ThreadSessionError extends Schema.TaggedErrorClass<ThreadSessionErr
   },
 ) {}
 
-export class InvalidLimitError extends Schema.TaggedErrorClass<InvalidLimitError>()(
-  "InvalidLimitError",
-  {
-    message: Schema.String,
-    value: Schema.String,
-  },
-) {}
-
 export class ProjectCreateVisibilityError extends Schema.TaggedErrorClass<ProjectCreateVisibilityError>()(
   "ProjectCreateVisibilityError",
   {
@@ -56,11 +39,8 @@ export class ProjectCreateVisibilityError extends Schema.TaggedErrorClass<Projec
 ) {}
 
 export type DomainError =
-  | OrchestrationError
-  | MessageInputError
   | ProjectLookupError
   | ModelSelectionError
   | ThreadEventError
   | ThreadSessionError
-  | InvalidLimitError
   | ProjectCreateVisibilityError;

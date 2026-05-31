@@ -1,15 +1,16 @@
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
+import type * as Stream from "effect/Stream";
 
+import type { ApplicationError } from "./error.ts";
+import type { DispatchResult } from "../domain/command-schema.ts";
 import type {
   ProjectShell,
   ShellSnapshot,
   ThreadDetail,
   ThreadMessage,
   ThreadShell,
-} from "./schema.ts";
-import type { DispatchResult } from "./command-schema.ts";
-import type { DomainError } from "./error.ts";
+} from "../domain/schema.ts";
 
 export type StartThreadInput = {
   readonly projectRef: string;
@@ -35,31 +36,29 @@ export type WaitEvent =
   | { readonly type: "status"; readonly status: string; readonly threadId: string }
   | { readonly type: "done"; readonly thread: ThreadDetail };
 
-export class T3Domain extends Context.Service<
-  T3Domain,
+export class T3Application extends Context.Service<
+  T3Application,
   {
-    readonly loadShell: () => Effect.Effect<ShellSnapshot, DomainError>;
+    readonly loadShell: () => Effect.Effect<ShellSnapshot, ApplicationError>;
     readonly addProject: (input: {
       readonly path: string;
       readonly title?: string;
     }) => Effect.Effect<
       { readonly dispatch: DispatchResult; readonly project: ProjectShell },
-      DomainError
+      ApplicationError
     >;
     readonly listThreads: (projectRef: string) => Effect.Effect<
       {
         readonly project: ProjectShell;
         readonly threads: ReadonlyArray<ThreadShell>;
       },
-      DomainError
+      ApplicationError
     >;
-    readonly getThreadMessages: (threadId: string) => Effect.Effect<ThreadDetail, DomainError>;
-    readonly archiveThread: (threadId: string) => Effect.Effect<DispatchResult, DomainError>;
-    readonly startThread: <E = never, R = never>(
+    readonly getThreadMessages: (threadId: string) => Effect.Effect<ThreadDetail, ApplicationError>;
+    readonly archiveThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
+    readonly startThread: (
       input: StartThreadInput,
-      policy?: StartThreadPolicy & {
-        readonly onEvent?: (event: WaitEvent) => Effect.Effect<void, E, R>;
-      },
+      policy?: StartThreadPolicy,
     ) => Effect.Effect<
       {
         readonly dispatch: DispatchResult;
@@ -67,26 +66,20 @@ export class T3Domain extends Context.Service<
         readonly threadId: string;
         readonly thread?: ThreadDetail;
       },
-      DomainError | E,
-      R
+      ApplicationError
     >;
-    readonly sendThread: <E = never, R = never>(
+    readonly sendThread: (
       input: SendThreadInput,
-      policy?: StartThreadPolicy & {
-        readonly onEvent?: (event: WaitEvent) => Effect.Effect<void, E, R>;
-      },
+      policy?: StartThreadPolicy,
     ) => Effect.Effect<
       {
         readonly dispatch: DispatchResult;
         readonly threadId: string;
         readonly thread?: ThreadDetail;
       },
-      DomainError | E,
-      R
+      ApplicationError
     >;
-    readonly waitForThread: <E = never, R = never>(
-      threadId: string,
-      onEvent?: (event: WaitEvent) => Effect.Effect<void, E, R>,
-    ) => Effect.Effect<ThreadDetail, DomainError | E, R>;
+    readonly watchThread: (threadId: string) => Stream.Stream<WaitEvent, ApplicationError>;
+    readonly waitForThread: (threadId: string) => Effect.Effect<ThreadDetail, ApplicationError>;
   }
->()("t3cli/T3Domain") {}
+>()("t3cli/T3Application") {}

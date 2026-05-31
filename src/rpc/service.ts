@@ -2,8 +2,8 @@ import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import type { RpcClient, RpcClientError } from "effect/unstable/rpc";
 
-import type { WsRpcGroup } from "../orchestration/schema.ts";
-import type { RpcError } from "../orchestration/error.ts";
+import type { WsRpcGroup } from "../protocol/schema.ts";
+import type { RpcError } from "./error.ts";
 
 export type WsClient = RpcClient.FromGroup<typeof WsRpcGroup, RpcClientError.RpcClientError>;
 

@@ -5,12 +5,16 @@ import type { ProjectShell, ShellSnapshot } from "./schema.ts";
 
 export function resolveProject(snapshot: ShellSnapshot, ref: string, path: Path.Path, cwd: string) {
   const byId = findProjectById(snapshot, ref);
-  if (byId) return byId;
+  if (byId !== null) {
+    return byId;
+  }
   const absolute = path.resolve(cwd, ref);
   const byPath = snapshot.projects.find(
     (project) => path.resolve(cwd, project.workspaceRoot) === absolute,
   );
-  if (byPath) return byPath;
+  if (byPath !== undefined) {
+    return byPath;
+  }
   throw new ProjectLookupError({ message: `project not found: ${ref}`, ref });
 }
 

@@ -52,7 +52,9 @@ export const resolveLocalOrigin = Effect.fn("resolveLocalOrigin")(function* (inp
   readonly baseDir: string;
   readonly origin?: string;
 }) {
-  if (input.origin !== undefined) return yield* normalizeLocalOrigin(input.origin);
+  if (input.origin !== undefined) {
+    return yield* normalizeLocalOrigin(input.origin);
+  }
 
   const path = yield* Path.Path;
   const runtimeStatePath = path.join(input.baseDir, "userdata", "server-runtime.json");
@@ -149,8 +151,12 @@ const resolveLocalBaseDir = Effect.fn("resolveLocalBaseDir")(function* (
   const path = yield* Path.Path;
   const envBaseDir = environment.env.T3CODE_HOME;
   const raw = input ?? envBaseDir;
-  if (raw === undefined || raw.length === 0) return path.join(environment.homeDir, ".t3");
-  if (raw === "~") return environment.homeDir;
+  if (raw === undefined || raw.length === 0) {
+    return path.join(environment.homeDir, ".t3");
+  }
+  if (raw === "~") {
+    return environment.homeDir;
+  }
   if (raw.startsWith("~/") || raw.startsWith("~\\")) {
     return path.join(environment.homeDir, raw.slice(2));
   }
@@ -159,8 +165,12 @@ const resolveLocalBaseDir = Effect.fn("resolveLocalBaseDir")(function* (
 
 function formatCommandFailure(stderr: string, stdout: string, exitCode: number) {
   const stderrDetail = stderr.trim();
-  if (stderrDetail.length > 0) return stderrDetail;
+  if (stderrDetail.length > 0) {
+    return stderrDetail;
+  }
   const stdoutDetail = stdout.trim();
-  if (stdoutDetail.length > 0) return stdoutDetail;
+  if (stdoutDetail.length > 0) {
+    return stdoutDetail;
+  }
   return `t3 exited with code ${exitCode}`;
 }

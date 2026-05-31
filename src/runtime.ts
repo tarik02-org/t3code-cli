@@ -4,7 +4,7 @@ import * as NodeSocket from "@effect/platform-node/NodeSocket";
 
 import { T3AuthLive } from "./auth/layer.ts";
 import { T3ConfigLive } from "./config/layer.ts";
-import { T3DomainLive } from "./domain/layer.ts";
+import { T3ApplicationLive } from "./application/layer.ts";
 import { T3OrchestrationLive } from "./orchestration/layer.ts";
 import { T3RpcLive } from "./rpc/layer.ts";
 
@@ -15,7 +15,7 @@ const T3RpcLayer = T3RpcLive.pipe(
   Layer.provide(Layer.mergeAll(T3ConfigLive, T3AuthLayer, NodeSocket.layerWebSocketConstructor)),
 );
 const T3OrchestrationLayer = T3OrchestrationLive.pipe(Layer.provide(T3RpcLayer));
-const T3DomainLayer = T3DomainLive.pipe(Layer.provide(T3OrchestrationLayer));
+const T3ApplicationLayer = T3ApplicationLive.pipe(Layer.provide(T3OrchestrationLayer));
 
 export const AuthAppLayer = Layer.mergeAll(T3ConfigLive, T3AuthLayer);
 
@@ -24,5 +24,5 @@ export const AppLayer = Layer.mergeAll(
   T3AuthLayer,
   T3RpcLayer,
   T3OrchestrationLayer,
-  T3DomainLayer,
+  T3ApplicationLayer,
 );

@@ -20,7 +20,9 @@ export function isThreadActive(thread: ThreadShell | ThreadDetail) {
 }
 
 export function threadStatus(thread: ThreadShell | ThreadDetail) {
-  if (isPendingStart(thread)) return "pending";
+  if (isPendingStart(thread)) {
+    return "pending";
+  }
   return thread.session?.status ?? thread.latestTurn?.state ?? "unknown";
 }
 
@@ -29,9 +31,13 @@ export function latestAssistantMessage(thread: ThreadDetail) {
 }
 
 export function isThreadCompleteEnough(thread: ThreadDetail) {
-  if (thread.session?.status === "error" || thread.session?.status === "interrupted") return true;
+  if (thread.session?.status === "error" || thread.session?.status === "interrupted") {
+    return true;
+  }
   const lastUserIndex = thread.messages.findLastIndex((message) => message.role === "user");
-  if (lastUserIndex === -1) return true;
+  if (lastUserIndex === -1) {
+    return true;
+  }
   return thread.messages.slice(lastUserIndex + 1).some((message) => message.role === "assistant");
 }
 
@@ -41,7 +47,7 @@ export function applyThreadEvent(
   messages: Map<string, ThreadMessage>,
 ) {
   const message = messageFromEvent(event, messages);
-  if (message) {
+  if (message !== null) {
     messages.set(messageKey(message), message);
     return { ...current, messages: [...messages.values()] };
   }
@@ -60,7 +66,9 @@ export function messageFromEvent(
   event: ThreadEvent,
   existingMessages: Map<string, ThreadMessage> = new Map(),
 ): ThreadMessage | null {
-  if (event.type !== "thread.message-sent") return null;
+  if (event.type !== "thread.message-sent") {
+    return null;
+  }
   const payload = event.payload;
   const id = payloadString(payload["messageId"]);
   const previous = existingMessages.get(id);
@@ -68,7 +76,7 @@ export function messageFromEvent(
   return Schema.decodeUnknownSync(ThreadMessageSchema)({
     id,
     role: payload["role"],
-    text: text.length > 0 || !previous ? text : previous.text,
+    text: text.length > 0 || previous === undefined ? text : previous.text,
     turnId: payload["turnId"] === null ? null : payloadString(payload["turnId"]),
     streaming: payload["streaming"],
     createdAt: payloadString(payload["createdAt"]),
@@ -81,13 +89,15 @@ export function messageKey(message: ThreadMessage) {
 }
 
 function isPendingStart(thread: ThreadShell | ThreadDetail) {
-  if (thread.session !== null || thread.latestTurn !== null || !("messages" in thread))
+  if (thread.session !== null || thread.latestTurn !== null || !("messages" in thread)) {
     return false;
+  }
   return thread.messages.at(-1)?.role === "user";
 }
 
 function payloadString(value: unknown) {
-  if (typeof value !== "string")
+  if (typeof value !== "string") {
     throw new ThreadEventError({ message: "invalid thread message event" });
+  }
   return value;
 }

@@ -7,9 +7,9 @@ import { Command } from "effect/unstable/cli";
 
 import { createCliCommand } from "./cli/app.ts";
 import { NodeEnvironmentLive } from "./environment/layer.ts";
-import { T3InputLive } from "./input/layer.ts";
-import { T3OutputLive } from "./output/layer.ts";
-import { T3Output } from "./output/service.ts";
+import { T3InputLive } from "./cli/input/layer.ts";
+import { T3OutputLive } from "./cli/output/layer.ts";
+import { T3Output } from "./cli/output/service.ts";
 import { AppLayer } from "./runtime.ts";
 import { T3VersionBundledLive, T3VersionPackageJsonLive } from "./version/layer.ts";
 import { T3Version } from "./version/service.ts";
@@ -27,7 +27,7 @@ const CliLayer = Layer.mergeAll(
   NodeEnvironmentLive,
   T3InputLive.pipe(Layer.provide(NodeServices.layer)),
   T3OutputLive.pipe(Layer.provide(NodeServices.layer)),
-  VersionLive,
+  VersionLive.pipe(Layer.provide(NodeServices.layer)),
 );
 
 const program = Effect.gen(function* () {
@@ -37,7 +37,7 @@ const program = Effect.gen(function* () {
   Effect.tapError((error) =>
     Effect.gen(function* () {
       const output = yield* T3Output;
-      yield* output.writeStderr(`${error.message}\n`);
+      yield* output.writeStderr(`${error instanceof Error ? error.message : String(error)}\n`);
     }),
   ),
   Effect.scoped,

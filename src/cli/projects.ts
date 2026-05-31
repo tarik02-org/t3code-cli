@@ -2,9 +2,9 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
-import { formatProjectAddedHuman, formatProjectsHuman } from "../domain/project-format.ts";
-import { T3Domain } from "../domain/service.ts";
-import { T3Output } from "../output/service.ts";
+import { formatProjectAddedHuman, formatProjectsHuman } from "./project-format.ts";
+import { T3Application } from "../application/service.ts";
+import { T3Output } from "./output/service.ts";
 
 export function createProjectsCommand() {
   return Command.make("projects").pipe(
@@ -20,11 +20,14 @@ const listCommand = Command.make(
   },
   ({ format }) =>
     Effect.gen(function* () {
-      const domain = yield* T3Domain;
+      const application = yield* T3Application;
       const output = yield* T3Output;
-      const snapshot = yield* domain.loadShell();
-      if (format === "json") yield* output.printJson(snapshot.projects);
-      else yield* output.writeStdout(formatProjectsHuman(snapshot.projects));
+      const snapshot = yield* application.loadShell();
+      if (format === "json") {
+        yield* output.printJson(snapshot.projects);
+      } else {
+        yield* output.writeStdout(formatProjectsHuman(snapshot.projects));
+      }
     }),
 ).pipe(Command.withDescription("list projects"));
 
@@ -37,14 +40,17 @@ const addCommand = Command.make(
   },
   ({ path, title, format }) =>
     Effect.gen(function* () {
-      const domain = yield* T3Domain;
+      const application = yield* T3Application;
       const output = yield* T3Output;
       const titleValue = Option.getOrUndefined(title);
-      const result = yield* domain.addProject({
+      const result = yield* application.addProject({
         path,
-        ...(titleValue ? { title: titleValue } : {}),
+        ...(titleValue !== undefined && titleValue.length > 0 ? { title: titleValue } : {}),
       });
-      if (format === "json") yield* output.printJson(result);
-      else yield* output.printInfo(formatProjectAddedHuman(result.project));
+      if (format === "json") {
+        yield* output.printJson(result);
+      } else {
+        yield* output.printInfo(formatProjectAddedHuman(result.project));
+      }
     }),
 ).pipe(Command.withDescription("add project"));

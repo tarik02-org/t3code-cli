@@ -11,7 +11,7 @@ import {
   ThreadDetailSchema,
   ThreadEventSchema,
 } from "../domain/schema.ts";
-import { RpcError } from "../orchestration/error.ts";
+import { RpcError } from "../rpc/error.ts";
 
 export const ORCHESTRATION_WS_METHODS = {
   dispatchCommand: "orchestration.dispatchCommand",

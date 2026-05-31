@@ -10,8 +10,12 @@ export function normalizeHttpBaseUrl(value: string) {
 export function toWebSocketBaseUrl(httpBaseUrl: string) {
   return parseUrl(httpBaseUrl).pipe(
     Effect.flatMap((url) => {
-      if (url.protocol === "http:") return Effect.succeed(makeWebSocketUrl(url, "ws:"));
-      if (url.protocol === "https:") return Effect.succeed(makeWebSocketUrl(url, "wss:"));
+      if (url.protocol === "http:") {
+        return Effect.succeed(makeWebSocketUrl(url, "ws:"));
+      }
+      if (url.protocol === "https:") {
+        return Effect.succeed(makeWebSocketUrl(url, "wss:"));
+      }
       return Effect.fail(
         new UrlError({
           message: `unsupported server url protocol: ${url.protocol}`,

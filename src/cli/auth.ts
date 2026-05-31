@@ -8,10 +8,10 @@ import {
   formatAuthPaired,
   formatAuthStatusHuman,
   formatAuthStatusJson,
-} from "../auth/format.ts";
+} from "./auth-format.ts";
 import { T3Auth } from "../auth/service.ts";
 import { T3Config } from "../config/service.ts";
-import { T3Output } from "../output/service.ts";
+import { T3Output } from "./output/service.ts";
 
 export function createAuthCommand() {
   return Command.make("auth").pipe(
@@ -57,8 +57,11 @@ const localCommand = Command.make(
         ...(Option.isSome(baseDir) ? { baseDir: baseDir.value } : {}),
         ...(Option.isSome(origin) ? { origin: origin.value } : {}),
       });
-      if (format === "json") yield* output.printJson(formatAuthLocalJson(result));
-      else yield* output.printInfo(formatAuthLocalHuman(result));
+      if (format === "json") {
+        yield* output.printJson(formatAuthLocalJson(result));
+      } else {
+        yield* output.printInfo(formatAuthLocalHuman(result));
+      }
     }),
 ).pipe(Command.withDescription("authenticate with local t3code installation"));
 
@@ -74,7 +77,10 @@ const statusCommand = Command.make(
       const output = yield* T3Output;
       const config = yield* configService.resolve();
       const result = yield* auth.status();
-      if (format === "json") yield* output.printJson(formatAuthStatusJson({ config, result }));
-      else yield* output.printInfo(formatAuthStatusHuman({ config, result }));
+      if (format === "json") {
+        yield* output.printJson(formatAuthStatusJson({ config, result }));
+      } else {
+        yield* output.printInfo(formatAuthStatusHuman({ config, result }));
+      }
     }),
 ).pipe(Command.withDescription("show auth status"));

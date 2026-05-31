@@ -5,7 +5,9 @@ import type * as Stream from "effect/Stream";
 
 import type { ClientOrchestrationCommand, DispatchResult } from "../domain/command-schema.ts";
 import type { ServerConfig, ShellSnapshot, ThreadDetail, ThreadEvent } from "../domain/schema.ts";
-import type { OrchestrationError } from "./error.ts";
+import type { RpcError } from "../rpc/error.ts";
+
+export type OrchestrationError = RpcError;
 
 export type OpenThread = {
   readonly snapshot: ThreadDetail;

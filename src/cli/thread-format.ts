@@ -1,6 +1,6 @@
-import type { WaitEvent } from "./service.ts";
-import type { ThreadDetail, ThreadShell } from "./schema.ts";
-import { latestAssistantMessage, threadStatus } from "./thread-lifecycle.ts";
+import type { WaitEvent } from "../application/service.ts";
+import type { ThreadDetail, ThreadShell } from "../domain/schema.ts";
+import { latestAssistantMessage, threadStatus } from "../domain/thread-lifecycle.ts";
 
 export function formatThreadsHuman(threads: ReadonlyArray<ThreadShell>) {
   return threads
@@ -25,7 +25,7 @@ export function formatThreadMessagesHuman(thread: ThreadDetail, limit: number) {
 
 export function formatWaitDoneHuman(thread: ThreadDetail) {
   const latest = latestAssistantMessage(thread);
-  return `status: ${threadStatus(thread)}\n${latest ? `\n### ${latest.role}\n\n${latest.text}\n` : ""}`;
+  return `status: ${threadStatus(thread)}\n${latest !== undefined ? `\n### ${latest.role}\n\n${latest.text}\n` : ""}`;
 }
 
 export function formatThreadMessagesJson(thread: ThreadDetail, full: boolean) {
@@ -33,7 +33,9 @@ export function formatThreadMessagesJson(thread: ThreadDetail, full: boolean) {
 }
 
 export function formatWaitEventNdjson(event: WaitEvent) {
-  if (event.type !== "thread" && event.type !== "done") return event;
+  if (event.type !== "thread" && event.type !== "done") {
+    return event;
+  }
   const compactThread = stripThreadHeavy(event.thread);
   return event.type === "done"
     ? {

@@ -1,4 +1,4 @@
-import type { ProjectShell } from "./schema.ts";
+import type { ProjectShell } from "../domain/schema.ts";
 
 export function formatProjectsHuman(projects: ReadonlyArray<ProjectShell>) {
   return projects

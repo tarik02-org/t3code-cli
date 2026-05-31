@@ -8,12 +8,14 @@ export function parsePairingUrl(value: string): Effect.Effect<PairingUrl, AuthPa
   return Effect.gen(function* () {
     const url = yield* parseUrl(value);
     const token = yield* readPairingToken(url);
-    if (!token) {
+    if (token.length === 0) {
       return yield* Effect.fail(new AuthPairingUrlError({ message: "pairing url missing token" }));
     }
 
     const hostedHost = url.searchParams.get("host")?.trim();
-    const baseUrl = normalizeBaseUrl(yield* parseUrl(hostedHost || url.origin));
+    const baseUrl = normalizeBaseUrl(
+      yield* parseUrl(hostedHost !== undefined && hostedHost.length > 0 ? hostedHost : url.origin),
+    );
     return { baseUrl, credential: token };
   });
 }
@@ -41,6 +43,12 @@ function readPairingToken(url: URL): Effect.Effect<string, AuthPairingUrlError> 
   return Effect.gen(function* () {
     const hash = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
     const hashUrl = yield* parseUrl(`http://t3.local/?${hash}`);
-    return hashUrl.searchParams.get("token")?.trim() || url.searchParams.get("token")?.trim() || "";
+    const hashToken = hashUrl.searchParams.get("token")?.trim();
+    const token = url.searchParams.get("token")?.trim();
+    return hashToken !== undefined && hashToken.length > 0
+      ? hashToken
+      : token !== undefined && token.length > 0
+        ? token
+        : "";
   });
 }

@@ -1,6 +1,6 @@
-import type { AuthSessionState } from "./schema.ts";
+import type { AuthSessionState } from "../auth/schema.ts";
 import type { ResolvedConfig } from "../config/service.ts";
-import type { LocalAuthResult, PairResult } from "./type.ts";
+import type { LocalAuthResult, PairResult } from "../auth/type.ts";
 
 export function formatAuthPaired(result: PairResult) {
   return `paired: ${result.url}\nrole: ${result.role}\nexpires: ${result.expiresAt}`;
@@ -26,8 +26,8 @@ export function formatAuthStatusHuman(input: {
   return [
     `url: ${input.config.url}`,
     `authenticated: ${input.result.authenticated ? "yes" : "no"}`,
-    ...(input.result.role ? [`role: ${input.result.role}`] : []),
-    ...(input.result.expiresAt ? [`expires: ${input.result.expiresAt}`] : []),
+    ...(input.result.role !== undefined ? [`role: ${input.result.role}`] : []),
+    ...(input.result.expiresAt !== undefined ? [`expires: ${input.result.expiresAt}`] : []),
   ].join("\n");
 }
 

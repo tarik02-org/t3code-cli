@@ -13,8 +13,8 @@ import * as Socket from "effect/unstable/socket/Socket";
 import { T3Auth } from "../auth/service.ts";
 import { T3Config } from "../config/service.ts";
 import { toWebSocketBaseUrl } from "../config/url.ts";
-import { RpcError } from "../orchestration/error.ts";
-import { WsRpcGroup } from "../orchestration/schema.ts";
+import { WsRpcGroup } from "../protocol/schema.ts";
+import { RpcError } from "./error.ts";
 import { T3Rpc, type WsClient } from "./service.ts";
 
 const makeClient = RpcClient.make(WsRpcGroup);
@@ -46,12 +46,16 @@ export const makeT3RpcLayer = Effect.fn("makeT3RpcLayer")(function* () {
 
   const disconnect = Effect.fn("T3RpcLive.disconnect")(function* () {
     const current = yield* SynchronizedRef.getAndSet(connection, Option.none<Connection>());
-    if (Option.isSome(current)) yield* Scope.close(current.value.scope, Exit.void);
+    if (Option.isSome(current)) {
+      yield* Scope.close(current.value.scope, Exit.void);
+    }
   });
 
   const getClient = Effect.fn("T3RpcLive.getClient")(function* () {
     return yield* SynchronizedRef.modifyEffect(connection, (current) => {
-      if (Option.isSome(current)) return Effect.succeed([current.value.client, current] as const);
+      if (Option.isSome(current)) {
+        return Effect.succeed([current.value.client, current] as const);
+      }
       return openConnection().pipe(Effect.map((next) => [next.client, Option.some(next)] as const));
     });
   });

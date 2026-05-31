@@ -24,7 +24,9 @@ export const makeT3Config = Effect.fn("makeT3Config")(function* () {
         (error) => new ConfigError({ message: "failed to read config", cause: error }),
       ),
     );
-    if (raw === undefined) return {};
+    if (raw === undefined) {
+      return {};
+    }
     return yield* parseStoredConfig(raw);
   });
   const writeStored = Effect.fn("T3ConfigLive.writeStored")(function* (config: StoredConfig) {
@@ -47,14 +49,21 @@ export const makeT3Config = Effect.fn("makeT3Config")(function* () {
     const stored = yield* readStored();
     const envUrl = environment.env.T3CODE_URL;
     const envToken = environment.env.T3CODE_TOKEN;
-    const url = envUrl?.trim() || stored.url;
-    const token = envToken?.trim() || stored.token;
-    if (!url || !token) {
+    const envUrlValue = envUrl?.trim();
+    const envTokenValue = envToken?.trim();
+    const url = envUrlValue !== undefined && envUrlValue.length > 0 ? envUrlValue : stored.url;
+    const token =
+      envTokenValue !== undefined && envTokenValue.length > 0 ? envTokenValue : stored.token;
+    if (url === undefined || url.length === 0 || token === undefined || token.length === 0) {
       return yield* Effect.fail(
         new ConfigError({ message: "not authenticated. run: t3cli auth pair <pairing-url>" }),
       );
     }
-    const source: "env" | "config" = envUrl || envToken ? "env" : "config";
+    const source: "env" | "config" =
+      (envUrlValue !== undefined && envUrlValue.length > 0) ||
+      (envTokenValue !== undefined && envTokenValue.length > 0)
+        ? "env"
+        : "config";
     const normalizedUrl = yield* normalizeHttpBaseUrl(url);
     return {
       url: normalizedUrl,
@@ -85,6 +94,10 @@ function parseStoredConfig(raw: string) {
 
 function resolveConfigPath(path: Path.Path, environment: EnvironmentShape) {
   const xdgConfigHome = environment.env.XDG_CONFIG_HOME;
-  const root = xdgConfigHome?.trim() || path.join(environment.homeDir, ".config");
+  const xdgConfigHomeValue = xdgConfigHome?.trim();
+  const root =
+    xdgConfigHomeValue !== undefined && xdgConfigHomeValue.length > 0
+      ? xdgConfigHomeValue
+      : path.join(environment.homeDir, ".config");
   return path.join(root, "t3cli", "config.json");
 }
