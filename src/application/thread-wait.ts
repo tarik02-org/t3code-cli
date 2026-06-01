@@ -19,48 +19,48 @@ export function watchThread(input: {
   readonly orchestration: Orchestration;
   readonly threadId: string;
 }) {
+  let current: ThreadDetail | undefined;
+  let currentMessages: Map<string, ThreadMessage> | undefined;
   return Stream.scoped(
-    Stream.unwrap(
-      Effect.gen(function* () {
-        const opened = yield* input.orchestration.openThread(input.threadId);
-        const messages = new Map<string, ThreadMessage>();
-        for (const message of opened.snapshot.messages) {
-          messages.set(messageKey(message), message);
-        }
-        const initialEvents: ReadonlyArray<WaitEvent> = [
-          { type: "thread", thread: opened.snapshot },
-          {
-            type: "status",
-            status: threadStatus(opened.snapshot),
-            threadId: opened.snapshot.id,
-          },
-        ];
-        if (!isThreadActive(opened.snapshot) && isThreadCompleteEnough(opened.snapshot)) {
-          return Stream.fromIterable([
-            ...initialEvents,
-            { type: "done", thread: opened.snapshot } satisfies WaitEvent,
-          ]);
+    input.orchestration.watchThreadItems(input.threadId).pipe(
+      Stream.flatMap((item) => {
+        if (item.kind === "snapshot") {
+          const messages = new Map<string, ThreadMessage>();
+          for (const message of item.snapshot.thread.messages) {
+            messages.set(messageKey(message), message);
+          }
+          current = item.snapshot.thread;
+          currentMessages = messages;
+
+          const events: Array<WaitEvent> = [
+            { type: "thread", thread: current },
+            { type: "status", status: threadStatus(current), threadId: current.id },
+          ];
+          if (!isThreadActive(current) && isThreadCompleteEnough(current)) {
+            events.push({ type: "done", thread: current });
+          }
+          return Stream.fromIterable(events);
         }
 
-        let current: ThreadDetail = opened.snapshot;
-        return Stream.concat(
-          Stream.fromIterable(initialEvents),
-          opened.events.pipe(
-            Stream.flatMap((event) => {
-              current = applyThreadEvent(current, event, messages);
-              const message = messageFromEvent(event, messages);
-              const events: Array<WaitEvent> =
-                message !== null ? [{ type: "message", message }] : [];
-              events.push({ type: "status", status: threadStatus(current), threadId: current.id });
-              if (!isThreadActive(current) && isThreadCompleteEnough(current)) {
-                events.push({ type: "done", thread: current });
-              }
-              return Stream.fromIterable(events);
+        if (current === undefined || currentMessages === undefined) {
+          return Stream.fail(
+            new ThreadSessionError({
+              message: `thread stream event received before snapshot: ${input.threadId}`,
+              threadId: input.threadId,
             }),
-            Stream.takeUntil((event) => event.type === "done"),
-          ),
-        );
+          );
+        }
+
+        current = applyThreadEvent(current, item.event, currentMessages);
+        const message = messageFromEvent(item.event, currentMessages);
+        const events: Array<WaitEvent> = message !== null ? [{ type: "message", message }] : [];
+        events.push({ type: "status", status: threadStatus(current), threadId: current.id });
+        if (!isThreadActive(current) && isThreadCompleteEnough(current)) {
+          events.push({ type: "done", thread: current });
+        }
+        return Stream.fromIterable(events);
       }),
+      Stream.takeUntil((event) => event.type === "done"),
     ),
   );
 }

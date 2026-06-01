@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
@@ -18,6 +19,7 @@ import { RpcError } from "./error.ts";
 import { T3Rpc, type WsClient } from "./service.ts";
 
 const makeClient = RpcClient.make(WsRpcGroup);
+const connectionRetrySchedule = Schedule.exponential("100 millis").pipe(Schedule.take(4));
 
 type Connection = {
   readonly scope: Scope.Closeable;
@@ -40,6 +42,7 @@ export const makeT3RpcLayer = Effect.fn("makeT3RpcLayer")(function* () {
       );
       return { scope, client } satisfies Connection;
     }).pipe(
+      Effect.retry(connectionRetrySchedule),
       Effect.onError(() => Scope.close(scope, Exit.void)),
       Effect.mapError((error) => new RpcError({ message: error.message, cause: error })),
     );

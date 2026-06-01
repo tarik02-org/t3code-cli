@@ -14,6 +14,10 @@ export type OpenThread = {
   readonly events: Stream.Stream<ThreadEvent, OrchestrationError>;
 };
 
+export type ThreadStreamItem =
+  | { readonly kind: "snapshot"; readonly snapshot: { readonly thread: ThreadDetail } }
+  | { readonly kind: "event"; readonly event: ThreadEvent };
+
 export type Orchestration = {
   readonly dispatch: (
     command: ClientOrchestrationCommand,
@@ -22,6 +26,9 @@ export type Orchestration = {
   readonly getShellSnapshot: () => Effect.Effect<ShellSnapshot, OrchestrationError>;
   readonly getThreadSnapshot: (threadId: string) => Effect.Effect<ThreadDetail, OrchestrationError>;
   readonly watchShellSequence: () => Stream.Stream<number, OrchestrationError, Scope.Scope>;
+  readonly watchThreadItems: (
+    threadId: string,
+  ) => Stream.Stream<ThreadStreamItem, OrchestrationError, Scope.Scope>;
   readonly openThread: (
     threadId: string,
   ) => Effect.Effect<OpenThread, OrchestrationError, Scope.Scope>;
