@@ -1,4 +1,5 @@
 ---
+"t3cli": minor
 ---
 
-Initial release automation setup.
+Initial release.
