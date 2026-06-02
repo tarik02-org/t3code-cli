@@ -6,7 +6,12 @@ import {
   firstSelectableModel,
   firstSelectableProvider,
 } from "../domain/model-config.ts";
-import { decodeModelSelection, type ProjectShell, type ServerConfig } from "../domain/schema.ts";
+import {
+  decodeModelSelection,
+  type ModelSelection,
+  type ProjectShell,
+  type ServerConfig,
+} from "../domain/schema.ts";
 import type { StartThreadInput } from "./service.ts";
 
 export function resolveModelSelection(input: {
@@ -16,7 +21,7 @@ export function resolveModelSelection(input: {
 }) {
   return Effect.gen(function* () {
     if (input.start.provider !== undefined && input.start.model !== undefined) {
-      return decodeModelSelection({
+      return withModelOptions(input.start, {
         instanceId: input.start.provider,
         model: input.start.model,
       });
@@ -27,31 +32,55 @@ export function resolveModelSelection(input: {
       if (model === undefined) {
         return yield* failNoAvailableModel();
       }
-      return {
+      return withModelOptions(input.start, {
         instanceId: input.start.provider,
         model: model.slug,
-      };
+      });
     }
     if (input.start.model !== undefined) {
       const provider = yield* firstAvailableModel(input.serverConfig);
-      return {
+      return withModelOptions(input.start, {
         instanceId: provider.instanceId,
         model: input.start.model,
-      };
+      });
     }
     if (input.project.defaultModelSelection !== null) {
-      return input.project.defaultModelSelection;
+      return withModelOptions(input.start, input.project.defaultModelSelection);
     }
     const provider = yield* firstAvailableModel(input.serverConfig);
     const model = firstSelectableModel(provider);
     if (model === undefined) {
       return yield* failNoAvailableModel();
     }
-    return decodeModelSelection({
+    return withModelOptions(input.start, {
       instanceId: provider.instanceId,
       model: model.slug,
     });
   });
+}
+
+export function mergeModelOptions(
+  selection: ModelSelection,
+  options: NonNullable<ModelSelection["options"]>,
+): ModelSelection {
+  if (options.length === 0) {
+    return selection;
+  }
+  const optionsById = new Map((selection.options ?? []).map((option) => [option.id, option]));
+  for (const option of options) {
+    optionsById.set(option.id, option);
+  }
+  return decodeModelSelection({
+    ...selection,
+    options: [...optionsById.values()],
+  });
+}
+
+function withModelOptions(input: StartThreadInput, selection: ModelSelection): ModelSelection {
+  if (input.options === undefined || input.options.length === 0) {
+    return selection;
+  }
+  return mergeModelOptions(selection, input.options);
 }
 
 function firstAvailableModel(serverConfig: ServerConfig) {

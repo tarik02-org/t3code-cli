@@ -11,6 +11,7 @@ import type {
   ThreadDetail,
   ThreadMessage,
   ThreadShell,
+  ModelSelection,
 } from "../domain/schema.ts";
 
 export type StartThreadInput = {
@@ -19,12 +20,14 @@ export type StartThreadInput = {
   readonly title?: string;
   readonly provider?: string;
   readonly model?: string;
+  readonly options?: NonNullable<ModelSelection["options"]>;
   readonly worktreePath?: string;
 };
 
 export type SendThreadInput = {
   readonly threadId: string;
   readonly message: string;
+  readonly options?: NonNullable<ModelSelection["options"]>;
 };
 
 export type StartThreadPolicy = {

@@ -7,7 +7,7 @@ import type {
   ThreadCreateCommand,
   ThreadTurnStartCommand,
 } from "../domain/command-schema.ts";
-import type { ProjectShell, ServerConfig } from "../domain/schema.ts";
+import type { ModelSelection, ProjectShell, ServerConfig } from "../domain/schema.ts";
 import { resolveModelSelection } from "./model-selection.ts";
 import type { SendThreadInput, StartThreadInput } from "./service.ts";
 
@@ -56,7 +56,7 @@ export const makeThreadStartCommands = Effect.fn("makeThreadStartCommands")(func
 });
 
 export const makeThreadTurnContinueCommand = Effect.fn("makeThreadTurnContinueCommand")(function* (
-  input: SendThreadInput,
+  input: SendThreadInput & { readonly modelSelection?: ModelSelection },
 ) {
   const crypto = yield* Crypto.Crypto;
   const createdAt = DateTime.formatIso(yield* DateTime.now);
@@ -72,6 +72,7 @@ export const makeThreadTurnContinueCommand = Effect.fn("makeThreadTurnContinueCo
     },
     runtimeMode: "full-access",
     interactionMode: "default",
+    ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
     createdAt,
   } satisfies ThreadTurnStartCommand;
 });

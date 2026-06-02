@@ -4,6 +4,7 @@ import * as Stream from "effect/Stream";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
 import { readInitialMessage } from "../message-input.ts";
+import { buildModelOptions } from "../model-options.ts";
 import { formatThreadStartedHuman } from "../thread-format.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
@@ -26,10 +27,30 @@ export const startThreadCommand = Command.make(
     worktree: Flag.string("worktree").pipe(Flag.optional),
     provider: Flag.string("provider").pipe(Flag.optional),
     model: Flag.string("model").pipe(Flag.optional),
+    option: Flag.keyValuePair("option").pipe(Flag.optional),
+    reasoningEffort: Flag.string("reasoning-effort").pipe(Flag.optional),
+    effort: Flag.string("effort").pipe(Flag.optional),
+    fastMode: Flag.boolean("fast-mode").pipe(Flag.optional),
+    thinking: Flag.boolean("thinking").pipe(Flag.optional),
     wait: Flag.boolean("wait"),
     format: Flag.choice("format", humanJsonNdjsonFormatChoices).pipe(Flag.withDefault("auto")),
   },
-  ({ project, message, stdin, title, worktree, provider, model, wait, format }) =>
+  ({
+    project,
+    message,
+    stdin,
+    title,
+    worktree,
+    provider,
+    model,
+    option,
+    reasoningEffort,
+    effort,
+    fastMode,
+    thinking,
+    wait,
+    format,
+  }) =>
     Effect.gen(function* () {
       const inputService = yield* T3Input;
       const text = yield* readInitialMessage({
@@ -41,6 +62,13 @@ export const startThreadCommand = Command.make(
       const worktreeValue = Option.getOrUndefined(worktree);
       const providerValue = Option.getOrUndefined(provider);
       const modelValue = Option.getOrUndefined(model);
+      const options = buildModelOptions({
+        option,
+        reasoningEffort,
+        effort,
+        fastMode,
+        thinking,
+      });
       const input = {
         projectRef: project,
         message: text,
@@ -52,6 +80,7 @@ export const startThreadCommand = Command.make(
           ? { provider: providerValue }
           : {}),
         ...(modelValue !== undefined && modelValue.length > 0 ? { model: modelValue } : {}),
+        ...(options.length > 0 ? { options } : {}),
       };
       const application = yield* T3Application;
       const environment = yield* Environment;

@@ -7,6 +7,8 @@ import { T3Orchestration } from "../orchestration/service.ts";
 import { ThreadSessionError } from "../domain/error.ts";
 import { resolveProject } from "../domain/helpers.ts";
 import { type StartThreadInput } from "./service.ts";
+import type { SendThreadInput } from "./service.ts";
+import { mergeModelOptions } from "./model-selection.ts";
 import {
   makeThreadArchiveCommand,
   makeThreadStartCommands,
@@ -88,17 +90,22 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     return { dispatch, project, threadId, thread };
   });
   const sendThread = Effect.fn("T3ApplicationLive.sendThread")(function* (
-    input: {
-      readonly threadId: string;
-      readonly message: string;
-    },
+    input: SendThreadInput,
     policy?: {
       readonly until: "dispatch" | "visible" | "complete";
     },
   ) {
-    const command = yield* makeThreadTurnContinueCommand(input).pipe(
-      Effect.provideService(Crypto.Crypto, crypto),
-    );
+    const modelSelection =
+      input.options !== undefined && input.options.length > 0
+        ? mergeModelOptions(
+            (yield* orchestration.getThreadSnapshot(input.threadId)).modelSelection,
+            input.options,
+          )
+        : undefined;
+    const command = yield* makeThreadTurnContinueCommand({
+      ...input,
+      ...(modelSelection !== undefined ? { modelSelection } : {}),
+    }).pipe(Effect.provideService(Crypto.Crypto, crypto));
     const dispatch = yield* orchestration.dispatch(command);
     const until = policy?.until ?? "dispatch";
     if (until === "dispatch") {
