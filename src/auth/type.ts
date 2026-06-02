@@ -15,7 +15,7 @@ export type PairResult = {
 
 export type LocalAuthInput = {
   readonly baseDir?: string;
-  readonly t3Bin: string;
+  readonly t3Command?: string;
   readonly origin?: string;
   readonly role: AuthSessionRole;
   readonly label: string;

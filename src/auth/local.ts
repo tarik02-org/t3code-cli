@@ -16,7 +16,7 @@ import {
 import type { LocalAuthInput } from "./type.ts";
 
 export const issueLocalSession = Effect.fn("issueLocalSession")(function* (
-  input: Pick<LocalAuthInput, "baseDir" | "t3Bin" | "role" | "label" | "subject">,
+  input: Pick<LocalAuthInput, "baseDir" | "t3Command" | "role" | "label" | "subject">,
 ) {
   const environment = yield* Environment;
   const baseDir = yield* resolveLocalBaseDir(input.baseDir, environment);
@@ -43,7 +43,8 @@ export const issueLocalSession = Effect.fn("issueLocalSession")(function* (
     "--subject",
     input.subject,
   ];
-  const output = yield* runLocalT3Command(input.t3Bin, args);
+  const command = resolveLocalT3Command(input.t3Command, environment);
+  const output = yield* runLocalT3Command(command, args);
   const parsed = yield* parseSessionIssueOutput(output.stdout);
   return { baseDir, session: parsed } as const;
 });
@@ -63,7 +64,7 @@ export const resolveLocalOrigin = Effect.fn("resolveLocalOrigin")(function* (inp
     Effect.mapError(
       (error) =>
         new AuthLocalError({
-          message: `local runtime state not found: ${runtimeStatePath}`,
+          message: `local runtime state not found: ${runtimeStatePath}. Make sure T3 Code is running with Network access enabled, or pass --origin manually.`,
           cause: error,
         }),
     ),
@@ -93,20 +94,84 @@ function normalizeLocalOrigin(origin: string) {
   );
 }
 
+type LocalT3Command = {
+  readonly command: string;
+  readonly argsPrefix: ReadonlyArray<string>;
+  readonly env?: Readonly<Record<string, string>>;
+};
+
+const defaultLocalT3Command: LocalT3Command = {
+  command: "t3",
+  argsPrefix: [],
+};
+
+const macOsAppNames = ["T3 Code (Dev)", "T3 Code (Alpha)", "T3 Code (Nightly)", "T3 Code"] as const;
+
+function resolveLocalT3Command(
+  input: string | undefined,
+  environment: EnvironmentShape,
+): LocalT3Command {
+  const envCommand = environment.env["T3CLI_T3_COMMAND"];
+  const exactCommand =
+    input ?? (envCommand !== undefined && envCommand.length > 0 ? envCommand : undefined);
+  if (exactCommand !== undefined && exactCommand.length > 0) {
+    return { command: exactCommand, argsPrefix: [] };
+  }
+  return defaultLocalT3Command;
+}
+
+const resolveMacOsAppT3Command = Effect.fn("resolveMacOsAppT3Command")(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  for (const appName of macOsAppNames) {
+    const appPath = `/Applications/${appName}.app`;
+    const command = `${appPath}/Contents/MacOS/${appName}`;
+    if (yield* fs.exists(command)) {
+      return {
+        command,
+        argsPrefix: [`${appPath}/Contents/Resources/app.asar/apps/server/dist/bin.mjs`],
+        env: { ELECTRON_RUN_AS_NODE: "1" },
+      } satisfies LocalT3Command;
+    }
+  }
+  return undefined;
+});
+
 const runLocalT3Command = Effect.fn("runLocalT3Command")(function* (
-  t3Bin: string,
+  command: LocalT3Command,
+  args: ReadonlyArray<string>,
+) {
+  return yield* runLocalT3CommandOnce(command, args).pipe(
+    Effect.catchTag("PlatformError", (error) =>
+      command === defaultLocalT3Command && process.platform === "darwin"
+        ? Effect.gen(function* () {
+            const fallback = yield* resolveMacOsAppT3Command();
+            if (fallback === undefined) {
+              return yield* Effect.fail(error);
+            }
+            return yield* runLocalT3CommandOnce(fallback, args);
+          })
+        : Effect.fail(error),
+    ),
+    Effect.catchTag("PlatformError", (error) =>
+      Effect.fail(
+        new AuthLocalError({
+          message: `local auth failed: ${error.message}`,
+          cause: error,
+        }),
+      ),
+    ),
+  );
+});
+
+const runLocalT3CommandOnce = Effect.fn("runLocalT3CommandOnce")(function* (
+  command: LocalT3Command,
   args: ReadonlyArray<string>,
 ) {
   const spawner = yield* ChildProcessSpawner;
-  const child = yield* spawner.spawn(ChildProcess.make(t3Bin, args)).pipe(
-    Effect.mapError(
-      (error) =>
-        new AuthLocalError({
-          message: `local auth failed: ${error instanceof Error ? error.message : "failed to spawn t3"}`,
-          cause: error,
-        }),
-    ),
+  const processCommand = ChildProcess.make(command.command, [...command.argsPrefix, ...args]).pipe(
+    command.env === undefined ? (self) => self : ChildProcess.setEnv(command.env),
   );
+  const child = yield* spawner.spawn(processCommand);
   const [stdout, stderr, exitCode] = yield* Effect.all(
     [
       collectProcessOutput(child.stdout),
@@ -118,7 +183,7 @@ const runLocalT3Command = Effect.fn("runLocalT3Command")(function* (
     Effect.mapError(
       (error) =>
         new AuthLocalError({
-          message: `local auth failed: ${error instanceof Error ? error.message : "failed to read t3 output"}`,
+          message: `local auth failed: ${error.message}`,
           cause: error,
         }),
     ),
