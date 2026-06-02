@@ -6,6 +6,7 @@ import type { ApplicationError } from "./error.ts";
 import type { DispatchResult } from "../domain/command-schema.ts";
 import type {
   ProjectShell,
+  ServerProvider,
   ShellSnapshot,
   ThreadDetail,
   ThreadMessage,
@@ -40,6 +41,10 @@ export class T3Application extends Context.Service<
   T3Application,
   {
     readonly loadShell: () => Effect.Effect<ShellSnapshot, ApplicationError>;
+    readonly listModels: (input: {
+      readonly all?: boolean;
+      readonly provider?: string;
+    }) => Effect.Effect<ReadonlyArray<ServerProvider>, ApplicationError>;
     readonly addProject: (input: {
       readonly path: string;
       readonly title?: string;

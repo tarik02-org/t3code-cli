@@ -100,23 +100,24 @@ export const ShellSnapshotSchema = Schema.Struct({
 });
 export type ShellSnapshot = typeof ShellSnapshotSchema.Type;
 
-const ServerProviderSchema = Schema.Struct({
+export const ServerProviderSchema = Schema.Struct({
   instanceId: Schema.String,
-  enabled: Schema.optionalKey(Schema.Boolean),
-  installed: Schema.optionalKey(Schema.Boolean),
-  availability: Schema.optionalKey(Schema.String),
-  models: Schema.optionalKey(
-    Schema.Array(
-      Schema.Union([
-        Schema.String,
-        Schema.Struct({
-          id: Schema.optionalKey(Schema.String),
-          name: Schema.optionalKey(Schema.String),
-        }),
-      ]),
-    ),
+  displayName: Schema.optionalKey(Schema.String),
+  enabled: Schema.Boolean,
+  installed: Schema.Boolean,
+  status: Schema.Literals(["ready", "warning", "error", "disabled"]),
+  auth: Schema.Struct({
+    status: Schema.Literals(["authenticated", "unauthenticated", "unknown"]),
+  }),
+  models: Schema.Array(
+    Schema.Struct({
+      slug: Schema.String,
+      name: Schema.String,
+    }),
   ),
 });
+export type ServerProvider = typeof ServerProviderSchema.Type;
+export type ServerProviderModel = NonNullable<ServerProvider["models"]>[number];
 
 export const ServerConfigSchema = Schema.Struct({
   providers: Schema.optionalKey(Schema.Array(ServerProviderSchema)),

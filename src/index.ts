@@ -8,6 +8,7 @@ export type {
 export type { ApplicationError } from "./application/error.ts";
 export type {
   ProjectShell,
+  ServerProvider,
   ShellSnapshot,
   ThreadDetail,
   ThreadMessage,
