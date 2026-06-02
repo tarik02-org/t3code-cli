@@ -149,7 +149,7 @@ const resolveLocalBaseDir = Effect.fn("resolveLocalBaseDir")(function* (
   environment: EnvironmentShape,
 ) {
   const path = yield* Path.Path;
-  const envBaseDir = environment.env.T3CODE_HOME;
+  const envBaseDir = environment.env["T3CODE_HOME"];
   const raw = input ?? envBaseDir;
   if (raw === undefined || raw.length === 0) {
     return path.join(environment.homeDir, ".t3");

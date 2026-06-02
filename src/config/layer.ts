@@ -47,8 +47,8 @@ export const makeT3Config = Effect.fn("makeT3Config")(function* () {
   });
   const resolve = Effect.fn("T3ConfigLive.resolve")(function* () {
     const stored = yield* readStored();
-    const envUrl = environment.env.T3CODE_URL;
-    const envToken = environment.env.T3CODE_TOKEN;
+    const envUrl = environment.env["T3CODE_URL"];
+    const envToken = environment.env["T3CODE_TOKEN"];
     const envUrlValue = envUrl?.trim();
     const envTokenValue = envToken?.trim();
     const url = envUrlValue !== undefined && envUrlValue.length > 0 ? envUrlValue : stored.url;
@@ -93,7 +93,7 @@ function parseStoredConfig(raw: string) {
 }
 
 function resolveConfigPath(path: Path.Path, environment: EnvironmentShape) {
-  const xdgConfigHome = environment.env.XDG_CONFIG_HOME;
+  const xdgConfigHome = environment.env["XDG_CONFIG_HOME"];
   const xdgConfigHomeValue = xdgConfigHome?.trim();
   const root =
     xdgConfigHomeValue !== undefined && xdgConfigHomeValue.length > 0

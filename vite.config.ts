@@ -21,6 +21,7 @@ export default defineConfig({
     },
     entry: {
       bin: "src/bin.ts",
+      index: "src/index.ts",
     },
     deps: {
       alwaysBundle: /^.+$/,

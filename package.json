@@ -22,9 +22,16 @@
     "t3cli": "./dist/bin.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "src"
   ],
   "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./src/index.ts"
+    }
+  },
   "scripts": {
     "build": "vp pack",
     "check": "vp check",
