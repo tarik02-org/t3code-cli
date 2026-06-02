@@ -1,6 +1,6 @@
 {
   "name": "t3cli",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "CLI for t3code",
   "keywords": [
     "claude",
@@ -40,15 +40,19 @@
     "lint": "vp lint",
     "lint:fix": "vp lint --fix",
     "prepack": "pnpm build",
+    "changeset": "changeset",
     "release:check": "pnpm check && pnpm typecheck && pnpm pack --dry-run",
+    "release:publish": "pnpm publish --access public --no-git-checks",
+    "release:publish:dry-run": "pnpm publish --access public --dry-run --no-git-checks",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.31.0",
     "@effect/platform-node": "4.0.0-beta.74",
     "@types/node": "^25.9.1",
     "effect": "4.0.0-beta.74",
-    "typescript": "^5.9.3",
-    "vite-plus": "^0.1.22"
+    "typescript": "^6.0.3",
+    "vite-plus": "^0.1.24"
   },
   "engines": {
     "node": "^24.0.0"
