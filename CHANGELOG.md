@@ -1,4 +1,4 @@
-# t3cli
+# t3code-cli
 
 ## 0.1.0
 

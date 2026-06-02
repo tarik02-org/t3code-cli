@@ -1,12 +1,14 @@
-# t3cli
+# t3code-cli
 
 Non-interactive CLI for a t3code server.
 
 ## install
 
 ```sh
-npm install --global t3cli
+npm install --global t3code-cli
 ```
+
+This installs the `t3cli` command.
 
 ## authenticate
 
