@@ -1,18 +1,5 @@
-import { readFileSync } from "node:fs";
 import { defineConfig } from "vite-plus";
-
-const packageJson: unknown = JSON.parse(
-  readFileSync(new URL("./package.json", import.meta.url), "utf8"),
-);
-
-if (
-  typeof packageJson !== "object" ||
-  packageJson === null ||
-  !("version" in packageJson) ||
-  typeof packageJson.version !== "string"
-) {
-  throw new Error("package version missing");
-}
+import packageJson from "./package.json" with { type: "json" };
 
 export default defineConfig({
   pack: {
