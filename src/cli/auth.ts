@@ -1,0 +1,99 @@
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { Argument, Command, Flag } from "effect/unstable/cli";
+
+import {
+  formatAuthLocalHuman,
+  formatAuthLocalJson,
+  formatAuthPaired,
+  formatAuthStatusHuman,
+  formatAuthStatusJson,
+} from "./auth-format.ts";
+import { T3Auth } from "../auth/service.ts";
+import { T3Config } from "../config/service.ts";
+import { Environment } from "../environment/service.ts";
+import { humanJsonFormatChoices, resolveOutputFormat } from "./output-format.ts";
+import { T3Output } from "./output/service.ts";
+
+export function createAuthCommand() {
+  return Command.make("auth").pipe(
+    Command.withDescription("auth commands"),
+    Command.withSubcommands([pairCommand, localCommand, statusCommand]),
+  );
+}
+
+const pairCommand = Command.make(
+  "pair",
+  {
+    url: Argument.string("url"),
+    format: Flag.choice("format", humanJsonFormatChoices).pipe(Flag.withDefault("auto")),
+  },
+  ({ url, format }) =>
+    Effect.gen(function* () {
+      const auth = yield* T3Auth;
+      const environment = yield* Environment;
+      const output = yield* T3Output;
+      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const result = yield* auth.pair(url);
+      if (resolvedFormat === "json") {
+        yield* output.printJson(result);
+      } else {
+        yield* output.printInfo(formatAuthPaired(result));
+      }
+    }),
+).pipe(Command.withDescription("pair with t3code server"));
+
+const localCommand = Command.make(
+  "local",
+  {
+    baseDir: Flag.string("base-dir").pipe(Flag.optional),
+    t3Command: Flag.string("t3-command").pipe(Flag.optional),
+    origin: Flag.string("origin").pipe(Flag.optional),
+    role: Flag.choice("role", ["owner", "client"] as const).pipe(Flag.withDefault("owner")),
+    label: Flag.string("label").pipe(Flag.withDefault("t3cli")),
+    subject: Flag.string("subject").pipe(Flag.withDefault("t3cli-local")),
+    format: Flag.choice("format", humanJsonFormatChoices).pipe(Flag.withDefault("auto")),
+  },
+  ({ baseDir, t3Command, origin, role, label, subject, format }) =>
+    Effect.gen(function* () {
+      const auth = yield* T3Auth;
+      const environment = yield* Environment;
+      const output = yield* T3Output;
+      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const result = yield* auth.local({
+        role,
+        label,
+        subject,
+        ...(Option.isSome(t3Command) ? { t3Command: t3Command.value } : {}),
+        ...(Option.isSome(baseDir) ? { baseDir: baseDir.value } : {}),
+        ...(Option.isSome(origin) ? { origin: origin.value } : {}),
+      });
+      if (resolvedFormat === "json") {
+        yield* output.printJson(formatAuthLocalJson(result));
+      } else {
+        yield* output.printInfo(formatAuthLocalHuman(result));
+      }
+    }),
+).pipe(Command.withDescription("authenticate with local t3code installation"));
+
+const statusCommand = Command.make(
+  "status",
+  {
+    format: Flag.choice("format", humanJsonFormatChoices).pipe(Flag.withDefault("auto")),
+  },
+  ({ format }) =>
+    Effect.gen(function* () {
+      const configService = yield* T3Config;
+      const auth = yield* T3Auth;
+      const environment = yield* Environment;
+      const output = yield* T3Output;
+      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const config = yield* configService.resolve();
+      const result = yield* auth.status();
+      if (resolvedFormat === "json") {
+        yield* output.printJson(formatAuthStatusJson({ config, result }));
+      } else {
+        yield* output.printInfo(formatAuthStatusHuman({ config, result }));
+      }
+    }),
+).pipe(Command.withDescription("show auth status"));
