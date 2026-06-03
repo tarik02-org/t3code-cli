@@ -12,7 +12,7 @@ export const makeModelsApplication = Effect.fn("makeModelsApplication")(function
   }) {
     const config = yield* orchestration.getServerConfig();
     return filterProvidersForModelListing({
-      providers: config.providers ?? [],
+      providers: config.providers,
       all: input.all === true,
       ...(input.provider !== undefined && input.provider.length > 0
         ? { provider: input.provider }

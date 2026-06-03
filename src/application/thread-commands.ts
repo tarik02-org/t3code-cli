@@ -1,23 +1,25 @@
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-
-import type {
-  ThreadArchiveCommand,
-  ThreadCreateCommand,
-  ThreadTurnStartCommand,
-} from "../domain/command-schema.ts";
-import type { ModelSelection, ProjectShell, ServerConfig } from "../domain/schema.ts";
+import {
+  CommandId,
+  MessageId,
+  ThreadId,
+  type ClientOrchestrationCommand,
+  type ModelSelection,
+  type OrchestrationProjectShell,
+} from "@t3tools/contracts";
+import type { ServerConfigForCli } from "../orchestration/service.ts";
 import { resolveModelSelection } from "./model-selection.ts";
 import type { SendThreadInput, StartThreadInput } from "./service.ts";
 
 export const makeThreadStartCommands = Effect.fn("makeThreadStartCommands")(function* (input: {
   readonly start: StartThreadInput;
-  readonly project: ProjectShell;
-  readonly serverConfig: ServerConfig;
+  readonly project: OrchestrationProjectShell;
+  readonly serverConfig: ServerConfigForCli;
 }) {
   const crypto = yield* Crypto.Crypto;
-  const threadId = yield* crypto.randomUUIDv4.pipe(Effect.orDie);
+  const threadId = ThreadId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie));
   const createdAt = DateTime.formatIso(yield* DateTime.now);
   const modelSelection = yield* resolveModelSelection(input);
   const inputTitle = input.start.title?.trim();
@@ -25,7 +27,9 @@ export const makeThreadStartCommands = Effect.fn("makeThreadStartCommands")(func
   const title = inputTitle !== undefined && inputTitle.length > 0 ? inputTitle : messageTitle;
   const createCommand = {
     type: "thread.create",
-    commandId: `t3cli:thread-create:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    commandId: CommandId.make(
+      `t3cli:thread-create:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    ),
     threadId,
     projectId: input.project.id,
     title: title.length > 0 ? title : "New thread",
@@ -35,13 +39,15 @@ export const makeThreadStartCommands = Effect.fn("makeThreadStartCommands")(func
     branch: null,
     worktreePath: input.start.worktreePath ?? null,
     createdAt,
-  } satisfies ThreadCreateCommand;
+  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.create" }>;
   const turnCommand = {
     type: "thread.turn.start",
-    commandId: `t3cli:thread-start:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    commandId: CommandId.make(
+      `t3cli:thread-start:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    ),
     threadId,
     message: {
-      messageId: yield* crypto.randomUUIDv4.pipe(Effect.orDie),
+      messageId: MessageId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie)),
       role: "user",
       text: input.start.message,
       attachments: [],
@@ -51,7 +57,7 @@ export const makeThreadStartCommands = Effect.fn("makeThreadStartCommands")(func
     runtimeMode: "full-access",
     interactionMode: "default",
     createdAt,
-  } satisfies ThreadTurnStartCommand;
+  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.turn.start" }>;
   return { createCommand, turnCommand, threadId };
 });
 
@@ -62,10 +68,12 @@ export const makeThreadTurnContinueCommand = Effect.fn("makeThreadTurnContinueCo
   const createdAt = DateTime.formatIso(yield* DateTime.now);
   return {
     type: "thread.turn.start",
-    commandId: `t3cli:thread-start:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-    threadId: input.threadId,
+    commandId: CommandId.make(
+      `t3cli:thread-start:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    ),
+    threadId: ThreadId.make(input.threadId),
     message: {
-      messageId: yield* crypto.randomUUIDv4.pipe(Effect.orDie),
+      messageId: MessageId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie)),
       role: "user",
       text: input.message,
       attachments: [],
@@ -74,7 +82,7 @@ export const makeThreadTurnContinueCommand = Effect.fn("makeThreadTurnContinueCo
     interactionMode: "default",
     ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
     createdAt,
-  } satisfies ThreadTurnStartCommand;
+  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.turn.start" }>;
 });
 
 export const makeThreadArchiveCommand = Effect.fn("makeThreadArchiveCommand")(function* (
@@ -83,7 +91,9 @@ export const makeThreadArchiveCommand = Effect.fn("makeThreadArchiveCommand")(fu
   const crypto = yield* Crypto.Crypto;
   return {
     type: "thread.archive",
-    commandId: `t3cli:thread-archive:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-    threadId,
-  } satisfies ThreadArchiveCommand;
+    commandId: CommandId.make(
+      `t3cli:thread-archive:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    ),
+    threadId: ThreadId.make(threadId),
+  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.archive" }>;
 });

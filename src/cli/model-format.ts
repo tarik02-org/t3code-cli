@@ -1,4 +1,4 @@
-import type { ServerProvider } from "../domain/schema.ts";
+import type { ServerProvider } from "@t3tools/contracts";
 
 export function formatModelsHuman(providers: ReadonlyArray<ServerProvider>) {
   if (providers.length === 0) {

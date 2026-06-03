@@ -1,0 +1,43 @@
+import {
+  EnvironmentAuthorizationError,
+  KeybindingsConfigError,
+  OrchestrationDispatchCommandError,
+  OrchestrationGetSnapshotError,
+  ServerConfig,
+  ServerProviders,
+  ServerSettingsError,
+  WS_METHODS,
+  WsOrchestrationDispatchCommandRpc,
+  WsOrchestrationSubscribeShellRpc,
+  WsOrchestrationSubscribeThreadRpc,
+} from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
+import { Rpc, RpcGroup } from "effect/unstable/rpc";
+
+export const FallbackServerConfig = Schema.Struct({
+  providers: ServerProviders,
+});
+export type FallbackServerConfig = typeof FallbackServerConfig.Type;
+
+export const CliServerConfig = Schema.Union([ServerConfig, FallbackServerConfig]);
+export type CliServerConfig = typeof CliServerConfig.Type;
+
+export const WsServerGetConfigRpc = Rpc.make(WS_METHODS.serverGetConfig, {
+  payload: Schema.Struct({}),
+  success: CliServerConfig,
+  error: Schema.Union([KeybindingsConfigError, ServerSettingsError, EnvironmentAuthorizationError]),
+});
+
+export const CliWsRpcGroup = RpcGroup.make(
+  WsOrchestrationDispatchCommandRpc,
+  WsOrchestrationSubscribeShellRpc,
+  WsOrchestrationSubscribeThreadRpc,
+  WsServerGetConfigRpc,
+);
+
+export type CliRpcRequestError =
+  | EnvironmentAuthorizationError
+  | KeybindingsConfigError
+  | OrchestrationDispatchCommandError
+  | OrchestrationGetSnapshotError
+  | ServerSettingsError;

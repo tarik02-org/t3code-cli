@@ -1,4 +1,11 @@
 import * as Schema from "effect/Schema";
+import {
+  EnvironmentAuthorizationError,
+  KeybindingsConfigError,
+  OrchestrationDispatchCommandError,
+  OrchestrationGetSnapshotError,
+  ServerSettingsError,
+} from "@t3tools/contracts";
 import { HttpClientError } from "effect/unstable/http";
 import { RpcClientError } from "effect/unstable/rpc";
 
@@ -12,6 +19,11 @@ import { ConfigError, UrlError } from "../config/error.ts";
 
 const RpcErrorCauseSchema = Schema.Union([
   RpcClientError.RpcClientError,
+  EnvironmentAuthorizationError,
+  KeybindingsConfigError,
+  OrchestrationDispatchCommandError,
+  OrchestrationGetSnapshotError,
+  ServerSettingsError,
   AuthConfigError,
   AuthLocalError,
   AuthPairingUrlError,

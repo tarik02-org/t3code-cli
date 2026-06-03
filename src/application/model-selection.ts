@@ -1,4 +1,7 @@
 import * as Effect from "effect/Effect";
+import { ModelSelection, ProviderInstanceId } from "@t3tools/contracts";
+import type { OrchestrationProjectShell } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 
 import { ModelSelectionError } from "../domain/error.ts";
 import {
@@ -6,23 +9,18 @@ import {
   firstSelectableModel,
   firstSelectableProvider,
 } from "../domain/model-config.ts";
-import {
-  decodeModelSelection,
-  type ModelSelection,
-  type ProjectShell,
-  type ServerConfig,
-} from "../domain/schema.ts";
+import type { ServerConfigForCli } from "../orchestration/service.ts";
 import type { StartThreadInput } from "./service.ts";
 
 export function resolveModelSelection(input: {
   readonly start: StartThreadInput;
-  readonly project: ProjectShell;
-  readonly serverConfig: ServerConfig;
+  readonly project: OrchestrationProjectShell;
+  readonly serverConfig: ServerConfigForCli;
 }) {
   return Effect.gen(function* () {
     if (input.start.provider !== undefined && input.start.model !== undefined) {
       return withModelOptions(input.start, {
-        instanceId: input.start.provider,
+        instanceId: ProviderInstanceId.make(input.start.provider),
         model: input.start.model,
       });
     }
@@ -33,7 +31,7 @@ export function resolveModelSelection(input: {
         return yield* failNoAvailableModel();
       }
       return withModelOptions(input.start, {
-        instanceId: input.start.provider,
+        instanceId: ProviderInstanceId.make(input.start.provider),
         model: model.slug,
       });
     }
@@ -70,7 +68,7 @@ export function mergeModelOptions(
   for (const option of options) {
     optionsById.set(option.id, option);
   }
-  return decodeModelSelection({
+  return Schema.decodeUnknownSync(ModelSelection)({
     ...selection,
     options: [...optionsById.values()],
   });
@@ -83,8 +81,8 @@ function withModelOptions(input: StartThreadInput, selection: ModelSelection): M
   return mergeModelOptions(selection, input.options);
 }
 
-function firstAvailableModel(serverConfig: ServerConfig) {
-  const providers = serverConfig.providers ?? [];
+function firstAvailableModel(serverConfig: ServerConfigForCli) {
+  const providers = serverConfig.providers;
   const provider = firstSelectableProvider(providers);
   if (provider === undefined) {
     return failNoAvailableModel();
@@ -92,8 +90,8 @@ function firstAvailableModel(serverConfig: ServerConfig) {
   return Effect.succeed(provider);
 }
 
-function findProvider(serverConfig: ServerConfig, instanceId: string) {
-  const provider = findSelectableProvider(serverConfig.providers ?? [], instanceId);
+function findProvider(serverConfig: ServerConfigForCli, instanceId: string) {
+  const provider = findSelectableProvider(serverConfig.providers, instanceId);
   if (provider === undefined) {
     return failNoAvailableModel();
   }

@@ -1,19 +1,13 @@
+import {
+  OrchestrationMessage,
+  type OrchestrationEvent,
+  type OrchestrationMessage as OrchestrationMessageType,
+  type OrchestrationThread,
+  type OrchestrationThreadShell,
+} from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
-import {
-  type ThreadDetail,
-  type ThreadEvent,
-  type ThreadMessage,
-  type ThreadShell,
-  ThreadMessageSchema,
-  ThreadMessageSentEventSchema,
-  ThreadSessionSetEventSchema,
-} from "./schema.ts";
-
-const isThreadMessageSentEvent = Schema.is(ThreadMessageSentEventSchema);
-const isThreadSessionSetEvent = Schema.is(ThreadSessionSetEventSchema);
-
-export function isThreadActive(thread: ThreadShell | ThreadDetail) {
+export function isThreadActive(thread: OrchestrationThreadShell | OrchestrationThread) {
   return (
     thread.session?.status === "starting" ||
     thread.session?.status === "running" ||
@@ -22,18 +16,18 @@ export function isThreadActive(thread: ThreadShell | ThreadDetail) {
   );
 }
 
-export function threadStatus(thread: ThreadShell | ThreadDetail) {
+export function threadStatus(thread: OrchestrationThreadShell | OrchestrationThread) {
   if (isPendingStart(thread)) {
     return "pending";
   }
   return thread.session?.status ?? thread.latestTurn?.state ?? "unknown";
 }
 
-export function latestAssistantMessage(thread: ThreadDetail) {
+export function latestAssistantMessage(thread: OrchestrationThread) {
   return thread.messages.toReversed().find((message) => message.role === "assistant");
 }
 
-export function isThreadCompleteEnough(thread: ThreadDetail) {
+export function isThreadCompleteEnough(thread: OrchestrationThread) {
   if (thread.session?.status === "error" || thread.session?.status === "interrupted") {
     return true;
   }
@@ -45,16 +39,16 @@ export function isThreadCompleteEnough(thread: ThreadDetail) {
 }
 
 export function applyThreadEvent(
-  current: ThreadDetail,
-  event: ThreadEvent,
-  messages: Map<string, ThreadMessage>,
+  current: OrchestrationThread,
+  event: OrchestrationEvent,
+  messages: Map<string, OrchestrationMessageType>,
 ) {
   const message = messageFromEvent(event, messages);
   if (message !== null) {
     messages.set(messageKey(message), message);
     return { ...current, messages: [...messages.values()] };
   }
-  if (isThreadSessionSetEvent(event)) {
+  if (event.type === "thread.session-set") {
     return {
       ...current,
       session: event.payload.session,
@@ -64,32 +58,32 @@ export function applyThreadEvent(
 }
 
 export function messageFromEvent(
-  event: ThreadEvent,
-  existingMessages: Map<string, ThreadMessage> = new Map(),
-): ThreadMessage | null {
-  if (!isThreadMessageSentEvent(event)) {
+  event: OrchestrationEvent,
+  existingMessages: Map<string, OrchestrationMessageType> = new Map(),
+): OrchestrationMessageType | null {
+  if (event.type !== "thread.message-sent") {
     return null;
   }
   const payload = event.payload;
   const id = payload.messageId;
   const previous = existingMessages.get(id);
   const text = payload.text;
-  return Schema.decodeUnknownSync(ThreadMessageSchema)({
+  return Schema.decodeUnknownSync(OrchestrationMessage)({
     id,
     role: payload.role,
     text: text.length > 0 || previous === undefined ? text : previous.text,
     turnId: payload.turnId,
-    ...(payload.streaming !== undefined ? { streaming: payload.streaming } : {}),
+    streaming: payload.streaming,
     createdAt: payload.createdAt,
     updatedAt: payload.updatedAt,
   });
 }
 
-export function messageKey(message: ThreadMessage) {
-  return message.id ?? message.messageId ?? `${message.role}:${message.createdAt}`;
+export function messageKey(message: OrchestrationMessageType) {
+  return message.id;
 }
 
-function isPendingStart(thread: ThreadShell | ThreadDetail) {
+function isPendingStart(thread: OrchestrationThreadShell | OrchestrationThread) {
   if (thread.session !== null || thread.latestTurn !== null || !("messages" in thread)) {
     return false;
   }

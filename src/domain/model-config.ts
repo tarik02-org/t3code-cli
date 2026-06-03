@@ -1,4 +1,4 @@
-import type { ServerProvider } from "./schema.ts";
+import type { ServerProvider } from "@t3tools/contracts";
 
 export function isSelectableProvider(provider: ServerProvider) {
   return provider.status === "ready" && provider.models.length > 0;

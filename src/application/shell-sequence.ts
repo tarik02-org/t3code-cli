@@ -1,10 +1,10 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
+import { ORCHESTRATION_WS_METHODS } from "@t3tools/contracts";
 
 import type { Orchestration } from "../orchestration/service.ts";
 import { RpcError } from "../rpc/error.ts";
-import { ORCHESTRATION_WS_METHODS } from "../protocol/schema.ts";
 
 export function waitForShellSequence(input: {
   readonly orchestration: Orchestration;
