@@ -48,6 +48,7 @@ jobs:
           publish: pnpm release:publish
           commit: release package
           title: release package
+          createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
