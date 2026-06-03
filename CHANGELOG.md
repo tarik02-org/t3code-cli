@@ -1,5 +1,11 @@
 # t3code-cli
 
+## 0.1.3
+
+### Patch Changes
+
+- f61d6d1: - Move internal schema definitions to upstream t3code schema modules for shared contract alignment.
+
 ## 0.1.2
 
 ### Patch Changes
