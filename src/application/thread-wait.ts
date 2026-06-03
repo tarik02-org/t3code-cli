@@ -1,10 +1,10 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
+import type { OrchestrationMessage, OrchestrationThread } from "@t3tools/contracts";
 
 import { ThreadSessionError } from "../domain/error.ts";
 import type { Orchestration } from "../orchestration/service.ts";
-import type { ThreadDetail, ThreadMessage } from "../domain/schema.ts";
 import type { WaitEvent } from "./service.ts";
 import {
   applyThreadEvent,
@@ -19,13 +19,13 @@ export function watchThread(input: {
   readonly orchestration: Orchestration;
   readonly threadId: string;
 }) {
-  let current: ThreadDetail | undefined;
-  let currentMessages: Map<string, ThreadMessage> | undefined;
+  let current: OrchestrationThread | undefined;
+  let currentMessages: Map<string, OrchestrationMessage> | undefined;
   return Stream.scoped(
     input.orchestration.watchThreadItems(input.threadId).pipe(
       Stream.flatMap((item) => {
         if (item.kind === "snapshot") {
-          const messages = new Map<string, ThreadMessage>();
+          const messages = new Map<string, OrchestrationMessage>();
           for (const message of item.snapshot.thread.messages) {
             messages.set(messageKey(message), message);
           }

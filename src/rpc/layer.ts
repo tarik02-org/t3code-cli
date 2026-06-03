@@ -14,11 +14,11 @@ import * as Socket from "effect/unstable/socket/Socket";
 import { T3Auth } from "../auth/service.ts";
 import { T3Config } from "../config/service.ts";
 import { toWebSocketBaseUrl } from "../config/url.ts";
-import { WsRpcGroup } from "../protocol/schema.ts";
+import { CliWsRpcGroup } from "./ws-group.ts";
 import { RpcError } from "./error.ts";
 import { T3Rpc, type WsClient } from "./service.ts";
 
-const makeClient = RpcClient.make(WsRpcGroup);
+const makeClient = RpcClient.make(CliWsRpcGroup);
 const connectionRetrySchedule = Schedule.exponential("100 millis").pipe(Schedule.take(4));
 
 type Connection = {

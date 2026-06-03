@@ -1,8 +1,8 @@
 import type { WaitEvent } from "../application/service.ts";
-import type { ThreadDetail, ThreadShell } from "../domain/schema.ts";
+import type { OrchestrationThread, OrchestrationThreadShell } from "@t3tools/contracts";
 import { latestAssistantMessage, threadStatus } from "../domain/thread-lifecycle.ts";
 
-export function formatThreadsHuman(threads: ReadonlyArray<ThreadShell>) {
+export function formatThreadsHuman(threads: ReadonlyArray<OrchestrationThreadShell>) {
   return threads
     .map(
       (thread) =>
@@ -12,23 +12,23 @@ export function formatThreadsHuman(threads: ReadonlyArray<ThreadShell>) {
 }
 
 export function formatThreadStartedHuman(input: {
-  readonly thread: ThreadDetail;
+  readonly thread: OrchestrationThread;
   readonly sequence: number;
 }) {
   return `thread started: ${input.thread.title}\nid: ${input.thread.id}\nstatus: ${threadStatus(input.thread)}\nsequence: ${input.sequence}`;
 }
 
-export function formatThreadMessagesHuman(thread: ThreadDetail, limit: number) {
+export function formatThreadMessagesHuman(thread: OrchestrationThread, limit: number) {
   const messages = limit === 0 ? thread.messages : thread.messages.slice(-limit);
   return messages.map((message) => `\n### ${message.role}\n\n${message.text}\n`).join("");
 }
 
-export function formatWaitDoneHuman(thread: ThreadDetail) {
+export function formatWaitDoneHuman(thread: OrchestrationThread) {
   const latest = latestAssistantMessage(thread);
   return `status: ${threadStatus(thread)}\n${latest !== undefined ? `\n### ${latest.role}\n\n${latest.text}\n` : ""}`;
 }
 
-export function formatThreadMessagesJson(thread: ThreadDetail, full: boolean) {
+export function formatThreadMessagesJson(thread: OrchestrationThread, full: boolean) {
   return full ? thread : { thread: stripThreadMessages(thread), messages: thread.messages };
 }
 

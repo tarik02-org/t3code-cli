@@ -1,11 +1,11 @@
-import type { ProjectShell } from "../domain/schema.ts";
+import type { OrchestrationProjectShell } from "@t3tools/contracts";
 
-export function formatProjectsHuman(projects: ReadonlyArray<ProjectShell>) {
+export function formatProjectsHuman(projects: ReadonlyArray<OrchestrationProjectShell>) {
   return projects
     .map((project) => `- ${project.title}\n  id: ${project.id}\n  path: ${project.workspaceRoot}\n`)
     .join("");
 }
 
-export function formatProjectAddedHuman(project: ProjectShell) {
+export function formatProjectAddedHuman(project: OrchestrationProjectShell) {
   return `project added: ${project.title}\nid: ${project.id}\npath: ${project.workspaceRoot}`;
 }

@@ -4,34 +4,35 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import { RpcClientError } from "effect/unstable/rpc";
-
-import { type ClientOrchestrationCommand } from "../domain/command-schema.ts";
 import {
   ORCHESTRATION_WS_METHODS,
-  type ShellStreamItem,
-  type ThreadStreamItem,
+  ThreadId,
   WS_METHODS,
-} from "../protocol/schema.ts";
+  type ClientOrchestrationCommand,
+  type OrchestrationShellStreamItem,
+  type OrchestrationThreadStreamItem,
+} from "@t3tools/contracts";
+import { RpcClientError } from "effect/unstable/rpc";
+
 import { RpcError } from "../rpc/error.ts";
 import { T3Rpc, type WsClient } from "../rpc/service.ts";
+import type { CliRpcRequestError } from "../rpc/ws-group.ts";
 import { T3Orchestration, type OpenThread } from "./service.ts";
 
-type ReconnectableRpcError = RpcClientError.RpcClientError | RpcError;
+type RpcRequestError = RpcClientError.RpcClientError | CliRpcRequestError;
 
 const rpcRetrySchedule = Schedule.exponential("100 millis").pipe(
   Schedule.take(4),
   Schedule.collectWhile(
-    (metadata: Schedule.Metadata<unknown, ReconnectableRpcError>) =>
-      metadata.input instanceof RpcClientError.RpcClientError,
+    (metadata: Schedule.Metadata) => metadata.input instanceof RpcClientError.RpcClientError,
   ),
 );
 
 function runRpc<A>(
   rpc: T3Rpc["Service"],
   method: string,
-  f: (client: WsClient) => Effect.Effect<A, ReconnectableRpcError>,
-) {
+  f: (client: WsClient) => Effect.Effect<A, RpcRequestError>,
+): Effect.Effect<A, RpcError> {
   return Effect.gen(function* () {
     const client = yield* rpc.getClient;
     return yield* f(client);
@@ -41,15 +42,13 @@ function runRpc<A>(
     ),
     Effect.retry(rpcRetrySchedule),
     Effect.catchTags({
-      RpcClientError: (error) =>
-        Effect.fail(
-          new RpcError({
-            message: error.message,
-            method,
-            cause: error,
-          }),
-        ),
       RpcError: (error) => Effect.fail(error),
+      EnvironmentAuthorizationError: (error) => Effect.fail(toRpcRequestError(error, method)),
+      RpcClientError: (error) => Effect.fail(toRpcRequestError(error, method)),
+      KeybindingsConfigParseError: (error) => Effect.fail(toRpcRequestError(error, method)),
+      OrchestrationDispatchCommandError: (error) => Effect.fail(toRpcRequestError(error, method)),
+      OrchestrationGetSnapshotError: (error) => Effect.fail(toRpcRequestError(error, method)),
+      ServerSettingsError: (error) => Effect.fail(toRpcRequestError(error, method)),
     }),
   );
 }
@@ -57,23 +56,21 @@ function runRpc<A>(
 function subscribeRpc<A>(
   rpc: T3Rpc["Service"],
   method: string,
-  f: (client: WsClient) => Stream.Stream<A, ReconnectableRpcError>,
-) {
+  f: (client: WsClient) => Stream.Stream<A, RpcRequestError>,
+): Stream.Stream<A, RpcError> {
   return Stream.unwrap(Effect.map(rpc.getClient, f)).pipe(
     Stream.tapError((error) =>
       error instanceof RpcClientError.RpcClientError ? rpc.disconnect : Effect.void,
     ),
     Stream.retry(rpcRetrySchedule),
     Stream.catchTags({
-      RpcClientError: (error) =>
-        Stream.fail(
-          new RpcError({
-            message: error.message,
-            method,
-            cause: error,
-          }),
-        ),
       RpcError: (error) => Stream.fail(error),
+      EnvironmentAuthorizationError: (error) => Stream.fail(toRpcRequestError(error, method)),
+      RpcClientError: (error) => Stream.fail(toRpcRequestError(error, method)),
+      KeybindingsConfigParseError: (error) => Stream.fail(toRpcRequestError(error, method)),
+      OrchestrationDispatchCommandError: (error) => Stream.fail(toRpcRequestError(error, method)),
+      OrchestrationGetSnapshotError: (error) => Stream.fail(toRpcRequestError(error, method)),
+      ServerSettingsError: (error) => Stream.fail(toRpcRequestError(error, method)),
     }),
   );
 }
@@ -83,20 +80,8 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
   const dispatch = Effect.fn("T3OrchestrationLive.dispatch")(function* (
     command: ClientOrchestrationCommand,
   ) {
-    const client = yield* rpc.getClient;
-    return yield* client[ORCHESTRATION_WS_METHODS.dispatchCommand](command).pipe(
-      Effect.tapErrorTag("RpcClientError", () => rpc.disconnect),
-      Effect.catchTags({
-        RpcClientError: (error) =>
-          Effect.fail(
-            new RpcError({
-              message: error.message,
-              method: ORCHESTRATION_WS_METHODS.dispatchCommand,
-              cause: error,
-            }),
-          ),
-        RpcError: (error) => Effect.fail(error),
-      }),
+    return yield* runRpc(rpc, ORCHESTRATION_WS_METHODS.dispatchCommand, (client) =>
+      client[ORCHESTRATION_WS_METHODS.dispatchCommand](command),
     );
   });
   const getServerConfig = Effect.fn("T3OrchestrationLive.getServerConfig")(function* () {
@@ -126,7 +111,7 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
   ) {
     const item = yield* Stream.runHead(
       subscribeRpc(rpc, ORCHESTRATION_WS_METHODS.subscribeThread, (client) =>
-        client[ORCHESTRATION_WS_METHODS.subscribeThread]({ threadId }),
+        client[ORCHESTRATION_WS_METHODS.subscribeThread]({ threadId: ThreadId.make(threadId) }),
       ),
     );
     const value = Option.getOrUndefined(item);
@@ -144,17 +129,17 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
     subscribeRpc(rpc, ORCHESTRATION_WS_METHODS.subscribeShell, (client) =>
       client[ORCHESTRATION_WS_METHODS.subscribeShell]({}),
     ).pipe(
-      Stream.map((item: ShellStreamItem) =>
+      Stream.map((item: OrchestrationShellStreamItem) =>
         item.kind === "snapshot" ? item.snapshot.snapshotSequence : item.sequence,
       ),
     );
   const watchThreadItems = (threadId: string) =>
     subscribeRpc(rpc, ORCHESTRATION_WS_METHODS.subscribeThread, (client) =>
-      client[ORCHESTRATION_WS_METHODS.subscribeThread]({ threadId }),
+      client[ORCHESTRATION_WS_METHODS.subscribeThread]({ threadId: ThreadId.make(threadId) }),
     );
   const openThread = Effect.fn("T3OrchestrationLive.openThread")(function* (threadId: string) {
     return yield* watchThreadItems(threadId).pipe(
-      Stream.peel(Sink.head<ThreadStreamItem>()),
+      Stream.peel(Sink.head<OrchestrationThreadStreamItem>()),
       Effect.flatMap(([item, rest]) => {
         const value = Option.getOrUndefined(item);
         if (value === undefined || value.kind !== "snapshot") {
@@ -169,7 +154,7 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
           snapshot: value.snapshot.thread,
           events: rest.pipe(
             Stream.filter(
-              (next): next is Extract<ThreadStreamItem, { readonly kind: "event" }> =>
+              (next): next is Extract<OrchestrationThreadStreamItem, { readonly kind: "event" }> =>
                 next.kind === "event",
             ),
             Stream.map((next) => next.event),
@@ -191,3 +176,11 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
 });
 
 export const T3OrchestrationLive = Layer.effect(T3Orchestration, makeT3Orchestration());
+
+function toRpcRequestError(error: RpcRequestError, method: string) {
+  return new RpcError({
+    message: error.message,
+    method,
+    cause: error,
+  });
+}

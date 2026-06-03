@@ -45,9 +45,11 @@
     "release:publish": "changeset publish",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {},
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
     "@effect/platform-node": "4.0.0-beta.74",
+    "@t3tools/contracts": "workspace:*",
     "@types/node": "^25.9.1",
     "effect": "4.0.0-beta.74",
     "typescript": "^6.0.3",

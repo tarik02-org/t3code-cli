@@ -7,12 +7,12 @@ export type {
 } from "./application/service.ts";
 export type { ApplicationError } from "./application/error.ts";
 export type {
-  ProjectShell,
+  OrchestrationMessage,
+  OrchestrationProjectShell,
+  OrchestrationShellSnapshot,
+  OrchestrationThread,
+  OrchestrationThreadShell,
   ServerProvider,
-  ShellSnapshot,
-  ThreadDetail,
-  ThreadMessage,
-  ThreadShell,
-} from "./domain/schema.ts";
+} from "@t3tools/contracts";
 export { NodeEnvironmentLive } from "./environment/layer.ts";
 export { AppLayer, AuthAppLayer } from "./runtime.ts";
