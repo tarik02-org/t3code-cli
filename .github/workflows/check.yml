@@ -31,7 +31,9 @@ jobs:
       - uses: actions/checkout@v6.0.3
         with:
           fetch-depth: 1
-          submodules: true
+
+      - name: checkout contracts submodule
+        run: git submodule update --init --depth=1 upstream-t3code
 
       - uses: pnpm/action-setup@v6.0.8
 

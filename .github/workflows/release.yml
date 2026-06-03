@@ -18,7 +18,9 @@ jobs:
         with:
           fetch-depth: 0
           filter: tree:0
-          submodules: true
+
+      - name: checkout contracts submodule
+        run: git submodule update --init --depth=1 upstream-t3code
 
       - uses: pnpm/action-setup@v6.0.8
 
