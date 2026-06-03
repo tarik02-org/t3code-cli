@@ -4,51 +4,11 @@ on:
   push:
     branches:
       - master
-  workflow_dispatch:
-    inputs:
-      dry_run:
-        description: run the release workflow in dry-run mode
-        required: false
-        default: false
-        type: boolean
-  pull_request:
-    branches:
-      - master
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
-  dry-run:
-    if: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v6.0.3
-        with:
-          fetch-depth: 0
-          filter: tree:0
-          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ github.head_ref || github.ref_name }}
-
-      - uses: pnpm/action-setup@v6.0.8
-
-      - uses: actions/setup-node@v6.4.0
-        with:
-          node-version-file: package.json
-          cache: pnpm
-
-      - name: install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: build
-        run: pnpm build
-
-      - name: dry-run release publish
-        run: pnpm release:publish:dry-run
-
   release:
-    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
