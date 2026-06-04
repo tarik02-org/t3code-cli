@@ -1,5 +1,11 @@
 # t3code-cli
 
+## 0.2.0
+
+### Minor Changes
+
+- 3c31a60: Support t3code servers mounted under custom base URLs.
+
 ## 0.1.3
 
 ### Patch Changes
