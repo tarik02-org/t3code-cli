@@ -26,6 +26,31 @@ export function toWebSocketBaseUrl(httpBaseUrl: string) {
   );
 }
 
+export function toHttpEndpointUrl(httpBaseUrl: string, pathname: string) {
+  return parseUrl(httpBaseUrl).pipe(
+    Effect.flatMap((url) => Effect.succeed(withPathname(url, pathname).toString())),
+  );
+}
+
+export function toWebSocketEndpointUrl(httpBaseUrl: string, pathname: string) {
+  return parseUrl(httpBaseUrl).pipe(
+    Effect.flatMap((url) => {
+      if (url.protocol === "http:") {
+        return Effect.succeed(withPathname(url, pathname, "ws:").toString());
+      }
+      if (url.protocol === "https:") {
+        return Effect.succeed(withPathname(url, pathname, "wss:").toString());
+      }
+      return Effect.fail(
+        new UrlError({
+          message: `unsupported server url protocol: ${url.protocol}`,
+          protocol: url.protocol,
+        }),
+      );
+    }),
+  );
+}
+
 function parseUrl(value: string): Effect.Effect<URL, UrlError> {
   return Effect.fromResult(Url.fromString(value)).pipe(
     Effect.catchTags({
@@ -39,7 +64,7 @@ function normalizeBaseUrl(url: URL) {
   return Url.mutate(url, (current) => {
     current.hash = "";
     current.search = "";
-    current.pathname = "";
+    current.pathname = normalizePathname(current.pathname);
   })
     .toString()
     .replace(/\/$/, "");
@@ -48,8 +73,27 @@ function normalizeBaseUrl(url: URL) {
 function makeWebSocketUrl(url: URL, protocol: "ws:" | "wss:") {
   return Url.mutate(url, (current) => {
     current.protocol = protocol;
-    current.pathname = "/ws";
+    current.pathname = appendPathname(current.pathname, "/ws");
     current.search = "";
     current.hash = "";
   }).toString();
+}
+
+function withPathname(url: URL, pathname: string, protocol?: "ws:" | "wss:") {
+  return Url.mutate(url, (current) => {
+    if (protocol !== undefined) {
+      current.protocol = protocol;
+    }
+    current.pathname = appendPathname(current.pathname, pathname);
+    current.search = "";
+    current.hash = "";
+  });
+}
+
+function normalizePathname(pathname: string) {
+  return pathname === "/" ? "" : pathname.replace(/\/+$/u, "");
+}
+
+function appendPathname(basePathname: string, pathname: string) {
+  return `${normalizePathname(basePathname)}${pathname.startsWith("/") ? pathname : `/${pathname}`}`;
 }
