@@ -23,7 +23,11 @@ export class AuthTransportError extends Schema.TaggedErrorClass<AuthTransportErr
   {
     message: Schema.String,
     cause: Schema.optionalKey(
-      Schema.Union([HttpClientError.HttpClientErrorSchema, Schema.instanceOf(Schema.SchemaError)]),
+      Schema.Union([
+        HttpClientError.HttpClientErrorSchema,
+        Schema.instanceOf(Schema.SchemaError),
+        UrlError,
+      ]),
     ),
   },
 ) {}

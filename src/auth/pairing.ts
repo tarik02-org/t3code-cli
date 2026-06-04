@@ -14,7 +14,11 @@ export function parsePairingUrl(value: string): Effect.Effect<PairingUrl, AuthPa
 
     const hostedHost = url.searchParams.get("host")?.trim();
     const baseUrl = normalizeBaseUrl(
-      yield* parseUrl(hostedHost !== undefined && hostedHost.length > 0 ? hostedHost : url.origin),
+      yield* parseUrl(
+        hostedHost !== undefined && hostedHost.length > 0
+          ? hostedHost
+          : new URL(".", url).toString(),
+      ),
     );
     return { baseUrl, credential: token };
   });
@@ -33,7 +37,7 @@ function normalizeBaseUrl(url: URL) {
   return Url.mutate(url, (current) => {
     current.hash = "";
     current.search = "";
-    current.pathname = "";
+    current.pathname = current.pathname === "/" ? "" : current.pathname.replace(/\/+$/u, "");
   })
     .toString()
     .replace(/\/$/, "");

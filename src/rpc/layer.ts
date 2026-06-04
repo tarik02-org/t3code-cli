@@ -13,7 +13,7 @@ import * as Socket from "effect/unstable/socket/Socket";
 
 import { T3Auth } from "../auth/service.ts";
 import { T3Config } from "../config/service.ts";
-import { toWebSocketBaseUrl } from "../config/url.ts";
+import { toWebSocketEndpointUrl } from "../config/url.ts";
 import { CliWsRpcGroup } from "./ws-group.ts";
 import { RpcError } from "./error.ts";
 import { T3Rpc, type WsClient } from "./service.ts";
@@ -77,7 +77,7 @@ const makeWsUrl = Effect.fn("makeWsUrl")(function* (input: {
 }) {
   const resolved = yield* input.config.resolve();
   const wsToken = yield* input.auth.issueWebSocketToken();
-  const wsUrl = yield* toWebSocketBaseUrl(resolved.url);
+  const wsUrl = yield* toWebSocketEndpointUrl(resolved.url, "/ws");
   const request = HttpClientRequest.get(wsUrl).pipe(
     HttpClientRequest.setUrlParam("wsToken", wsToken.token),
   );
