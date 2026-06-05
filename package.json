@@ -26,14 +26,21 @@
     "src"
   ],
   "type": "module",
+  "types": "./dist/src/index.d.ts",
+  "imports": {
+    "#t3tools/contracts": {
+      "types": "./dist/upstream-t3code/packages/contracts/src/index.d.ts",
+      "default": "./dist/upstream-t3code/packages/contracts/src/index.d.ts"
+    }
+  },
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./src/index.ts"
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/index.js"
     }
   },
   "scripts": {
-    "build": "vp pack",
+    "build": "vp pack && tsc -p tsconfig.dts.json",
     "check": "vp check",
     "format": "vp fmt",
     "format:check": "vp fmt --check",
@@ -45,13 +52,14 @@
     "release:publish": "changeset publish",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@effect/platform-node": "4.0.0-beta.74",
+    "effect": "4.0.0-beta.74"
+  },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
-    "@effect/platform-node": "4.0.0-beta.74",
     "@t3tools/contracts": "workspace:*",
     "@types/node": "^25.9.1",
-    "effect": "4.0.0-beta.74",
     "typescript": "^6.0.3",
     "vite-plus": "^0.1.24"
   },

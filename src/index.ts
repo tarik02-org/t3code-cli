@@ -6,6 +6,8 @@ export type {
   WaitEvent,
 } from "./application/service.ts";
 export type { ApplicationError } from "./application/error.ts";
+export { NodeEnvironmentLive } from "./environment/layer.ts";
+export { AppLayer, AuthAppLayer } from "./runtime.ts";
 export type {
   OrchestrationMessage,
   OrchestrationProjectShell,
@@ -13,6 +15,4 @@ export type {
   OrchestrationThread,
   OrchestrationThreadShell,
   ServerProvider,
-} from "@t3tools/contracts";
-export { NodeEnvironmentLive } from "./environment/layer.ts";
-export { AppLayer, AuthAppLayer } from "./runtime.ts";
+} from "#t3tools/contracts";

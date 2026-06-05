@@ -19,22 +19,23 @@ catalogs:
 importers:
 
   .:
+    dependencies:
+      '@effect/platform-node':
+        specifier: 4.0.0-beta.74
+        version: 4.0.0-beta.74(effect@4.0.0-beta.74)(ioredis@5.10.1)
+      effect:
+        specifier: 4.0.0-beta.74
+        version: 4.0.0-beta.74
     devDependencies:
       '@changesets/cli':
         specifier: ^2.31.0
         version: 2.31.0(@types/node@25.9.1)
-      '@effect/platform-node':
-        specifier: 4.0.0-beta.74
-        version: 4.0.0-beta.74(effect@4.0.0-beta.74)(ioredis@5.10.1)
       '@t3tools/contracts':
         specifier: workspace:*
         version: link:upstream-t3code/packages/contracts
       '@types/node':
         specifier: ^25.9.1
         version: 25.9.1
-      effect:
-        specifier: 4.0.0-beta.74
-        version: 4.0.0-beta.74
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

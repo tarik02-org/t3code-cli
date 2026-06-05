@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import type { OrchestrationMessage, OrchestrationThread } from "@t3tools/contracts";
+import type { OrchestrationMessage, OrchestrationThread } from "#t3tools/contracts";
 
 import { ThreadSessionError } from "../domain/error.ts";
 import type { Orchestration } from "../orchestration/service.ts";

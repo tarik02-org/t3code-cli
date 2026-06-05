@@ -1,5 +1,5 @@
 import type * as Path from "effect/Path";
-import type { OrchestrationProjectShell, OrchestrationShellSnapshot } from "@t3tools/contracts";
+import type { OrchestrationProjectShell, OrchestrationShellSnapshot } from "#t3tools/contracts";
 
 import { ProjectLookupError } from "./error.ts";
 

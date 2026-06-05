@@ -7,6 +7,10 @@
     "moduleResolution": "NodeNext",
     "noEmit": true,
     "noUncheckedIndexedAccess": true,
+    "paths": {
+      "#t3tools/contracts": ["./upstream-t3code/packages/contracts/src/index.ts"],
+      "#t3tools/contracts/*": ["./upstream-t3code/packages/contracts/src/*.ts"]
+    },
     "skipLibCheck": true,
     "strict": true,
     "target": "ES2024",
