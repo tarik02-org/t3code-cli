@@ -23,13 +23,6 @@ export const AuthWebSocketTokenResultSchema = Schema.Struct({
 });
 export type AuthWebSocketTokenResult = typeof AuthWebSocketTokenResultSchema.Type;
 
-export const AuthLocalSessionIssueResultSchema = Schema.Struct({
-  token: Schema.String,
-  role: Schema.Literals(["owner", "client"]),
-  expiresAt: Schema.String,
-});
-export type AuthLocalSessionIssueResult = typeof AuthLocalSessionIssueResultSchema.Type;
-
 export const AuthLocalRuntimeStateSchema = Schema.Struct({
   version: Schema.Literal(1),
   origin: Schema.String,
@@ -43,13 +36,7 @@ export const decodeAuthSessionState = Schema.decodeUnknownEffect(AuthSessionStat
 export const decodeAuthWebSocketTokenResult = Schema.decodeUnknownEffect(
   AuthWebSocketTokenResultSchema,
 );
-export const decodeAuthLocalSessionIssueResult = Schema.decodeUnknownEffect(
-  AuthLocalSessionIssueResultSchema,
-);
 export const decodeAuthLocalRuntimeState = Schema.decodeUnknownEffect(AuthLocalRuntimeStateSchema);
-export const decodeAuthLocalSessionIssueResultFromJson = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(AuthLocalSessionIssueResultSchema),
-);
 export const decodeAuthLocalRuntimeStateFromJson = Schema.decodeUnknownEffect(
   Schema.fromJsonString(AuthLocalRuntimeStateSchema),
 );

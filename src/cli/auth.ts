@@ -47,14 +47,13 @@ const localCommand = Command.make(
   "local",
   {
     baseDir: Flag.string("base-dir").pipe(Flag.optional),
-    t3Command: Flag.string("t3-command").pipe(Flag.optional),
     origin: Flag.string("origin").pipe(Flag.optional),
     role: Flag.choice("role", ["owner", "client"] as const).pipe(Flag.withDefault("owner")),
     label: Flag.string("label").pipe(Flag.withDefault("t3cli")),
     subject: Flag.string("subject").pipe(Flag.withDefault("t3cli-local")),
     format: Flag.choice("format", humanJsonFormatChoices).pipe(Flag.withDefault("auto")),
   },
-  ({ baseDir, t3Command, origin, role, label, subject, format }) =>
+  ({ baseDir, origin, role, label, subject, format }) =>
     Effect.gen(function* () {
       const auth = yield* T3Auth;
       const environment = yield* Environment;
@@ -64,7 +63,6 @@ const localCommand = Command.make(
         role,
         label,
         subject,
-        ...(Option.isSome(t3Command) ? { t3Command: t3Command.value } : {}),
         ...(Option.isSome(baseDir) ? { baseDir: baseDir.value } : {}),
         ...(Option.isSome(origin) ? { origin: origin.value } : {}),
       });

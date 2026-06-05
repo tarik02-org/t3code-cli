@@ -14,7 +14,7 @@ This installs the `t3cli` command.
 
 ```sh
 t3cli auth pair <url>
-t3cli auth local [--base-dir <path>] [--t3-command <command>] [--origin <url>] [--role owner|client] [--label <label>] [--subject <subject>]
+t3cli auth local [--base-dir <path>] [--origin <url>] [--role owner|client] [--label <label>] [--subject <subject>]
 t3cli auth status
 ```
 

@@ -1,22 +1,23 @@
+import {
+  AuthAdministrativeScopes,
+  AuthSessionId,
+  type AuthEnvironmentScope,
+} from "#t3tools/contracts";
+import { DatabaseSync } from "node:sqlite";
+import * as Crypto from "node:crypto";
+import * as NodeFs from "node:fs";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as Stream from "effect/Stream";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 
 import { normalizeHttpBaseUrl } from "../config/url.ts";
 import { Environment, type EnvironmentShape } from "../environment/service.ts";
 import { AuthLocalError } from "./error.ts";
-import {
-  decodeAuthLocalRuntimeStateFromJson,
-  decodeAuthLocalSessionIssueResultFromJson,
-  type AuthLocalSessionIssueResult,
-} from "./schema.ts";
+import { decodeAuthLocalRuntimeStateFromJson } from "./schema.ts";
 import type { LocalAuthInput } from "./type.ts";
 
 export const issueLocalSession = Effect.fn("issueLocalSession")(function* (
-  input: Pick<LocalAuthInput, "baseDir" | "t3Command" | "role" | "label" | "subject">,
+  input: Pick<LocalAuthInput, "baseDir" | "role" | "label" | "subject">,
 ) {
   const environment = yield* Environment;
   const baseDir = yield* resolveLocalBaseDir(input.baseDir, environment);
@@ -29,24 +30,15 @@ export const issueLocalSession = Effect.fn("issueLocalSession")(function* (
     );
   }
 
-  const args = [
-    "auth",
-    "session",
-    "issue",
-    "--base-dir",
-    baseDir,
-    "--json",
-    "--role",
-    input.role,
-    "--label",
-    input.label,
-    "--subject",
-    input.subject,
-  ];
-  const command = resolveLocalT3Command(input.t3Command, environment);
-  const output = yield* runLocalT3Command(command, args);
-  const parsed = yield* parseSessionIssueOutput(output.stdout);
-  return { baseDir, session: parsed } as const;
+  const path = yield* Path.Path;
+  const session = yield* issueLocalDatabaseSession({
+    dbPath: path.join(baseDir, "userdata", "state.sqlite"),
+    secretsDir: path.join(baseDir, "userdata", "secrets"),
+    role: input.role,
+    label: input.label,
+    subject: input.subject,
+  });
+  return { baseDir, session } as const;
 });
 
 export const resolveLocalOrigin = Effect.fn("resolveLocalOrigin")(function* (input: {
@@ -78,136 +70,11 @@ export const resolveLocalOrigin = Effect.fn("resolveLocalOrigin")(function* (inp
   return yield* normalizeLocalOrigin(state.origin);
 });
 
-function parseSessionIssueOutput(
-  stdout: string,
-): Effect.Effect<AuthLocalSessionIssueResult, AuthLocalError> {
-  return decodeAuthLocalSessionIssueResultFromJson(stdout).pipe(
-    Effect.mapError(
-      (error) => new AuthLocalError({ message: "local auth returned invalid shape", cause: error }),
-    ),
-  );
-}
-
 function normalizeLocalOrigin(origin: string) {
   return normalizeHttpBaseUrl(origin).pipe(
     Effect.mapError((error) => new AuthLocalError({ message: error.message, cause: error })),
   );
 }
-
-type LocalT3Command = {
-  readonly command: string;
-  readonly argsPrefix: ReadonlyArray<string>;
-  readonly env?: Readonly<Record<string, string>>;
-};
-
-const defaultLocalT3Command: LocalT3Command = {
-  command: "t3",
-  argsPrefix: [],
-};
-
-const macOsAppNames = ["T3 Code (Dev)", "T3 Code (Alpha)", "T3 Code (Nightly)", "T3 Code"] as const;
-
-function resolveLocalT3Command(
-  input: string | undefined,
-  environment: EnvironmentShape,
-): LocalT3Command {
-  const envCommand = environment.env["T3CLI_T3_COMMAND"];
-  const exactCommand =
-    input ?? (envCommand !== undefined && envCommand.length > 0 ? envCommand : undefined);
-  if (exactCommand !== undefined && exactCommand.length > 0) {
-    return { command: exactCommand, argsPrefix: [] };
-  }
-  return defaultLocalT3Command;
-}
-
-const resolveMacOsAppT3Command = Effect.fn("resolveMacOsAppT3Command")(function* () {
-  const fs = yield* FileSystem.FileSystem;
-  for (const appName of macOsAppNames) {
-    const appPath = `/Applications/${appName}.app`;
-    const command = `${appPath}/Contents/MacOS/${appName}`;
-    if (yield* fs.exists(command)) {
-      return {
-        command,
-        argsPrefix: [`${appPath}/Contents/Resources/app.asar/apps/server/dist/bin.mjs`],
-        env: { ELECTRON_RUN_AS_NODE: "1" },
-      } satisfies LocalT3Command;
-    }
-  }
-  return undefined;
-});
-
-const runLocalT3Command = Effect.fn("runLocalT3Command")(function* (
-  command: LocalT3Command,
-  args: ReadonlyArray<string>,
-) {
-  return yield* runLocalT3CommandOnce(command, args).pipe(
-    Effect.catchTag("PlatformError", (error) =>
-      command === defaultLocalT3Command && process.platform === "darwin"
-        ? Effect.gen(function* () {
-            const fallback = yield* resolveMacOsAppT3Command();
-            if (fallback === undefined) {
-              return yield* Effect.fail(error);
-            }
-            return yield* runLocalT3CommandOnce(fallback, args);
-          })
-        : Effect.fail(error),
-    ),
-    Effect.catchTag("PlatformError", (error) =>
-      Effect.fail(
-        new AuthLocalError({
-          message: `local auth failed: ${error.message}`,
-          cause: error,
-        }),
-      ),
-    ),
-  );
-});
-
-const runLocalT3CommandOnce = Effect.fn("runLocalT3CommandOnce")(function* (
-  command: LocalT3Command,
-  args: ReadonlyArray<string>,
-) {
-  const spawner = yield* ChildProcessSpawner;
-  const processCommand = ChildProcess.make(command.command, [...command.argsPrefix, ...args]).pipe(
-    command.env === undefined ? (self) => self : ChildProcess.setEnv(command.env),
-  );
-  const child = yield* spawner.spawn(processCommand);
-  const [stdout, stderr, exitCode] = yield* Effect.all(
-    [
-      collectProcessOutput(child.stdout),
-      collectProcessOutput(child.stderr),
-      child.exitCode.pipe(Effect.map(Number)),
-    ],
-    { concurrency: "unbounded" },
-  ).pipe(
-    Effect.mapError(
-      (error) =>
-        new AuthLocalError({
-          message: `local auth failed: ${error.message}`,
-          cause: error,
-        }),
-    ),
-  );
-
-  if (exitCode !== 0) {
-    return yield* Effect.fail(
-      new AuthLocalError({
-        message: `local auth failed: ${formatCommandFailure(stderr, stdout, exitCode)}`,
-      }),
-    );
-  }
-
-  return { stdout, stderr };
-});
-
-const collectProcessOutput = <E>(stream: Stream.Stream<Uint8Array, E>): Effect.Effect<string, E> =>
-  stream.pipe(
-    Stream.decodeText(),
-    Stream.runFold(
-      () => "",
-      (acc, chunk) => acc + chunk,
-    ),
-  );
 
 const resolveLocalBaseDir = Effect.fn("resolveLocalBaseDir")(function* (
   input: string | undefined,
@@ -228,14 +95,176 @@ const resolveLocalBaseDir = Effect.fn("resolveLocalBaseDir")(function* (
   return path.resolve(environment.cwd, raw);
 });
 
-function formatCommandFailure(stderr: string, stdout: string, exitCode: number) {
-  const stderrDetail = stderr.trim();
-  if (stderrDetail.length > 0) {
-    return stderrDetail;
-  }
-  const stdoutDetail = stdout.trim();
-  if (stdoutDetail.length > 0) {
-    return stdoutDetail;
-  }
-  return `t3 exited with code ${exitCode}`;
+type LocalSessionClaims = {
+  readonly v: 1;
+  readonly kind: "session";
+  readonly sid: AuthSessionId;
+  readonly sub: string;
+  readonly scopes: ReadonlyArray<AuthEnvironmentScope>;
+  readonly method: "bearer-access-token";
+  readonly iat: number;
+  readonly exp: number;
+};
+
+type LocalDatabaseSessionInput = {
+  readonly dbPath: string;
+  readonly secretsDir: string;
+  readonly role: LocalAuthInput["role"];
+  readonly label: string;
+  readonly subject: string;
+};
+
+const defaultSessionTtlMs = 30 * 24 * 60 * 60 * 1000;
+const signingSecretName = "server-signing-key";
+
+const issueLocalDatabaseSession = Effect.fn("issueLocalDatabaseSession")(function* (
+  input: LocalDatabaseSessionInput,
+) {
+  const secret = yield* getOrCreateSigningSecret(input.secretsDir);
+  const issuedAt = new Date();
+  const expiresAt = new Date(issuedAt.getTime() + defaultSessionTtlMs);
+  const sessionId = AuthSessionId.make(Crypto.randomUUID());
+  const scopes = [...AuthAdministrativeScopes];
+  const claims: LocalSessionClaims = {
+    v: 1,
+    kind: "session",
+    sid: sessionId,
+    sub: input.subject,
+    scopes,
+    method: "bearer-access-token",
+    iat: issuedAt.getTime(),
+    exp: expiresAt.getTime(),
+  };
+  const encodedPayload = base64UrlEncode(JSON.stringify(claims));
+  const token = `${encodedPayload}.${signPayload(encodedPayload, secret)}`;
+  yield* insertAuthSession({
+    dbPath: input.dbPath,
+    sessionId,
+    subject: input.subject,
+    scopes,
+    label: input.label,
+    issuedAt: issuedAt.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+  });
+  return {
+    token,
+    role: input.role,
+    expiresAt: expiresAt.toISOString(),
+  };
+});
+
+const getOrCreateSigningSecret = Effect.fn("getOrCreateSigningSecret")(function* (
+  secretsDir: string,
+) {
+  const path = yield* Path.Path;
+  const secretPath = path.join(secretsDir, `${signingSecretName}.bin`);
+  return yield* Effect.try({
+    try: () => {
+      try {
+        return Uint8Array.from(NodeFs.readFileSync(secretPath));
+      } catch (error) {
+        if (!isNodeError(error, "ENOENT")) {
+          throw error;
+        }
+      }
+
+      NodeFs.mkdirSync(secretsDir, { recursive: true, mode: 0o700 });
+      NodeFs.chmodSync(secretsDir, 0o700);
+      const generated = Crypto.randomBytes(32);
+      try {
+        NodeFs.writeFileSync(secretPath, generated, { flag: "wx", mode: 0o600 });
+        NodeFs.chmodSync(secretPath, 0o600);
+        return Uint8Array.from(generated);
+      } catch (error) {
+        if (isNodeError(error, "EEXIST")) {
+          return Uint8Array.from(NodeFs.readFileSync(secretPath));
+        }
+        throw error;
+      }
+    },
+    catch: (error) =>
+      new AuthLocalError({
+        message: `local auth failed to load signing secret: ${formatError(error)}`,
+      }),
+  });
+});
+
+type InsertAuthSessionInput = {
+  readonly dbPath: string;
+  readonly sessionId: AuthSessionId;
+  readonly subject: string;
+  readonly scopes: ReadonlyArray<AuthEnvironmentScope>;
+  readonly label: string;
+  readonly issuedAt: string;
+  readonly expiresAt: string;
+};
+
+function insertAuthSession(input: InsertAuthSessionInput) {
+  return Effect.try({
+    try: () => {
+      const db = new DatabaseSync(input.dbPath);
+      try {
+        db.exec("PRAGMA busy_timeout = 5000;");
+        db.exec("PRAGMA foreign_keys = ON;");
+        const columns = db.prepare("PRAGMA table_info(auth_sessions)").all();
+        if (!columns.some((column) => column["name"] === "scopes")) {
+          throw new Error(
+            `local auth database is missing scoped auth_sessions schema: ${input.dbPath}`,
+          );
+        }
+        db.prepare(
+          `
+          INSERT INTO auth_sessions (
+            session_id,
+            subject,
+            scopes,
+            method,
+            client_label,
+            client_ip_address,
+            client_user_agent,
+            client_device_type,
+            client_os,
+            client_browser,
+            issued_at,
+            expires_at,
+            revoked_at
+          )
+          VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NULL, ?, ?, NULL)
+        `,
+        ).run(
+          input.sessionId,
+          input.subject,
+          JSON.stringify(input.scopes),
+          "bearer-access-token",
+          input.label,
+          "bot",
+          input.issuedAt,
+          input.expiresAt,
+        );
+      } finally {
+        db.close();
+      }
+    },
+    catch: (error) =>
+      new AuthLocalError({
+        message: `local auth failed to write session database: ${formatError(error)}`,
+      }),
+  });
+}
+
+function base64UrlEncode(input: string | Uint8Array): string {
+  const buffer = typeof input === "string" ? Buffer.from(input, "utf8") : Buffer.from(input);
+  return buffer.toString("base64url");
+}
+
+function signPayload(payload: string, secret: Uint8Array): string {
+  return Crypto.createHmac("sha256", Buffer.from(secret)).update(payload).digest("base64url");
+}
+
+function formatError(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error && error.code === code;
 }

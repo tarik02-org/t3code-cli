@@ -2,8 +2,6 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import * as Scope from "effect/Scope";
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 
 import { T3Config } from "../config/service.ts";
 import { Environment } from "../environment/service.ts";
@@ -17,11 +15,9 @@ import type { LocalAuthInput } from "./type.ts";
 export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
   const config = yield* T3Config;
   const transport = yield* makeAuthTransport();
-  const spawner = yield* ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const environment = yield* Environment;
-  const scope = yield* Scope.Scope;
 
   const pair = Effect.fn("T3AuthLive.pair")(function* (pairingUrl: string) {
     const parsed = yield* parsePairingUrl(pairingUrl);
@@ -45,11 +41,9 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
 
   const local = Effect.fn("T3AuthLive.local")(function* (input: LocalAuthInput) {
     const issued = yield* issueLocalSession(input).pipe(
-      Effect.provideService(ChildProcessSpawner, spawner),
       Effect.provideService(FileSystem.FileSystem, fs),
       Effect.provideService(Path.Path, path),
       Effect.provideService(Environment, environment),
-      Effect.provideService(Scope.Scope, scope),
     );
     const url = yield* resolveLocalOrigin({
       baseDir: issued.baseDir,
