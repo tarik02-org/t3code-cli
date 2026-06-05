@@ -1,5 +1,11 @@
 # t3code-cli
 
+## 0.3.0
+
+### Minor Changes
+
+- 37ec214: Stop publishing package types that resolve to source files and workspace-only contracts.
+
 ## 0.2.0
 
 ### Minor Changes
