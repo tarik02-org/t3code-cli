@@ -10,7 +10,7 @@ import type {
   OrchestrationThread,
   OrchestrationThreadShell,
   ServerProvider,
-} from "@t3tools/contracts";
+} from "#t3tools/contracts";
 
 import type { ApplicationError } from "./error.ts";
 

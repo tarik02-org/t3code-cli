@@ -11,7 +11,7 @@ import {
   type ClientOrchestrationCommand,
   type OrchestrationShellStreamItem,
   type OrchestrationThreadStreamItem,
-} from "@t3tools/contracts";
+} from "#t3tools/contracts";
 import { RpcClientError } from "effect/unstable/rpc";
 
 import { RpcError } from "../rpc/error.ts";

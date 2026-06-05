@@ -4,7 +4,7 @@ import {
   type OrchestrationMessage as OrchestrationMessageType,
   type OrchestrationThread,
   type OrchestrationThreadShell,
-} from "@t3tools/contracts";
+} from "#t3tools/contracts";
 import * as Schema from "effect/Schema";
 
 export function isThreadActive(thread: OrchestrationThreadShell | OrchestrationThread) {

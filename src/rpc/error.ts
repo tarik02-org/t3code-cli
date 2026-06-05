@@ -5,7 +5,7 @@ import {
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
   ServerSettingsError,
-} from "@t3tools/contracts";
+} from "#t3tools/contracts";
 import { HttpClientError } from "effect/unstable/http";
 import { RpcClientError } from "effect/unstable/rpc";
 

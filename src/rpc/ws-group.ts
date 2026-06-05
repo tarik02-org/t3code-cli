@@ -10,7 +10,7 @@ import {
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationSubscribeShellRpc,
   WsOrchestrationSubscribeThreadRpc,
-} from "@t3tools/contracts";
+} from "#t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
