@@ -325,8 +325,9 @@ function insertAuthSession(input: InsertAuthSessionInput) {
   });
   return Effect.gen(function* () {
     const sqlFactory = yield* SqlClientFactory;
-    return yield* sqlFactory.withSqliteClient({ filename: input.dbPath }, insert);
-  }).pipe(Effect.mapError(toAuthLocalDatabaseError));
+    const sql = yield* sqlFactory.sqliteClient({ filename: input.dbPath });
+    return yield* insert.pipe(Effect.provideService(SqlClient.SqlClient, sql));
+  }).pipe(Effect.scoped, Effect.mapError(toAuthLocalDatabaseError));
 }
 
 function toAuthLocalDatabaseError(error: SqlError | AuthLocalDatabaseError) {

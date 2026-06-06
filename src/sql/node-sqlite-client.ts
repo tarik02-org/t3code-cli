@@ -12,7 +12,6 @@ import { classifySqliteError, SqlError } from "effect/unstable/sql/SqlError";
 import * as Statement from "effect/unstable/sql/Statement";
 
 import { SqlClientFactory, type SqliteClientConfig } from "./service.ts";
-import type { SqlClientFactoryShape } from "./service.ts";
 
 const ATTR_DB_SYSTEM_NAME = "db.system.name";
 
@@ -115,11 +114,8 @@ export const NodeSqliteClientLive = (config: SqliteClientConfig) =>
     Effect.map(makeNodeSqliteClient(config), (client) => Context.make(SqlClient.SqlClient, client)),
   ).pipe(Layer.provide(Reactivity.layer));
 
-const withSqliteClient: SqlClientFactoryShape["withSqliteClient"] = (config, effect) =>
-  effect.pipe(Effect.provide(NodeSqliteClientLive(config)), Effect.scoped);
-
 export const NodeSqlClientFactoryLive = Layer.succeed(SqlClientFactory, {
-  withSqliteClient,
+  sqliteClient: (config) => makeNodeSqliteClient(config).pipe(Effect.provide(Reactivity.layer)),
 });
 
 function toSqlInputValue(value: unknown): SQLInputValue {

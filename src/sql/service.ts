@@ -11,10 +11,9 @@ export type SqliteClientConfig = {
 };
 
 export type SqlClientFactoryShape = {
-  readonly withSqliteClient: <A, E, R>(
+  readonly sqliteClient: (
     config: SqliteClientConfig,
-    effect: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, E | SqlError, Exclude<Exclude<R, SqlClient.SqlClient>, Scope.Scope>>;
+  ) => Effect.Effect<SqlClient.SqlClient, SqlError, Scope.Scope>;
 };
 
 export class SqlClientFactory extends Context.Service<SqlClientFactory, SqlClientFactoryShape>()(
