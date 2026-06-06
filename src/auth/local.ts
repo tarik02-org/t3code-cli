@@ -3,28 +3,90 @@ import {
   AuthSessionId,
   type AuthEnvironmentScope,
 } from "#t3tools/contracts";
+import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Encoding from "effect/Encoding";
 import * as Filter from "effect/Filter";
 import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
+import { T3Config } from "../config/service.ts";
 import { normalizeHttpBaseUrl } from "../config/url.ts";
 import { Environment, type EnvironmentShape } from "../environment/service.ts";
+import { SqlClientFactory } from "../sql/service.ts";
 import {
+  AuthConfigError,
   AuthLocalDatabaseError,
   AuthLocalError,
   AuthLocalSecretError,
   AuthLocalSigningError,
 } from "./error.ts";
 import { decodeAuthLocalRuntimeStateFromJson } from "./schema.ts";
-import type { LocalAuthInput } from "./type.ts";
-import { SqlClientFactory } from "../sql/service.ts";
+import type { LocalAuthInput, LocalAuthResult } from "./type.ts";
 
-export const issueLocalSession = Effect.fn("issueLocalSession")(function* (
+export class T3LocalAuth extends Context.Service<
+  T3LocalAuth,
+  {
+    readonly local: (
+      input: LocalAuthInput,
+    ) => Effect.Effect<LocalAuthResult, AuthConfigError | AuthLocalError>;
+  }
+>()("t3cli/T3LocalAuth") {}
+
+export const makeT3LocalAuth = Effect.fn("makeT3LocalAuth")(function* () {
+  const config = yield* T3Config;
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const environment = yield* Environment;
+  const crypto = yield* Crypto.Crypto;
+  const sqlClientFactory = yield* SqlClientFactory;
+
+  const local = Effect.fn("T3LocalAuthLive.local")(function* (input: LocalAuthInput) {
+    const issued = yield* issueLocalSession(input).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, path),
+      Effect.provideService(Environment, environment),
+      Effect.provideService(Crypto.Crypto, crypto),
+      Effect.provideService(SqlClientFactory, sqlClientFactory),
+    );
+    const url = yield* resolveLocalOrigin({
+      baseDir: issued.baseDir,
+      ...(input.origin !== undefined ? { origin: input.origin } : {}),
+    }).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, path),
+    );
+    const existing = yield* config.readStored().pipe(
+      Effect.catchTags({
+        ConfigError: (error) =>
+          Effect.fail(new AuthConfigError({ message: "auth config failed", cause: error })),
+      }),
+    );
+    yield* config.writeStored({ ...existing, url, token: issued.session.token }).pipe(
+      Effect.catchTags({
+        ConfigError: (error) =>
+          Effect.fail(new AuthConfigError({ message: "auth config failed", cause: error })),
+      }),
+    );
+    return {
+      url,
+      role: issued.session.role,
+      expiresAt: issued.session.expiresAt,
+      source: "local" as const,
+      baseDir: issued.baseDir,
+    };
+  });
+
+  return { local };
+});
+
+export const T3LocalAuthLive = Layer.effect(T3LocalAuth, makeT3LocalAuth());
+
+const issueLocalSession = Effect.fn("issueLocalSession")(function* (
   input: Pick<LocalAuthInput, "baseDir" | "role" | "label" | "subject">,
 ) {
   const environment = yield* Environment;
@@ -54,7 +116,7 @@ export const issueLocalSession = Effect.fn("issueLocalSession")(function* (
   return { baseDir, session } as const;
 });
 
-export const resolveLocalOrigin = Effect.fn("resolveLocalOrigin")(function* (input: {
+const resolveLocalOrigin = Effect.fn("resolveLocalOrigin")(function* (input: {
   readonly baseDir: string;
   readonly origin?: string;
 }) {
