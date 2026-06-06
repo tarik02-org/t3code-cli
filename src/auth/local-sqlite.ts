@@ -1,44 +1,41 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import { identity } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Reactivity from "effect/unstable/reactivity/Reactivity";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import type { Connection } from "effect/unstable/sql/SqlConnection";
+import { classifySqliteError, SqlError } from "effect/unstable/sql/SqlError";
+import * as Statement from "effect/unstable/sql/Statement";
 
-import { AuthLocalDatabaseError } from "./error.ts";
+const ATTR_DB_SYSTEM_NAME = "db.system.name";
 
-export type LocalAuthSqliteColumn = {
-  readonly name: string;
-};
+const classifyError = (cause: unknown, message: string, operation: string) =>
+  classifySqliteError(cause, { message, operation });
 
-export type LocalAuthSqliteShape = {
-  readonly execute: (sql: string) => Effect.Effect<void, AuthLocalDatabaseError>;
-  readonly run: (
-    sql: string,
-    params: ReadonlyArray<SQLInputValue>,
-  ) => Effect.Effect<void, AuthLocalDatabaseError>;
-  readonly tableInfo: (
-    tableName: "auth_sessions",
-  ) => Effect.Effect<ReadonlyArray<LocalAuthSqliteColumn>, AuthLocalDatabaseError>;
-};
-
-export class LocalAuthSqlite extends Context.Service<LocalAuthSqlite, LocalAuthSqliteShape>()(
-  "t3cli/LocalAuthSqlite",
-) {}
-
-export type LocalAuthSqliteConfig = {
+export type NodeSqliteClientConfig = {
   readonly filename: string;
+  readonly transformResultNames?: ((str: string) => string) | undefined;
+  readonly transformQueryNames?: ((str: string) => string) | undefined;
 };
 
-export const makeLocalAuthSqlite = Effect.fn("makeLocalAuthSqlite")(function* (
-  config: LocalAuthSqliteConfig,
+export const makeNodeSqliteClient = Effect.fn("makeNodeSqliteClient")(function* (
+  config: NodeSqliteClientConfig,
 ) {
+  const compiler = Statement.makeCompilerSqlite(config.transformQueryNames);
+  const transformRows =
+    config.transformResultNames === undefined
+      ? undefined
+      : Statement.defaultTransforms(config.transformResultNames).array;
   const scope = yield* Effect.scope;
   const db = yield* Effect.try({
     try: () => new DatabaseSync(config.filename),
-    catch: (error) =>
-      new AuthLocalDatabaseError({
-        operation: "connect",
-        message: sqliteErrorMessage(error),
+    catch: (cause) =>
+      new SqlError({
+        reason: classifyError(cause, "Failed to open sqlite database", "connect"),
       }),
   });
   yield* Scope.addFinalizer(
@@ -47,70 +44,102 @@ export const makeLocalAuthSqlite = Effect.fn("makeLocalAuthSqlite")(function* (
       try {
         db.close();
       } catch {
-        // Ignore close failures after the owning effect already produced its result.
+        // Ignore close failures after the scoped client is done.
       }
     }),
   );
 
-  const execute = Effect.fn("LocalAuthSqlite.execute")((sql: string) =>
+  const runRows = (sql: string, params: ReadonlyArray<unknown>) =>
     Effect.try({
-      try: () => db.exec(sql),
-      catch: (error) =>
-        new AuthLocalDatabaseError({
-          operation: "query",
-          message: sqliteErrorMessage(error),
-        }),
-    }),
-  );
-
-  const run = Effect.fn("LocalAuthSqlite.run")(
-    (sql: string, params: ReadonlyArray<SQLInputValue>) =>
-      Effect.try({
-        try: () => db.prepare(sql).run(...params),
-        catch: (error) =>
-          new AuthLocalDatabaseError({
-            operation: "query",
-            message: sqliteErrorMessage(error),
-          }),
-      }).pipe(Effect.asVoid),
-  );
-
-  const tableInfo = Effect.fn("LocalAuthSqlite.tableInfo")((tableName: "auth_sessions") =>
-    Effect.try({
-      try: () => db.prepare(`PRAGMA table_info(${tableName})`).all(),
-      catch: (error) =>
-        new AuthLocalDatabaseError({
-          operation: "query",
-          message: sqliteErrorMessage(error),
-        }),
-    }).pipe(
-      Effect.flatMap((rows) => {
-        const columns = rows.flatMap((row) =>
-          typeof row["name"] === "string" ? [{ name: row["name"] }] : [],
-        );
-        if (columns.length !== rows.length) {
-          return Effect.fail(
-            new AuthLocalDatabaseError({
-              operation: "schema",
-              message: `local auth database returned invalid ${tableName} table info`,
-            }),
-          );
+      try: () => {
+        const statement = db.prepare(sql);
+        const bound = params.map(toSqlInputValue);
+        if (statement.columns().length > 0) {
+          return statement.all(...bound);
         }
-        return Effect.succeed(columns);
-      }),
-    ),
-  );
+        statement.run(...bound);
+        return [];
+      },
+      catch: (cause) =>
+        new SqlError({
+          reason: classifyError(cause, "Failed to execute sqlite statement", "execute"),
+        }),
+    });
 
-  return {
-    execute,
-    run,
-    tableInfo,
-  };
+  const runRaw = (sql: string, params: ReadonlyArray<unknown>) =>
+    Effect.try({
+      try: () => {
+        const statement = db.prepare(sql);
+        const bound = params.map(toSqlInputValue);
+        return statement.columns().length > 0 ? statement.all(...bound) : statement.run(...bound);
+      },
+      catch: (cause) =>
+        new SqlError({
+          reason: classifyError(cause, "Failed to execute sqlite statement", "execute"),
+        }),
+    });
+
+  const runValues = (sql: string, params: ReadonlyArray<unknown>) =>
+    Effect.map(runRows(sql, params), (rows) =>
+      rows.map((row) => Object.values(row as Record<string, unknown>)),
+    );
+
+  const connection = identity<Connection>({
+    execute(sql, params, rowTransform) {
+      const effect = runRows(sql, params);
+      return rowTransform === undefined ? effect : Effect.map(effect, rowTransform);
+    },
+    executeRaw(sql, params) {
+      return runRaw(sql, params);
+    },
+    executeValues(sql, params) {
+      return runValues(sql, params);
+    },
+    executeUnprepared(sql, params, rowTransform) {
+      const effect = runRows(sql, params);
+      return rowTransform === undefined ? effect : Effect.map(effect, rowTransform);
+    },
+    executeStream(sql, params, rowTransform) {
+      return Stream.fromIterableEffect(this.execute(sql, params, rowTransform));
+    },
+  });
+
+  const acquirer = Effect.succeed(connection);
+  return yield* SqlClient.make({
+    acquirer,
+    compiler,
+    spanAttributes: [[ATTR_DB_SYSTEM_NAME, "sqlite"]],
+    transformRows,
+  });
 });
 
-export const LocalAuthSqliteLive = (config: LocalAuthSqliteConfig) =>
-  Layer.effect(LocalAuthSqlite, makeLocalAuthSqlite(config));
+export const NodeSqliteClientLive = (config: NodeSqliteClientConfig) =>
+  Layer.effectContext(
+    Effect.map(makeNodeSqliteClient(config), (client) => Context.make(SqlClient.SqlClient, client)),
+  ).pipe(Layer.provide(Reactivity.layer));
 
-function sqliteErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "sqlite operation failed";
+function toSqlInputValue(value: unknown): SQLInputValue {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value === "string" || typeof value === "number" || typeof value === "bigint") {
+    return value;
+  }
+  if (typeof value === "boolean") {
+    return value ? 1 : 0;
+  }
+  if (isDate(value)) {
+    return value.toISOString();
+  }
+  if (ArrayBuffer.isView(value)) {
+    const bytes = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    const copy = new Uint8Array(bytes.byteLength);
+    copy.set(bytes);
+    return copy;
+  }
+  return JSON.stringify(value) ?? null;
+}
+
+function isDate(value: unknown): value is Date {
+  return Object.prototype.toString.call(value) === "[object Date]";
 }

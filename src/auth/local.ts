@@ -4,11 +4,15 @@ import {
   type AuthEnvironmentScope,
 } from "#t3tools/contracts";
 import * as Crypto from "effect/Crypto";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Encoding from "effect/Encoding";
 import * as Filter from "effect/Filter";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 
 import { normalizeHttpBaseUrl } from "../config/url.ts";
 import { Environment, type EnvironmentShape } from "../environment/service.ts";
@@ -18,7 +22,7 @@ import {
   AuthLocalSecretError,
   AuthLocalSigningError,
 } from "./error.ts";
-import { LocalAuthSqlite, LocalAuthSqliteLive } from "./local-sqlite.ts";
+import { NodeSqliteClientLive } from "./local-sqlite.ts";
 import { decodeAuthLocalRuntimeStateFromJson } from "./schema.ts";
 import type { LocalAuthInput } from "./type.ts";
 
@@ -133,8 +137,8 @@ const issueLocalDatabaseSession = Effect.fn("issueLocalDatabaseSession")(functio
 ) {
   const crypto = yield* Crypto.Crypto;
   const secret = yield* getOrCreateSigningSecret(input.secretsDir);
-  const issuedAt = new Date();
-  const expiresAt = new Date(issuedAt.getTime() + defaultSessionTtlMs);
+  const issuedAt = yield* DateTime.now;
+  const expiresAt = DateTime.add(issuedAt, { milliseconds: defaultSessionTtlMs });
   const sessionId = yield* crypto.randomUUIDv4.pipe(
     Effect.map((id) => AuthSessionId.make(id)),
     Effect.mapError(
@@ -153,8 +157,8 @@ const issueLocalDatabaseSession = Effect.fn("issueLocalDatabaseSession")(functio
     sub: input.subject,
     scopes,
     method: "bearer-access-token",
-    iat: issuedAt.getTime(),
-    exp: expiresAt.getTime(),
+    iat: DateTime.toEpochMillis(issuedAt),
+    exp: DateTime.toEpochMillis(expiresAt),
   };
   const encodedPayload = Encoding.encodeBase64Url(JSON.stringify(claims));
   const token = `${encodedPayload}.${yield* signPayload(encodedPayload, secret)}`;
@@ -164,13 +168,13 @@ const issueLocalDatabaseSession = Effect.fn("issueLocalDatabaseSession")(functio
     subject: input.subject,
     scopes,
     label: input.label,
-    issuedAt: issuedAt.toISOString(),
-    expiresAt: expiresAt.toISOString(),
+    issuedAt: DateTime.formatIso(issuedAt),
+    expiresAt: DateTime.formatIso(expiresAt),
   });
   return {
     token,
     role: input.role,
-    expiresAt: expiresAt.toISOString(),
+    expiresAt: DateTime.formatIso(expiresAt),
   };
 });
 
@@ -273,10 +277,10 @@ type InsertAuthSessionInput = {
 
 function insertAuthSession(input: InsertAuthSessionInput) {
   return Effect.gen(function* () {
-    const db = yield* LocalAuthSqlite;
-    yield* db.execute("PRAGMA busy_timeout = 5000;");
-    yield* db.execute("PRAGMA foreign_keys = ON;");
-    const columns = yield* db.tableInfo("auth_sessions");
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`PRAGMA busy_timeout = 5000;`;
+    yield* sql`PRAGMA foreign_keys = ON;`;
+    const columns = yield* sql<{ readonly name: string }>`PRAGMA table_info(auth_sessions)`;
     if (!columns.some((column) => column.name === "scopes")) {
       return yield* Effect.fail(
         new AuthLocalDatabaseError({
@@ -285,8 +289,7 @@ function insertAuthSession(input: InsertAuthSessionInput) {
         }),
       );
     }
-    yield* db.run(
-      `
+    yield* sql`
           INSERT INTO auth_sessions (
             session_id,
             subject,
@@ -302,21 +305,38 @@ function insertAuthSession(input: InsertAuthSessionInput) {
             expires_at,
             revoked_at
           )
-          VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NULL, ?, ?, NULL)
-        `,
-      [
-        input.sessionId,
-        input.subject,
-        JSON.stringify(input.scopes),
-        "bearer-access-token",
-        input.label,
-        "bot",
-        input.issuedAt,
-        input.expiresAt,
-      ],
-    );
+          VALUES (
+            ${input.sessionId},
+            ${input.subject},
+            ${JSON.stringify(input.scopes)},
+            ${"bearer-access-token"},
+            ${input.label},
+            NULL,
+            NULL,
+            ${"bot"},
+            NULL,
+            NULL,
+            ${input.issuedAt},
+            ${input.expiresAt},
+            NULL
+          )
+        `;
     return undefined;
-  }).pipe(Effect.provide(LocalAuthSqliteLive({ filename: input.dbPath })), Effect.scoped);
+  }).pipe(
+    Effect.provide(NodeSqliteClientLive({ filename: input.dbPath })),
+    Effect.scoped,
+    Effect.mapError(toAuthLocalDatabaseError),
+  );
+}
+
+function toAuthLocalDatabaseError(error: SqlError | AuthLocalDatabaseError) {
+  if (Predicate.isTagged(error, "AuthLocalDatabaseError")) {
+    return error;
+  }
+  return new AuthLocalDatabaseError({
+    operation: Predicate.isTagged(error.cause, "ConnectionError") ? "connect" : "query",
+    message: error.message,
+  });
 }
 
 function signPayload(payload: string, secret: Uint8Array) {
