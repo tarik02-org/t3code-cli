@@ -34,6 +34,8 @@ const RpcErrorCauseSchema = Schema.Union([
   Schema.instanceOf(Schema.SchemaError),
 ]);
 
+export type RpcKnownCause = Schema.Schema.Type<typeof RpcErrorCauseSchema>;
+
 export class RpcError extends Schema.TaggedErrorClass<RpcError>()("RpcError", {
   message: Schema.String,
   method: Schema.optionalKey(Schema.String),
@@ -41,3 +43,15 @@ export class RpcError extends Schema.TaggedErrorClass<RpcError>()("RpcError", {
 }) {}
 
 export type OrchestrationError = RpcError;
+
+export function isRpcClientError(error: unknown): error is RpcClientError.RpcClientError {
+  return hasTag(error, "RpcClientError");
+}
+
+export function isRpcError(error: unknown): error is RpcError {
+  return hasTag(error, "RpcError");
+}
+
+function hasTag(error: unknown, tag: string): error is { readonly _tag: string } {
+  return typeof error === "object" && error !== null && Reflect.get(error, "_tag") === tag;
+}

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
@@ -9,20 +9,17 @@ import {
   type TerminalEvent,
   type TerminalSummary,
 } from "#t3tools/contracts";
-import { RpcClientError } from "effect/unstable/rpc";
 
 import { ProjectLookupError, TerminalLookupError, ThreadLookupError } from "../domain/error.ts";
 import { findProjectById } from "../domain/helpers.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
-import { RpcError } from "../rpc/error.ts";
+import { isRpcClientError, isRpcError, RpcError } from "../rpc/error.ts";
 import { T3Rpc, type WsClient } from "../rpc/service.ts";
 import type { T3Application, TerminalAttachTarget, TerminalRef } from "./service.ts";
 
 const rpcRetrySchedule = Schedule.exponential("100 millis").pipe(
   Schedule.take(4),
-  Schedule.collectWhile(
-    (metadata: Schedule.Metadata) => metadata.input instanceof RpcClientError.RpcClientError,
-  ),
+  Schedule.collectWhile((metadata: Schedule.Metadata) => isRpcClientError(metadata.input)),
 );
 
 export type CreateTerminalInput = {
@@ -44,6 +41,7 @@ type TerminalApplicationService = Pick<
 >;
 
 export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(function* () {
+  const crypto = yield* Crypto.Crypto;
   const rpc = yield* T3Rpc;
   const orchestration = yield* T3Orchestration;
 
@@ -99,7 +97,7 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
       );
     }
 
-    const terminalId = input.terminalId ?? `t3cli-${randomUUID()}`;
+    const terminalId = input.terminalId ?? `t3cli-${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`;
     const cwd = thread.worktreePath ?? project.workspaceRoot;
     const opened = yield* runRpc(rpc, WS_METHODS.terminalOpen, (client) =>
       client[WS_METHODS.terminalOpen]({
@@ -247,43 +245,39 @@ function getTerminalMetadataSnapshot(
   });
 }
 
-function runRpc<A, E>(
+function runRpc<A, E extends { readonly message: string }>(
   rpc: T3Rpc["Service"],
   method: string,
-  f: (client: WsClient) => Effect.Effect<A, E>,
+  f: (client: WsClient) => Effect.Effect<A, E | RpcError>,
 ): Effect.Effect<A, RpcError> {
   return Effect.gen(function* () {
     const client = yield* rpc.getClient;
     return yield* f(client);
   }).pipe(
-    Effect.tapError((error) =>
-      error instanceof RpcClientError.RpcClientError ? rpc.disconnect : Effect.void,
-    ),
+    Effect.tapError((error) => (isRpcClientError(error) ? rpc.disconnect : Effect.void)),
     Effect.retry(rpcRetrySchedule),
     Effect.mapError((error) => toRpcError(error, method)),
   );
 }
 
-function subscribeRpc<A, E>(
+function subscribeRpc<A, E extends { readonly message: string }>(
   rpc: T3Rpc["Service"],
   method: string,
-  f: (client: WsClient) => Stream.Stream<A, E>,
+  f: (client: WsClient) => Stream.Stream<A, E | RpcError>,
 ): Stream.Stream<A, RpcError> {
   return Stream.unwrap(Effect.map(rpc.getClient, f)).pipe(
-    Stream.tapError((error) =>
-      error instanceof RpcClientError.RpcClientError ? rpc.disconnect : Effect.void,
-    ),
+    Stream.tapError((error) => (isRpcClientError(error) ? rpc.disconnect : Effect.void)),
     Stream.retry(rpcRetrySchedule),
     Stream.mapError((error) => toRpcError(error, method)),
   );
 }
 
-function toRpcError(error: unknown, method: string) {
-  if (error instanceof RpcError) {
+function toRpcError(error: RpcError | { readonly message: string }, method: string) {
+  if (isRpcError(error)) {
     return error;
   }
   return new RpcError({
-    message: error instanceof Error ? error.message : String(error),
+    message: error.message,
     method,
   });
 }

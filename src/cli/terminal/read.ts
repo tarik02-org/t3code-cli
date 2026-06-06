@@ -5,6 +5,7 @@ import { Argument, Command, Flag } from "effect/unstable/cli";
 
 import { T3Application } from "../../application/service.ts";
 import { T3Output } from "../output/service.ts";
+import { TerminalCliError } from "./error.ts";
 import { filterAttachStreamEvent, toTerminalAttachTarget } from "./shared.ts";
 
 const jsonNdjsonFormatChoices = ["json", "ndjson"] as const;
@@ -26,13 +27,31 @@ export const readTerminalCommand = Command.make(
       const fromSequenceValue = Option.getOrUndefined(fromSequence);
 
       if (fromSequenceValue !== undefined && fromSequenceValue < 0) {
-        yield* Effect.fail(new Error(`invalid from-sequence: ${fromSequenceValue}`));
+        yield* Effect.fail(
+          new TerminalCliError({
+            message: `invalid from-sequence: ${fromSequenceValue}`,
+            threadId: thread,
+            terminalId,
+          }),
+        );
       }
       if (fromSequenceValue !== undefined && !follow) {
-        yield* Effect.fail(new Error("--from-sequence requires --follow"));
+        yield* Effect.fail(
+          new TerminalCliError({
+            message: "--from-sequence requires --follow",
+            threadId: thread,
+            terminalId,
+          }),
+        );
       }
       if (follow && format !== "ndjson") {
-        yield* Effect.fail(new Error("--follow requires --format ndjson"));
+        yield* Effect.fail(
+          new TerminalCliError({
+            message: "--follow requires --format ndjson",
+            threadId: thread,
+            terminalId,
+          }),
+        );
       }
 
       const terminal = yield* application.getTerminal({
@@ -61,7 +80,13 @@ export const readTerminalCommand = Command.make(
       const item = yield* Stream.runHead(stream);
       const event = Option.getOrUndefined(item);
       if (event === undefined || event.type !== "snapshot") {
-        yield* Effect.fail(new Error("server did not return terminal snapshot"));
+        yield* Effect.fail(
+          new TerminalCliError({
+            message: "server did not return terminal snapshot",
+            threadId: thread,
+            terminalId,
+          }),
+        );
       } else {
         if (format === "ndjson") {
           yield* output.printNdjson(event);

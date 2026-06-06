@@ -5,6 +5,7 @@ import { Argument, Command, Flag } from "effect/unstable/cli";
 
 import { T3Application } from "../../application/service.ts";
 import { T3Output } from "../output/service.ts";
+import { TerminalCliError } from "./error.ts";
 import { filterAttachStreamEvent, toTerminalAttachTarget } from "./shared.ts";
 
 const ndjsonOnlyFormatChoices = ["ndjson"] as const;
@@ -24,7 +25,13 @@ export const streamTerminalCommand = Command.make(
       const fromSequenceValue = Option.getOrUndefined(fromSequence);
 
       if (fromSequenceValue !== undefined && fromSequenceValue < 0) {
-        yield* Effect.fail(new Error(`invalid from-sequence: ${fromSequenceValue}`));
+        yield* Effect.fail(
+          new TerminalCliError({
+            message: `invalid from-sequence: ${fromSequenceValue}`,
+            threadId: thread,
+            terminalId,
+          }),
+        );
       }
 
       const terminal = yield* application.getTerminal({

@@ -6,11 +6,12 @@ import * as Stream from "effect/Stream";
 import type { TerminalEvent, TerminalSummary } from "#t3tools/contracts";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
-import { TerminalLookupError } from "../../domain/error.ts";
+import { isTerminalLookupError } from "../../domain/error.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
 import { humanJsonFormatChoices, resolveOutputFormat } from "../output-format.ts";
 import { T3Output } from "../output/service.ts";
+import { TerminalCliError } from "./error.ts";
 
 const terminalWaitTargetChoices = ["exited", "closed", "ended"] as const;
 type TerminalWaitTarget = (typeof terminalWaitTargetChoices)[number];
@@ -40,10 +41,16 @@ export const waitTerminalCommand = Command.make(
       if (Exit.isFailure(currentResult)) {
         const failure = Cause.findErrorOption(currentResult.cause);
         if (Option.isNone(failure)) {
-          yield* Effect.fail(new Error("terminal lookup failed without an error value"));
+          yield* Effect.fail(
+            new TerminalCliError({
+              message: "terminal lookup failed without an error value",
+              threadId: thread,
+              terminalId,
+            }),
+          );
         } else {
           const error = failure.value;
-          if (error instanceof TerminalLookupError && (target === "closed" || target === "ended")) {
+          if (isTerminalLookupError(error) && (target === "closed" || target === "ended")) {
             const result = {
               threadId: thread,
               terminalId,
@@ -87,11 +94,21 @@ export const waitTerminalCommand = Command.make(
         );
         const matched = Option.getOrUndefined(item);
         if (matched === undefined) {
-          yield* Effect.fail(new Error("terminal wait stream ended unexpectedly"));
+          yield* Effect.fail(
+            new TerminalCliError({
+              message: "terminal wait stream ended unexpectedly",
+              threadId: thread,
+              terminalId,
+            }),
+          );
         } else {
           if (target === "exited" && matched.type === "closed") {
             yield* Effect.fail(
-              new Error(`terminal closed before an exited event was observed: ${terminalId}`),
+              new TerminalCliError({
+                message: `terminal closed before an exited event was observed: ${terminalId}`,
+                threadId: thread,
+                terminalId,
+              }),
             );
           }
 

@@ -12,10 +12,13 @@ import type {
   TerminalAttachTarget,
   TerminalRef,
 } from "../../application/service.ts";
+import type { ApplicationError } from "../../application/error.ts";
+import { TerminalCliError } from "./error.ts";
 
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
 const DETACH_BYTE = 0x1d;
+const ANSI_CLEAR_SCREEN = "\u001bc";
 
 export function runAttachedTerminalSession(input: {
   readonly application: T3Application["Service"];
@@ -24,7 +27,11 @@ export function runAttachedTerminalSession(input: {
   return Effect.gen(function* () {
     if (!process.stdin.isTTY || !process.stdout.isTTY || process.stdin.setRawMode === undefined) {
       return yield* Effect.fail(
-        new Error("terminal attach requires an interactive TTY on stdin and stdout"),
+        new TerminalCliError({
+          message: "terminal attach requires an interactive TTY on stdin and stdout",
+          threadId: input.terminal.threadId,
+          terminalId: input.terminal.terminalId,
+        }),
       );
     }
 
@@ -36,7 +43,7 @@ export function runAttachedTerminalSession(input: {
       rows,
     });
 
-    return yield* Effect.callback<void, Error>((resume) => {
+    return yield* Effect.callback<void, ApplicationError | TerminalCliError>((resume) => {
       let settled = false;
       const stdin = process.stdin;
       const stdout = process.stdout;
@@ -50,7 +57,7 @@ export function runAttachedTerminalSession(input: {
           }),
         ).pipe(
           Effect.match({
-            onFailure: (error) => finish(error instanceof Error ? error : new Error(String(error))),
+            onFailure: (error) => finish(error),
             onSuccess: () => finish(),
           }),
         ),
@@ -63,7 +70,7 @@ export function runAttachedTerminalSession(input: {
         stdin.pause();
       };
 
-      const finish = (error?: Error, message?: string) => {
+      const finish = (error?: ApplicationError | TerminalCliError, message?: string) => {
         if (settled) {
           return;
         }
@@ -79,13 +86,20 @@ export function runAttachedTerminalSession(input: {
       const sendResize = () => {
         const nextCols = stdout.columns ?? DEFAULT_COLS;
         const nextRows = stdout.rows ?? DEFAULT_ROWS;
-        void Effect.runPromise(
-          input.application.resizeTerminal({
-            terminal: input.terminal,
-            cols: nextCols,
-            rows: nextRows,
-          }),
-        ).catch(() => undefined);
+        Effect.runFork(
+          input.application
+            .resizeTerminal({
+              terminal: input.terminal,
+              cols: nextCols,
+              rows: nextRows,
+            })
+            .pipe(
+              Effect.match({
+                onFailure: (error) => finish(error),
+                onSuccess: () => undefined,
+              }),
+            ),
+        );
       };
 
       const onResize = () => {
@@ -97,12 +111,19 @@ export function runAttachedTerminalSession(input: {
         const detachOffset = buffer.indexOf(DETACH_BYTE);
         const payload = detachOffset === -1 ? buffer : buffer.subarray(0, detachOffset);
         if (payload.length > 0) {
-          void Effect.runPromise(
-            input.application.writeTerminal({
-              terminal: input.terminal,
-              data: payload.toString("utf8"),
-            }),
-          ).catch((error) => finish(error instanceof Error ? error : new Error(String(error))));
+          Effect.runFork(
+            input.application
+              .writeTerminal({
+                terminal: input.terminal,
+                data: payload.toString("utf8"),
+              })
+              .pipe(
+                Effect.match({
+                  onFailure: (error) => finish(error),
+                  onSuccess: () => undefined,
+                }),
+              ),
+          );
         }
         if (detachOffset !== -1) {
           finish(undefined, "detached");
@@ -125,7 +146,7 @@ function applyAttachEvent(event: TerminalAttachStreamEvent) {
   }
 
   if (event.type === "snapshot" || event.type === "restarted") {
-    process.stdout.write("\u001bc");
+    process.stdout.write(ANSI_CLEAR_SCREEN);
     if (event.snapshot.history.length > 0) {
       process.stdout.write(event.snapshot.history);
     }
@@ -138,7 +159,7 @@ function applyAttachEvent(event: TerminalAttachStreamEvent) {
   }
 
   if (event.type === "cleared") {
-    process.stdout.write("\u001bc");
+    process.stdout.write(ANSI_CLEAR_SCREEN);
     return;
   }
 

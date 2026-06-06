@@ -8,6 +8,7 @@ import { Environment } from "../../environment/service.ts";
 import { T3Input } from "../input/service.ts";
 import { humanJsonFormatChoices, resolveOutputFormat } from "../output-format.ts";
 import { T3Output } from "../output/service.ts";
+import { TerminalCliError } from "./error.ts";
 
 export const writeTerminalCommand = Command.make(
   "write",
@@ -39,20 +40,30 @@ export const writeTerminalCommand = Command.make(
 
       if (inputCount !== 1) {
         yield* Effect.fail(
-          new Error("provide exactly one of <data>, --stdin, --hex <data>, or --base64 <data>"),
+          new TerminalCliError({
+            message: "provide exactly one of <data>, --stdin, --hex <data>, or --base64 <data>",
+            threadId: thread,
+            terminalId,
+          }),
         );
       }
 
       const payload =
         hexData !== undefined
-          ? decodeHexPayload(hexData)
+          ? yield* decodeHexPayload(hexData, thread, terminalId)
           : base64Data !== undefined
-            ? decodeBase64Payload(base64Data)
+            ? yield* decodeBase64Payload(base64Data, thread, terminalId)
             : stdin
               ? yield* inputService.readStdin()
               : argumentData!;
       if (payload.length === 0) {
-        yield* Effect.fail(new Error("terminal write payload is empty"));
+        yield* Effect.fail(
+          new TerminalCliError({
+            message: "terminal write payload is empty",
+            threadId: thread,
+            terminalId,
+          }),
+        );
       }
 
       yield* application.writeTerminal({
@@ -86,22 +97,34 @@ export const writeTerminalCommand = Command.make(
     }),
 ).pipe(Command.withDescription("write raw data to a terminal"));
 
-function decodeHexPayload(value: string) {
+function decodeHexPayload(value: string, threadId: string, terminalId: string) {
   const normalized = value.trim();
   if (
     normalized.length === 0 ||
     normalized.length % 2 !== 0 ||
     !/^[0-9a-fA-F]+$/.test(normalized)
   ) {
-    throw new Error("invalid hex payload");
+    return Effect.fail(
+      new TerminalCliError({
+        message: "invalid hex payload",
+        threadId,
+        terminalId,
+      }),
+    );
   }
-  return Buffer.from(normalized, "hex").toString("utf8");
+  return Effect.succeed(Buffer.from(normalized, "hex").toString("utf8"));
 }
 
-function decodeBase64Payload(value: string) {
+function decodeBase64Payload(value: string, threadId: string, terminalId: string) {
   const normalized = value.trim();
   if (normalized.length === 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)) {
-    throw new Error("invalid base64 payload");
+    return Effect.fail(
+      new TerminalCliError({
+        message: "invalid base64 payload",
+        threadId,
+        terminalId,
+      }),
+    );
   }
-  return Buffer.from(normalized, "base64").toString("utf8");
+  return Effect.succeed(Buffer.from(normalized, "base64").toString("utf8"));
 }
