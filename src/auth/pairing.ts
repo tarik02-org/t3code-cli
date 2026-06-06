@@ -1,8 +1,50 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { Url } from "effect/unstable/http";
 
-import { AuthPairingUrlError } from "./error.ts";
-import type { PairingUrl } from "./type.ts";
+import { T3Config } from "../config/service.ts";
+import { AuthConfigError, AuthPairingUrlError, AuthTransportError } from "./error.ts";
+import { T3AuthTransport } from "./transport.ts";
+import type { PairingUrl, PairResult } from "./type.ts";
+
+export class T3AuthPairing extends Context.Service<
+  T3AuthPairing,
+  {
+    readonly pair: (
+      pairingUrl: string,
+    ) => Effect.Effect<PairResult, AuthConfigError | AuthPairingUrlError | AuthTransportError>;
+  }
+>()("t3cli/T3AuthPairing") {}
+
+export const makeT3AuthPairing = Effect.fn("makeT3AuthPairing")(function* () {
+  const config = yield* T3Config;
+  const transport = yield* T3AuthTransport;
+
+  const pair = Effect.fn("T3AuthPairingLive.pair")(function* (pairingUrl: string) {
+    const parsed = yield* parsePairingUrl(pairingUrl);
+    const result = yield* transport.bootstrapBearer(parsed);
+    const existing = yield* config.readStored().pipe(
+      Effect.catchTags({
+        ConfigError: (error) =>
+          Effect.fail(new AuthConfigError({ message: "auth config failed", cause: error })),
+      }),
+    );
+    yield* config
+      .writeStored({ ...existing, url: parsed.baseUrl, token: result.sessionToken })
+      .pipe(
+        Effect.catchTags({
+          ConfigError: (error) =>
+            Effect.fail(new AuthConfigError({ message: "auth config failed", cause: error })),
+        }),
+      );
+    return { url: parsed.baseUrl, role: result.role, expiresAt: result.expiresAt };
+  });
+
+  return { pair };
+});
+
+export const T3AuthPairingLive = Layer.effect(T3AuthPairing, makeT3AuthPairing());
 
 export function parsePairingUrl(value: string): Effect.Effect<PairingUrl, AuthPairingUrlError> {
   return Effect.gen(function* () {

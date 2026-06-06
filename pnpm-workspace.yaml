@@ -3,6 +3,7 @@ packages:
   - upstream-t3code/packages/contracts
 
 catalog:
-  "@effect/vitest": 4.0.0-beta.74
-  effect: 4.0.0-beta.74
+  "@effect/vitest": 4.0.0-beta.78
+  effect: 4.0.0-beta.78
+  vite-plus: 0.1.24
   vitest: 4.1.0

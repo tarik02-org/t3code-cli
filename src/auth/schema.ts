@@ -1,13 +1,21 @@
 import * as Schema from "effect/Schema";
 
-export const AuthBearerBootstrapResultSchema = Schema.Struct({
-  authenticated: Schema.Literal(true),
-  role: Schema.Literals(["owner", "client"]),
-  sessionMethod: Schema.Literal("bearer-session-token"),
-  expiresAt: Schema.String,
-  sessionToken: Schema.String,
+export const AuthAccessTokenResultSchema = Schema.Struct({
+  access_token: Schema.String,
+  issued_token_type: Schema.String,
+  token_type: Schema.Literal("Bearer"),
+  expires_in: Schema.Number,
+  scope: Schema.String,
 });
-export type AuthBearerBootstrapResult = typeof AuthBearerBootstrapResultSchema.Type;
+export type AuthAccessTokenResult = typeof AuthAccessTokenResultSchema.Type;
+
+export type AuthBearerBootstrapResult = {
+  readonly authenticated: true;
+  readonly role: "owner" | "client";
+  readonly sessionMethod: "bearer-access-token";
+  readonly expiresAt: string;
+  readonly sessionToken: string;
+};
 
 export const AuthSessionStateSchema = Schema.Struct({
   authenticated: Schema.Boolean,
@@ -17,18 +25,11 @@ export const AuthSessionStateSchema = Schema.Struct({
 });
 export type AuthSessionState = typeof AuthSessionStateSchema.Type;
 
-export const AuthWebSocketTokenResultSchema = Schema.Struct({
-  token: Schema.String,
+export const AuthWebSocketTicketResultSchema = Schema.Struct({
+  ticket: Schema.String,
   expiresAt: Schema.String,
 });
-export type AuthWebSocketTokenResult = typeof AuthWebSocketTokenResultSchema.Type;
-
-export const AuthLocalSessionIssueResultSchema = Schema.Struct({
-  token: Schema.String,
-  role: Schema.Literals(["owner", "client"]),
-  expiresAt: Schema.String,
-});
-export type AuthLocalSessionIssueResult = typeof AuthLocalSessionIssueResultSchema.Type;
+export type AuthWebSocketTicketResult = typeof AuthWebSocketTicketResultSchema.Type;
 
 export const AuthLocalRuntimeStateSchema = Schema.Struct({
   version: Schema.Literal(1),
@@ -36,20 +37,12 @@ export const AuthLocalRuntimeStateSchema = Schema.Struct({
 });
 export type AuthLocalRuntimeState = typeof AuthLocalRuntimeStateSchema.Type;
 
-export const decodeAuthBearerBootstrapResult = Schema.decodeUnknownEffect(
-  AuthBearerBootstrapResultSchema,
-);
+export const decodeAuthAccessTokenResult = Schema.decodeUnknownEffect(AuthAccessTokenResultSchema);
 export const decodeAuthSessionState = Schema.decodeUnknownEffect(AuthSessionStateSchema);
-export const decodeAuthWebSocketTokenResult = Schema.decodeUnknownEffect(
-  AuthWebSocketTokenResultSchema,
-);
-export const decodeAuthLocalSessionIssueResult = Schema.decodeUnknownEffect(
-  AuthLocalSessionIssueResultSchema,
+export const decodeAuthWebSocketTicketResult = Schema.decodeUnknownEffect(
+  AuthWebSocketTicketResultSchema,
 );
 export const decodeAuthLocalRuntimeState = Schema.decodeUnknownEffect(AuthLocalRuntimeStateSchema);
-export const decodeAuthLocalSessionIssueResultFromJson = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(AuthLocalSessionIssueResultSchema),
-);
 export const decodeAuthLocalRuntimeStateFromJson = Schema.decodeUnknownEffect(
   Schema.fromJsonString(AuthLocalRuntimeStateSchema),
 );
