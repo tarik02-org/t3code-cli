@@ -10,9 +10,7 @@ import * as Encoding from "effect/Encoding";
 import * as Filter from "effect/Filter";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as Predicate from "effect/Predicate";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-import type { SqlError } from "effect/unstable/sql/SqlError";
 
 import { normalizeHttpBaseUrl } from "../config/url.ts";
 import { Environment, type EnvironmentShape } from "../environment/service.ts";
@@ -327,17 +325,39 @@ function insertAuthSession(input: InsertAuthSessionInput) {
     const sqlFactory = yield* SqlClientFactory;
     const sql = yield* sqlFactory.sqliteClient({ filename: input.dbPath });
     return yield* insert.pipe(Effect.provideService(SqlClient.SqlClient, sql));
-  }).pipe(Effect.scoped, Effect.mapError(toAuthLocalDatabaseError));
-}
-
-function toAuthLocalDatabaseError(error: SqlError | AuthLocalDatabaseError) {
-  if (Predicate.isTagged(error, "AuthLocalDatabaseError")) {
-    return error;
-  }
-  return new AuthLocalDatabaseError({
-    operation: Predicate.isTagged(error.cause, "ConnectionError") ? "connect" : "query",
-    message: error.message,
-  });
+  }).pipe(
+    Effect.scoped,
+    Effect.catchTag("SqlError", (error) => {
+      const queryError = Effect.fail(
+        new AuthLocalDatabaseError({
+          operation: "query",
+          message: error.message,
+        }),
+      );
+      return Effect.fail(error.reason).pipe(
+        Effect.catchTag("ConnectionError", () =>
+          Effect.fail(
+            new AuthLocalDatabaseError({
+              operation: "connect",
+              message: error.message,
+            }),
+          ),
+        ),
+        Effect.catchTags({
+          AuthenticationError: () => queryError,
+          AuthorizationError: () => queryError,
+          SqlSyntaxError: () => queryError,
+          UniqueViolation: () => queryError,
+          ConstraintError: () => queryError,
+          DeadlockError: () => queryError,
+          SerializationError: () => queryError,
+          LockTimeoutError: () => queryError,
+          StatementTimeoutError: () => queryError,
+          UnknownError: () => queryError,
+        }),
+      );
+    }),
+  );
 }
 
 function signPayload(payload: string, secret: Uint8Array) {
