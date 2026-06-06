@@ -76,10 +76,10 @@ const makeWsUrl = Effect.fn("makeWsUrl")(function* (input: {
   readonly auth: T3Auth["Service"];
 }) {
   const resolved = yield* input.config.resolve();
-  const wsToken = yield* input.auth.issueWebSocketToken();
+  const wsTicket = yield* input.auth.issueWebSocketTicket();
   const wsUrl = yield* toWebSocketEndpointUrl(resolved.url, "/ws");
   const request = HttpClientRequest.get(wsUrl).pipe(
-    HttpClientRequest.setUrlParam("wsToken", wsToken.token),
+    HttpClientRequest.setUrlParam("wsTicket", wsTicket.ticket),
   );
   return Option.getOrThrow(HttpClientRequest.toUrl(request)).toString();
 });

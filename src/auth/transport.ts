@@ -17,8 +17,8 @@ import {
   decodeAuthAccessTokenResult,
   type AuthSessionState,
   decodeAuthSessionState,
-  type AuthWebSocketTokenResult,
-  decodeAuthWebSocketTokenResult,
+  type AuthWebSocketTicketResult,
+  decodeAuthWebSocketTicketResult,
 } from "./schema.ts";
 
 export class T3AuthTransport extends Context.Service<
@@ -31,9 +31,9 @@ export class T3AuthTransport extends Context.Service<
     readonly getSession: (
       config: ResolvedConfig,
     ) => Effect.Effect<AuthSessionState, AuthTransportError>;
-    readonly issueWebSocketToken: (
+    readonly issueWebSocketTicket: (
       config: ResolvedConfig,
-    ) => Effect.Effect<AuthWebSocketTokenResult, AuthTransportError>;
+    ) => Effect.Effect<AuthWebSocketTicketResult, AuthTransportError>;
   }
 >()("t3cli/T3AuthTransport") {}
 
@@ -123,10 +123,10 @@ const makeT3AuthTransport = Effect.fn("makeT3AuthTransport")(function* () {
     );
   });
 
-  const issueWebSocketToken = Effect.fn("AuthTransport.issueWebSocketToken")(function* (
+  const issueWebSocketTicket = Effect.fn("AuthTransport.issueWebSocketTicket")(function* (
     config: ResolvedConfig,
   ) {
-    const url = yield* makeHttpEndpointUrl(config.url, "/api/auth/ws-token");
+    const url = yield* makeHttpEndpointUrl(config.url, "/api/auth/websocket-ticket");
     const request = HttpClientRequest.post(url).pipe(authenticatedRequest(config));
     const response = yield* client.execute(request).pipe(
       Effect.catchTags({
@@ -140,7 +140,7 @@ const makeT3AuthTransport = Effect.fn("makeT3AuthTransport")(function* () {
       }),
     );
     return yield* response.json.pipe(
-      Effect.flatMap(decodeAuthWebSocketTokenResult),
+      Effect.flatMap(decodeAuthWebSocketTicketResult),
       Effect.catchTags({
         HttpClientError: (error) =>
           Effect.fail(
@@ -160,7 +160,7 @@ const makeT3AuthTransport = Effect.fn("makeT3AuthTransport")(function* () {
   return {
     bootstrapBearer,
     getSession,
-    issueWebSocketToken,
+    issueWebSocketTicket,
   };
 });
 

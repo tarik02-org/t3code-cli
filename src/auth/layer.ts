@@ -26,7 +26,7 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
     return yield* transport.getSession(resolved);
   });
 
-  const issueWebSocketToken = Effect.fn("T3AuthLive.issueWebSocketToken")(function* () {
+  const issueWebSocketTicket = Effect.fn("T3AuthLive.issueWebSocketTicket")(function* () {
     const resolved = yield* config.resolve().pipe(
       Effect.catchTags({
         ConfigError: (error) =>
@@ -35,14 +35,14 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
           Effect.fail(new AuthConfigError({ message: "auth config failed", cause: error })),
       }),
     );
-    return yield* transport.issueWebSocketToken(resolved);
+    return yield* transport.issueWebSocketTicket(resolved);
   });
 
   return {
     pair: pairing.pair,
     local: localAuth.local,
     status,
-    issueWebSocketToken,
+    issueWebSocketTicket,
   };
 });
 
