@@ -7,9 +7,10 @@ import { T3ConfigLive } from "./config/layer.ts";
 import { T3ApplicationLive } from "./application/layer.ts";
 import { T3OrchestrationLive } from "./orchestration/layer.ts";
 import { T3RpcLive } from "./rpc/layer.ts";
+import { NodeSqlClientFactoryLive } from "./sql/node-sqlite-client.ts";
 
 const T3AuthLayer = T3AuthLive.pipe(
-  Layer.provide(Layer.mergeAll(T3ConfigLive, NodeHttpClient.layerUndici)),
+  Layer.provide(Layer.mergeAll(T3ConfigLive, NodeHttpClient.layerUndici, NodeSqlClientFactoryLive)),
 );
 const T3RpcLayer = T3RpcLive.pipe(
   Layer.provide(Layer.mergeAll(T3ConfigLive, T3AuthLayer, NodeSocket.layerWebSocketConstructor)),

@@ -11,19 +11,16 @@ import type { Connection } from "effect/unstable/sql/SqlConnection";
 import { classifySqliteError, SqlError } from "effect/unstable/sql/SqlError";
 import * as Statement from "effect/unstable/sql/Statement";
 
+import { SqlClientFactory, type SqliteClientConfig } from "./service.ts";
+import type { SqlClientFactoryShape } from "./service.ts";
+
 const ATTR_DB_SYSTEM_NAME = "db.system.name";
 
 const classifyError = (cause: unknown, message: string, operation: string) =>
   classifySqliteError(cause, { message, operation });
 
-export type NodeSqliteClientConfig = {
-  readonly filename: string;
-  readonly transformResultNames?: ((str: string) => string) | undefined;
-  readonly transformQueryNames?: ((str: string) => string) | undefined;
-};
-
 export const makeNodeSqliteClient = Effect.fn("makeNodeSqliteClient")(function* (
-  config: NodeSqliteClientConfig,
+  config: SqliteClientConfig,
 ) {
   const compiler = Statement.makeCompilerSqlite(config.transformQueryNames);
   const transformRows =
@@ -113,10 +110,17 @@ export const makeNodeSqliteClient = Effect.fn("makeNodeSqliteClient")(function* 
   });
 });
 
-export const NodeSqliteClientLive = (config: NodeSqliteClientConfig) =>
+export const NodeSqliteClientLive = (config: SqliteClientConfig) =>
   Layer.effectContext(
     Effect.map(makeNodeSqliteClient(config), (client) => Context.make(SqlClient.SqlClient, client)),
   ).pipe(Layer.provide(Reactivity.layer));
+
+const withSqliteClient: SqlClientFactoryShape["withSqliteClient"] = (config, effect) =>
+  effect.pipe(Effect.provide(NodeSqliteClientLive(config)), Effect.scoped);
+
+export const NodeSqlClientFactoryLive = Layer.succeed(SqlClientFactory, {
+  withSqliteClient,
+});
 
 function toSqlInputValue(value: unknown): SQLInputValue {
   if (value === undefined || value === null) {

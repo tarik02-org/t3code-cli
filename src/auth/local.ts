@@ -22,9 +22,9 @@ import {
   AuthLocalSecretError,
   AuthLocalSigningError,
 } from "./error.ts";
-import { NodeSqliteClientLive } from "./local-sqlite.ts";
 import { decodeAuthLocalRuntimeStateFromJson } from "./schema.ts";
 import type { LocalAuthInput } from "./type.ts";
+import { SqlClientFactory } from "../sql/service.ts";
 
 export const issueLocalSession = Effect.fn("issueLocalSession")(function* (
   input: Pick<LocalAuthInput, "baseDir" | "role" | "label" | "subject">,
@@ -276,7 +276,7 @@ type InsertAuthSessionInput = {
 };
 
 function insertAuthSession(input: InsertAuthSessionInput) {
-  return Effect.gen(function* () {
+  const insert = Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     yield* sql`PRAGMA busy_timeout = 5000;`;
     yield* sql`PRAGMA foreign_keys = ON;`;
@@ -322,11 +322,11 @@ function insertAuthSession(input: InsertAuthSessionInput) {
           )
         `;
     return undefined;
-  }).pipe(
-    Effect.provide(NodeSqliteClientLive({ filename: input.dbPath })),
-    Effect.scoped,
-    Effect.mapError(toAuthLocalDatabaseError),
-  );
+  });
+  return Effect.gen(function* () {
+    const sqlFactory = yield* SqlClientFactory;
+    return yield* sqlFactory.withSqliteClient({ filename: input.dbPath }, insert);
+  }).pipe(Effect.mapError(toAuthLocalDatabaseError));
 }
 
 function toAuthLocalDatabaseError(error: SqlError | AuthLocalDatabaseError) {

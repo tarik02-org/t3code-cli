@@ -12,6 +12,7 @@ import { parsePairingUrl } from "./pairing.ts";
 import { T3Auth } from "./service.ts";
 import { makeAuthTransport } from "./transport.ts";
 import type { LocalAuthInput } from "./type.ts";
+import { SqlClientFactory } from "../sql/service.ts";
 
 export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
   const config = yield* T3Config;
@@ -20,6 +21,7 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
   const path = yield* Path.Path;
   const environment = yield* Environment;
   const crypto = yield* Crypto.Crypto;
+  const sqlClientFactory = yield* SqlClientFactory;
 
   const pair = Effect.fn("T3AuthLive.pair")(function* (pairingUrl: string) {
     const parsed = yield* parsePairingUrl(pairingUrl);
@@ -47,6 +49,7 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
       Effect.provideService(Path.Path, path),
       Effect.provideService(Environment, environment),
       Effect.provideService(Crypto.Crypto, crypto),
+      Effect.provideService(SqlClientFactory, sqlClientFactory),
     );
     const url = yield* resolveLocalOrigin({
       baseDir: issued.baseDir,
