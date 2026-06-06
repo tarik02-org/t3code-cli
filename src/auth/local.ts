@@ -3,16 +3,22 @@ import {
   AuthSessionId,
   type AuthEnvironmentScope,
 } from "#t3tools/contracts";
-import { DatabaseSync } from "node:sqlite";
-import * as Crypto from "node:crypto";
-import * as NodeFs from "node:fs";
+import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
+import * as Encoding from "effect/Encoding";
+import * as Filter from "effect/Filter";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
 import { normalizeHttpBaseUrl } from "../config/url.ts";
 import { Environment, type EnvironmentShape } from "../environment/service.ts";
-import { AuthLocalError } from "./error.ts";
+import {
+  AuthLocalDatabaseError,
+  AuthLocalError,
+  AuthLocalSecretError,
+  AuthLocalSigningError,
+} from "./error.ts";
 import { decodeAuthLocalRuntimeStateFromJson } from "./schema.ts";
 import type { LocalAuthInput } from "./type.ts";
 
@@ -37,7 +43,12 @@ export const issueLocalSession = Effect.fn("issueLocalSession")(function* (
     role: input.role,
     label: input.label,
     subject: input.subject,
-  });
+  }).pipe(
+    Effect.mapError(
+      (error) =>
+        new AuthLocalError({ message: `local auth failed: ${error.message}`, cause: error }),
+    ),
+  );
   return { baseDir, session } as const;
 });
 
@@ -120,10 +131,20 @@ const signingSecretName = "server-signing-key";
 const issueLocalDatabaseSession = Effect.fn("issueLocalDatabaseSession")(function* (
   input: LocalDatabaseSessionInput,
 ) {
+  const crypto = yield* Crypto.Crypto;
   const secret = yield* getOrCreateSigningSecret(input.secretsDir);
   const issuedAt = new Date();
   const expiresAt = new Date(issuedAt.getTime() + defaultSessionTtlMs);
-  const sessionId = AuthSessionId.make(Crypto.randomUUID());
+  const sessionId = yield* crypto.randomUUIDv4.pipe(
+    Effect.map((id) => AuthSessionId.make(id)),
+    Effect.mapError(
+      (error) =>
+        new AuthLocalSecretError({
+          message: "failed to generate auth session id",
+          cause: error,
+        }),
+    ),
+  );
   const scopes = [...AuthAdministrativeScopes];
   const claims: LocalSessionClaims = {
     v: 1,
@@ -135,8 +156,8 @@ const issueLocalDatabaseSession = Effect.fn("issueLocalDatabaseSession")(functio
     iat: issuedAt.getTime(),
     exp: expiresAt.getTime(),
   };
-  const encodedPayload = base64UrlEncode(JSON.stringify(claims));
-  const token = `${encodedPayload}.${signPayload(encodedPayload, secret)}`;
+  const encodedPayload = Encoding.encodeBase64Url(JSON.stringify(claims));
+  const token = `${encodedPayload}.${yield* signPayload(encodedPayload, secret)}`;
   yield* insertAuthSession({
     dbPath: input.dbPath,
     sessionId,
@@ -156,38 +177,88 @@ const issueLocalDatabaseSession = Effect.fn("issueLocalDatabaseSession")(functio
 const getOrCreateSigningSecret = Effect.fn("getOrCreateSigningSecret")(function* (
   secretsDir: string,
 ) {
+  const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const secretPath = path.join(secretsDir, `${signingSecretName}.bin`);
-  return yield* Effect.try({
-    try: () => {
-      try {
-        return Uint8Array.from(NodeFs.readFileSync(secretPath));
-      } catch (error) {
-        if (!isNodeError(error, "ENOENT")) {
-          throw error;
-        }
-      }
+  const existing = yield* readSigningSecret(secretPath);
+  if (existing !== undefined) {
+    return existing;
+  }
 
-      NodeFs.mkdirSync(secretsDir, { recursive: true, mode: 0o700 });
-      NodeFs.chmodSync(secretsDir, 0o700);
-      const generated = Crypto.randomBytes(32);
-      try {
-        NodeFs.writeFileSync(secretPath, generated, { flag: "wx", mode: 0o600 });
-        NodeFs.chmodSync(secretPath, 0o600);
-        return Uint8Array.from(generated);
-      } catch (error) {
-        if (isNodeError(error, "EEXIST")) {
-          return Uint8Array.from(NodeFs.readFileSync(secretPath));
-        }
-        throw error;
-      }
-    },
-    catch: (error) =>
-      new AuthLocalError({
-        message: `local auth failed to load signing secret: ${formatError(error)}`,
-      }),
-  });
+  yield* fs.makeDirectory(secretsDir, { recursive: true, mode: 0o700 }).pipe(
+    Effect.mapError(
+      (error) =>
+        new AuthLocalSecretError({
+          message: `failed to create secrets directory: ${secretsDir}`,
+          cause: error,
+        }),
+    ),
+  );
+  yield* fs.chmod(secretsDir, 0o700).pipe(
+    Effect.mapError(
+      (error) =>
+        new AuthLocalSecretError({
+          message: `failed to secure secrets directory: ${secretsDir}`,
+          cause: error,
+        }),
+    ),
+  );
+
+  const crypto = yield* Crypto.Crypto;
+  const generated = yield* crypto.randomBytes(32).pipe(
+    Effect.mapError(
+      (error) =>
+        new AuthLocalSecretError({
+          message: "failed to generate signing secret",
+          cause: error,
+        }),
+    ),
+  );
+  return yield* fs.writeFile(secretPath, generated, { flag: "wx", mode: 0o600 }).pipe(
+    Effect.flatMap(() => fs.chmod(secretPath, 0o600)),
+    Effect.as(generated),
+    Effect.catchFilter(Filter.reason("PlatformError", "AlreadyExists"), () =>
+      readSigningSecret(secretPath).pipe(
+        Effect.flatMap((secret) =>
+          secret === undefined
+            ? Effect.fail(
+                new AuthLocalSecretError({
+                  message: `signing secret disappeared after concurrent creation: ${secretPath}`,
+                }),
+              )
+            : Effect.succeed(secret),
+        ),
+      ),
+    ),
+    Effect.mapError((error) =>
+      error instanceof AuthLocalSecretError
+        ? error
+        : new AuthLocalSecretError({
+            message: `failed to persist signing secret: ${secretPath}`,
+            cause: error,
+          }),
+    ),
+  );
 });
+
+function readSigningSecret(secretPath: string) {
+  return Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    return yield* fs.readFile(secretPath).pipe(
+      Effect.map((bytes) => Uint8Array.from(bytes)),
+      Effect.catchFilter(Filter.reason("PlatformError", "NotFound"), () =>
+        Effect.succeed(undefined),
+      ),
+      Effect.mapError(
+        (error) =>
+          new AuthLocalSecretError({
+            message: `failed to read signing secret: ${secretPath}`,
+            cause: error,
+          }),
+      ),
+    );
+  });
+}
 
 type InsertAuthSessionInput = {
   readonly dbPath: string;
@@ -200,19 +271,22 @@ type InsertAuthSessionInput = {
 };
 
 function insertAuthSession(input: InsertAuthSessionInput) {
-  return Effect.try({
-    try: () => {
-      const db = new DatabaseSync(input.dbPath);
-      try {
-        db.exec("PRAGMA busy_timeout = 5000;");
-        db.exec("PRAGMA foreign_keys = ON;");
-        const columns = db.prepare("PRAGMA table_info(auth_sessions)").all();
-        if (!columns.some((column) => column["name"] === "scopes")) {
-          throw new Error(
-            `local auth database is missing scoped auth_sessions schema: ${input.dbPath}`,
+  return Effect.scoped(
+    withLocalDatabase(input.dbPath, (db) =>
+      Effect.gen(function* () {
+        yield* executeSql(db, "PRAGMA busy_timeout = 5000;");
+        yield* executeSql(db, "PRAGMA foreign_keys = ON;");
+        const columns = yield* tableInfo(db, "auth_sessions");
+        if (!columns.some((column) => column.name === "scopes")) {
+          return yield* Effect.fail(
+            new AuthLocalDatabaseError({
+              operation: "schema",
+              message: `local auth database is missing scoped auth_sessions schema: ${input.dbPath}`,
+            }),
           );
         }
-        db.prepare(
+        yield* runStatement(
+          db,
           `
           INSERT INTO auth_sessions (
             session_id,
@@ -231,40 +305,145 @@ function insertAuthSession(input: InsertAuthSessionInput) {
           )
           VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NULL, ?, ?, NULL)
         `,
-        ).run(
-          input.sessionId,
-          input.subject,
-          JSON.stringify(input.scopes),
-          "bearer-access-token",
-          input.label,
-          "bot",
-          input.issuedAt,
-          input.expiresAt,
+          [
+            input.sessionId,
+            input.subject,
+            JSON.stringify(input.scopes),
+            "bearer-access-token",
+            input.label,
+            "bot",
+            input.issuedAt,
+            input.expiresAt,
+          ],
         );
-      } finally {
-        db.close();
-      }
-    },
+        return undefined;
+      }),
+    ),
+  );
+}
+
+function withLocalDatabase<A>(
+  dbPath: string,
+  use: (db: DatabaseSync) => Effect.Effect<A, AuthLocalDatabaseError>,
+) {
+  return Effect.acquireRelease(openLocalDatabase(dbPath), closeLocalDatabase).pipe(
+    Effect.flatMap(use),
+  );
+}
+
+function openLocalDatabase(dbPath: string) {
+  return Effect.try({
+    try: () => new DatabaseSync(dbPath),
     catch: (error) =>
-      new AuthLocalError({
-        message: `local auth failed to write session database: ${formatError(error)}`,
+      new AuthLocalDatabaseError({
+        operation: "connect",
+        message: sqliteErrorMessage(error),
       }),
   });
 }
 
-function base64UrlEncode(input: string | Uint8Array): string {
-  const buffer = typeof input === "string" ? Buffer.from(input, "utf8") : Buffer.from(input);
-  return buffer.toString("base64url");
+function closeLocalDatabase(db: DatabaseSync) {
+  return Effect.sync(() => {
+    try {
+      db.close();
+    } catch {
+      // Closing happens after the main operation has already produced its result.
+    }
+  });
 }
 
-function signPayload(payload: string, secret: Uint8Array): string {
-  return Crypto.createHmac("sha256", Buffer.from(secret)).update(payload).digest("base64url");
+function executeSql(db: DatabaseSync, sql: string) {
+  return Effect.try({
+    try: () => db.exec(sql),
+    catch: (error) =>
+      new AuthLocalDatabaseError({
+        operation: "query",
+        message: sqliteErrorMessage(error),
+      }),
+  });
 }
 
-function formatError(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+function tableInfo(db: DatabaseSync, tableName: "auth_sessions") {
+  return Effect.try({
+    try: () => db.prepare(`PRAGMA table_info(${tableName})`).all(),
+    catch: (error) =>
+      new AuthLocalDatabaseError({
+        operation: "query",
+        message: sqliteErrorMessage(error),
+      }),
+  }).pipe(
+    Effect.flatMap((rows) => {
+      const columns = rows.flatMap((row) =>
+        typeof row["name"] === "string" ? [{ name: row["name"] }] : [],
+      );
+      if (columns.length !== rows.length) {
+        return Effect.fail(
+          new AuthLocalDatabaseError({
+            operation: "schema",
+            message: `local auth database returned invalid ${tableName} table info`,
+          }),
+        );
+      }
+      return Effect.succeed(columns);
+    }),
+  );
 }
 
-function isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === code;
+function runStatement(db: DatabaseSync, sql: string, params: ReadonlyArray<SQLInputValue>) {
+  return Effect.try({
+    try: () => db.prepare(sql).run(...params),
+    catch: (error) =>
+      new AuthLocalDatabaseError({
+        operation: "query",
+        message: sqliteErrorMessage(error),
+      }),
+  });
+}
+
+function sqliteErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "sqlite operation failed";
+}
+
+function signPayload(payload: string, secret: Uint8Array) {
+  return Effect.gen(function* () {
+    const subtle = globalThis.crypto?.subtle;
+    if (subtle === undefined) {
+      return yield* Effect.fail(
+        new AuthLocalSigningError({
+          operation: "import-key",
+          message: "globalThis.crypto.subtle is not available",
+        }),
+      );
+    }
+    const key = yield* Effect.tryPromise({
+      try: () =>
+        subtle.importKey("raw", toArrayBuffer(secret), { name: "HMAC", hash: "SHA-256" }, false, [
+          "sign",
+        ]),
+      catch: (error) =>
+        new AuthLocalSigningError({
+          operation: "import-key",
+          message: webCryptoErrorMessage(error),
+        }),
+    });
+    const signature = yield* Effect.tryPromise({
+      try: () => subtle.sign("HMAC", key, new TextEncoder().encode(payload)),
+      catch: (error) =>
+        new AuthLocalSigningError({
+          operation: "sign",
+          message: webCryptoErrorMessage(error),
+        }),
+    });
+    return Encoding.encodeBase64Url(new Uint8Array(signature));
+  });
+}
+
+function webCryptoErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "webcrypto operation failed";
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
 }

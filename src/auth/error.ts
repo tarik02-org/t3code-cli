@@ -38,9 +38,40 @@ const AuthLocalErrorCauseSchema = Schema.Union([
   UrlError,
 ]);
 
+export class AuthLocalSecretError extends Schema.TaggedErrorClass<AuthLocalSecretError>()(
+  "AuthLocalSecretError",
+  {
+    message: Schema.String,
+    cause: Schema.optionalKey(Schema.instanceOf(PlatformError)),
+  },
+) {}
+
+export class AuthLocalDatabaseError extends Schema.TaggedErrorClass<AuthLocalDatabaseError>()(
+  "AuthLocalDatabaseError",
+  {
+    operation: Schema.Literals(["connect", "query", "schema"]),
+    message: Schema.String,
+  },
+) {}
+
+export class AuthLocalSigningError extends Schema.TaggedErrorClass<AuthLocalSigningError>()(
+  "AuthLocalSigningError",
+  {
+    operation: Schema.Literals(["import-key", "sign"]),
+    message: Schema.String,
+  },
+) {}
+
 export class AuthLocalError extends Schema.TaggedErrorClass<AuthLocalError>()("AuthLocalError", {
   message: Schema.String,
-  cause: Schema.optionalKey(AuthLocalErrorCauseSchema),
+  cause: Schema.optionalKey(
+    Schema.Union([
+      AuthLocalErrorCauseSchema,
+      AuthLocalSecretError,
+      AuthLocalDatabaseError,
+      AuthLocalSigningError,
+    ]),
+  ),
 }) {}
 
 export type AuthError = AuthPairingUrlError | AuthConfigError | AuthTransportError | AuthLocalError;
