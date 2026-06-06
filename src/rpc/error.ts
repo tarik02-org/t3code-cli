@@ -5,6 +5,10 @@ import {
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
   ServerSettingsError,
+  TerminalCwdError,
+  TerminalHistoryError,
+  TerminalNotRunningError,
+  TerminalSessionLookupError,
 } from "#t3tools/contracts";
 import { HttpClientError } from "effect/unstable/http";
 import { RpcClientError } from "effect/unstable/rpc";
@@ -24,6 +28,10 @@ const RpcErrorCauseSchema = Schema.Union([
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
   ServerSettingsError,
+  TerminalCwdError,
+  TerminalHistoryError,
+  TerminalNotRunningError,
+  TerminalSessionLookupError,
   AuthConfigError,
   AuthLocalError,
   AuthPairingUrlError,

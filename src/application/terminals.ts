@@ -72,6 +72,7 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
   const createTerminal: TerminalApplicationService["createTerminal"] = Effect.fn(
     "T3ApplicationLive.createTerminal",
   )(function* (input: CreateTerminalInput) {
+    const client = yield* rpc.getClient;
     const snapshot = yield* orchestration.getShellSnapshot();
     const thread = snapshot.threads.find((candidate) => candidate.id === input.threadId);
     if (thread === undefined) {
@@ -94,35 +95,19 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
 
     const terminalId = input.terminalId ?? `t3cli-${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`;
     const cwd = thread.worktreePath ?? project.workspaceRoot;
-    const opened = yield* runRpc(
-      rpc,
-      WS_METHODS.terminalOpen,
-      rpc.getClient.pipe(
-        Effect.flatMap((client) =>
-          client[WS_METHODS.terminalOpen]({
-            threadId: thread.id,
-            terminalId,
-            cwd,
-            worktreePath: thread.worktreePath ?? null,
-          }),
-        ),
-      ),
-    );
+    const opened = yield* client[WS_METHODS.terminalOpen]({
+      threadId: thread.id,
+      terminalId,
+      cwd,
+      worktreePath: thread.worktreePath ?? null,
+    }).pipe(runRpc(rpc, WS_METHODS.terminalOpen));
 
     if (input.command !== undefined) {
-      yield* runRpc(
-        rpc,
-        WS_METHODS.terminalWrite,
-        rpc.getClient.pipe(
-          Effect.flatMap((client) =>
-            client[WS_METHODS.terminalWrite]({
-              threadId: thread.id,
-              terminalId,
-              data: `${input.command}\r`,
-            }),
-          ),
-        ),
-      );
+      yield* client[WS_METHODS.terminalWrite]({
+        threadId: thread.id,
+        terminalId,
+        data: `${input.command}\r`,
+      }).pipe(runRpc(rpc, WS_METHODS.terminalWrite));
     }
 
     return opened;
@@ -133,33 +118,29 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
     readonly cols?: number;
     readonly rows?: number;
   }): Stream.Stream<TerminalAttachStreamEvent, RpcError> =>
-    subscribeRpc(
-      rpc,
-      WS_METHODS.terminalAttach,
-      Stream.unwrap(
-        rpc.getClient.pipe(
-          Effect.map((client) =>
-            client[WS_METHODS.terminalAttach]({
-              threadId: input.terminal.threadId,
-              terminalId: input.terminal.terminalId,
-              cwd: input.terminal.cwd,
-              worktreePath: input.terminal.worktreePath,
-              ...(input.cols !== undefined ? { cols: input.cols } : {}),
-              ...(input.rows !== undefined ? { rows: input.rows } : {}),
-            }),
-          ),
+    Stream.unwrap(
+      rpc.getClient.pipe(
+        Effect.map((client) =>
+          client[WS_METHODS.terminalAttach]({
+            threadId: input.terminal.threadId,
+            terminalId: input.terminal.terminalId,
+            cwd: input.terminal.cwd,
+            worktreePath: input.terminal.worktreePath,
+            ...(input.cols !== undefined ? { cols: input.cols } : {}),
+            ...(input.rows !== undefined ? { rows: input.rows } : {}),
+          }),
         ),
+        Effect.map(subscribeRpc(rpc, WS_METHODS.terminalAttach)),
       ),
     );
 
   const watchTerminalEvents: TerminalApplicationService["watchTerminalEvents"] = (
     terminal: TerminalRef,
   ): Stream.Stream<TerminalEvent, RpcError> =>
-    subscribeRpc(
-      rpc,
-      WS_METHODS.subscribeTerminalEvents,
-      Stream.unwrap(
-        rpc.getClient.pipe(Effect.map((client) => client[WS_METHODS.subscribeTerminalEvents]({}))),
+    Stream.unwrap(
+      rpc.getClient.pipe(
+        Effect.map((client) => client[WS_METHODS.subscribeTerminalEvents]({})),
+        Effect.map(subscribeRpc(rpc, WS_METHODS.subscribeTerminalEvents)),
       ),
     ).pipe(
       Stream.filter(
@@ -170,19 +151,12 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
   const writeTerminal: TerminalApplicationService["writeTerminal"] = Effect.fn(
     "T3ApplicationLive.writeTerminal",
   )(function* (input: { readonly terminal: TerminalRef; readonly data: string }) {
-    yield* runRpc(
-      rpc,
-      WS_METHODS.terminalWrite,
-      rpc.getClient.pipe(
-        Effect.flatMap((client) =>
-          client[WS_METHODS.terminalWrite]({
-            threadId: input.terminal.threadId,
-            terminalId: input.terminal.terminalId,
-            data: input.data,
-          }),
-        ),
-      ),
-    );
+    const client = yield* rpc.getClient;
+    yield* client[WS_METHODS.terminalWrite]({
+      threadId: input.terminal.threadId,
+      terminalId: input.terminal.terminalId,
+      data: input.data,
+    }).pipe(runRpc(rpc, WS_METHODS.terminalWrite));
   });
 
   const resizeTerminal: TerminalApplicationService["resizeTerminal"] = Effect.fn(
@@ -192,38 +166,24 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
     readonly cols: number;
     readonly rows: number;
   }) {
-    yield* runRpc(
-      rpc,
-      WS_METHODS.terminalResize,
-      rpc.getClient.pipe(
-        Effect.flatMap((client) =>
-          client[WS_METHODS.terminalResize]({
-            threadId: input.terminal.threadId,
-            terminalId: input.terminal.terminalId,
-            cols: input.cols,
-            rows: input.rows,
-          }),
-        ),
-      ),
-    );
+    const client = yield* rpc.getClient;
+    yield* client[WS_METHODS.terminalResize]({
+      threadId: input.terminal.threadId,
+      terminalId: input.terminal.terminalId,
+      cols: input.cols,
+      rows: input.rows,
+    }).pipe(runRpc(rpc, WS_METHODS.terminalResize));
   });
 
   const destroyTerminal: TerminalApplicationService["destroyTerminal"] = Effect.fn(
     "T3ApplicationLive.destroyTerminal",
   )(function* (terminal: TerminalRef) {
-    yield* runRpc(
-      rpc,
-      WS_METHODS.terminalClose,
-      rpc.getClient.pipe(
-        Effect.flatMap((client) =>
-          client[WS_METHODS.terminalClose]({
-            threadId: terminal.threadId,
-            terminalId: terminal.terminalId,
-            deleteHistory: true,
-          }),
-        ),
-      ),
-    );
+    const client = yield* rpc.getClient;
+    yield* client[WS_METHODS.terminalClose]({
+      threadId: terminal.threadId,
+      terminalId: terminal.terminalId,
+      deleteHistory: true,
+    }).pipe(runRpc(rpc, WS_METHODS.terminalClose));
   });
 
   return {
@@ -265,13 +225,10 @@ function getTerminalMetadataSnapshot(
 ): Effect.Effect<ReadonlyArray<TerminalSummary>, RpcError> {
   return Effect.gen(function* () {
     const item = yield* Stream.runHead(
-      subscribeRpc(
-        rpc,
-        WS_METHODS.subscribeTerminalMetadata,
-        Stream.unwrap(
-          rpc.getClient.pipe(
-            Effect.map((client) => client[WS_METHODS.subscribeTerminalMetadata]({})),
-          ),
+      Stream.unwrap(
+        rpc.getClient.pipe(
+          Effect.map((client) => client[WS_METHODS.subscribeTerminalMetadata]({})),
+          Effect.map(subscribeRpc(rpc, WS_METHODS.subscribeTerminalMetadata)),
         ),
       ),
     );

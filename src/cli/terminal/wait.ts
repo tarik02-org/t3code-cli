@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import type { TerminalEvent, TerminalSummary } from "#t3tools/contracts";
@@ -48,26 +49,26 @@ export const waitTerminalCommand = Command.make(
           );
         } else {
           const error = failure.value;
-          if (
-            error["_tag"] === "TerminalLookupError" &&
-            (target === "closed" || target === "ended")
-          ) {
-            const result = {
-              threadId: thread,
-              terminalId,
-              target,
-              status: "closed",
-              alreadySatisfied: true,
-              missingTreatedAsClosed: true,
-            } as const;
-            if (resolvedFormat === "json") {
-              yield* output.printJson(result);
-            } else {
-              yield* output.printInfo(`terminal closed: ${terminalId} (${thread})`);
-            }
-            return;
-          }
-          yield* Effect.fail(error);
+          yield* Match.value(error).pipe(
+            Match.tag("TerminalLookupError", () => {
+              if (target !== "closed" && target !== "ended") {
+                return Effect.fail(error);
+              }
+              const result = {
+                threadId: thread,
+                terminalId,
+                target,
+                status: "closed",
+                alreadySatisfied: true,
+                missingTreatedAsClosed: true,
+              } as const;
+              return resolvedFormat === "json"
+                ? output.printJson(result)
+                : output.printInfo(`terminal closed: ${terminalId} (${thread})`);
+            }),
+            Match.orElse(() => Effect.fail(error)),
+          );
+          return;
         }
       } else {
         const current = currentResult.value;

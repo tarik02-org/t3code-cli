@@ -1,5 +1,6 @@
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
+import * as Match from "effect/Match";
 import * as Stream from "effect/Stream";
 import type {
   TerminalAttachStreamEvent,
@@ -13,98 +14,126 @@ import type {
   TerminalRef,
 } from "../../application/service.ts";
 import type { ApplicationError } from "../../application/error.ts";
-import { TerminalCliError, TerminalIoError } from "./error.ts";
+import { TerminalCliError, type TerminalIoError } from "./error.ts";
 import { TerminalIo } from "./io-service.ts";
 
 const DETACH_BYTE = 0x1d;
 const ANSI_CLEAR_SCREEN = "\u001bc";
 
+type AttachSessionResult =
+  | {
+      readonly _tag: "Failure";
+      readonly error: ApplicationError | TerminalCliError;
+      readonly message?: string;
+    }
+  | {
+      readonly _tag: "Success";
+      readonly message?: string;
+    };
+
 export function runAttachedTerminalSession(input: {
   readonly application: T3Application["Service"];
   readonly terminal: TerminalAttachTarget;
 }) {
-  return Effect.gen(function* () {
-    const io = yield* TerminalIo;
-    const { cols, rows } = yield* io.getWindowSize.pipe(
-      Effect.mapError((error) => mapTerminalIoError(error, input.terminal)),
-    );
-    const stream = input.application.attachTerminal({
-      terminal: input.terminal,
-      cols,
-      rows,
-    });
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const io = yield* TerminalIo;
+      const { cols, rows } = yield* io.getWindowSize.pipe(
+        Effect.mapError((error) => mapTerminalIoError(error, input.terminal)),
+      );
+      const session = yield* io.openRawSession.pipe(
+        Effect.mapError((error) => mapTerminalIoError(error, input.terminal)),
+      );
+      const completion = yield* Deferred.make<AttachSessionResult>();
+      const stream = input.application.attachTerminal({
+        terminal: input.terminal,
+        cols,
+        rows,
+      });
 
-    return yield* Effect.callback<void, ApplicationError | TerminalCliError>((resume) => {
-      let settled = false;
-
-      const streamFiber = Effect.runFork(
-        Stream.runForEach(stream, (event) => applyAttachEvent(io, event)).pipe(
-          Effect.match({
-            onFailure: (error) => finish(error),
-            onSuccess: () => finish(),
-          }),
-        ),
+      yield* Stream.runForEach(stream, (event) => applyAttachEvent(io, event)).pipe(
+        Effect.match({
+          onFailure: (error) => completeAttachSession(completion, { _tag: "Failure", error }),
+          onSuccess: () => completeAttachSession(completion, { _tag: "Success" }),
+        }),
+        Effect.forkScoped,
       );
 
-      const finish = (error?: ApplicationError | TerminalCliError, message?: string) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        if (message !== undefined) {
-          Effect.runFork(writeSystemMessage(io, message));
-        }
-        Effect.runFork(Fiber.interrupt(streamFiber));
-        resume(error !== undefined ? Effect.fail(error) : Effect.void);
-      };
+      yield* Stream.runForEach(session.resize, ({ cols: nextCols, rows: nextRows }) =>
+        input.application.resizeTerminal({
+          terminal: input.terminal,
+          cols: nextCols,
+          rows: nextRows,
+        }),
+      ).pipe(
+        Effect.match({
+          onFailure: (error) => completeAttachSession(completion, { _tag: "Failure", error }),
+          onSuccess: () => completeAttachSession(completion, { _tag: "Success" }),
+        }),
+        Effect.forkScoped,
+      );
 
-      const session = io
-        .withRawSession({
-          onResize: ({ cols: nextCols, rows: nextRows }) =>
-            input.application.resizeTerminal({
-              terminal: input.terminal,
-              cols: nextCols,
-              rows: nextRows,
-            }),
-          onData: (buffer: Buffer) => {
-            const detachOffset = buffer.indexOf(DETACH_BYTE);
-            const payload = detachOffset === -1 ? buffer : buffer.subarray(0, detachOffset);
-            if (payload.length === 0 && detachOffset === -1) {
-              return Effect.void;
-            }
-            return Effect.gen(function* () {
-              if (payload.length > 0) {
-                yield* input.application.writeTerminal({
-                  terminal: input.terminal,
-                  data: payload.toString("utf8"),
-                });
-              }
-              if (detachOffset !== -1) {
-                yield* Effect.sync(() => {
-                  finish(undefined, "detached");
-                });
-              }
-            });
-          },
-        })
-        .pipe(
-          Effect.match({
-            onFailure: (error) =>
-              finish(
-                error["_tag"] === "TerminalIoError"
-                  ? mapTerminalIoError(error, input.terminal)
-                  : error,
-              ),
-            onSuccess: () => finish(),
-          }),
-        );
+      yield* Stream.runForEach(session.input, (chunk) =>
+        handleSessionInput({
+          application: input.application,
+          completion,
+          terminal: input.terminal,
+          chunk,
+        }),
+      ).pipe(
+        Effect.match({
+          onFailure: (error) => completeAttachSession(completion, { _tag: "Failure", error }),
+          onSuccess: () => completeAttachSession(completion, { _tag: "Success" }),
+        }),
+        Effect.forkScoped,
+      );
 
-      Effect.runFork(session);
+      const result = yield* Deferred.await(completion);
+      if (result.message !== undefined) {
+        yield* writeSystemMessage(io, result.message);
+      }
+      return yield* Match.value(result).pipe(
+        Match.tag("Failure", ({ error }) => Effect.fail(error)),
+        Match.orElse(() => Effect.void),
+      );
+    }),
+  );
+}
 
-      return Effect.sync(() => {
-        finish();
+function completeAttachSession(
+  completion: Deferred.Deferred<AttachSessionResult>,
+  result: AttachSessionResult,
+) {
+  return Deferred.succeed(completion, result).pipe(Effect.ignore);
+}
+
+function handleSessionInput(input: {
+  readonly application: T3Application["Service"];
+  readonly completion: Deferred.Deferred<AttachSessionResult>;
+  readonly terminal: TerminalRef;
+  readonly chunk: Uint8Array;
+}) {
+  const detachOffset = input.chunk.indexOf(DETACH_BYTE);
+  const payload = detachOffset === -1 ? input.chunk : input.chunk.slice(0, detachOffset);
+
+  if (payload.length === 0 && detachOffset === -1) {
+    return Effect.void;
+  }
+
+  return Effect.gen(function* () {
+    if (payload.length > 0) {
+      yield* input.application.writeTerminal({
+        terminal: input.terminal,
+        data: Buffer.from(payload).toString("utf8"),
       });
-    });
+    }
+
+    if (detachOffset !== -1) {
+      yield* completeAttachSession(input.completion, {
+        _tag: "Success",
+        message: "detached",
+      });
+    }
   });
 }
 
@@ -120,46 +149,33 @@ function mapTerminalIoError(
 }
 
 function applyAttachEvent(io: TerminalIo["Service"], event: TerminalAttachStreamEvent) {
-  if (event.type === "activity") {
-    return Effect.void;
-  }
-
-  if (event.type === "snapshot" || event.type === "restarted") {
-    return io
-      .writeOutput(ANSI_CLEAR_SCREEN)
-      .pipe(
-        Effect.flatMap(() =>
-          event.snapshot.history.length > 0 ? io.writeOutput(event.snapshot.history) : Effect.void,
-        ),
+  return Match.value(event).pipe(
+    Match.when({ type: "activity" }, () => Effect.void),
+    Match.when({ type: "snapshot" }, ({ snapshot }) => writeSnapshot(io, snapshot.history)),
+    Match.when({ type: "restarted" }, ({ snapshot }) => writeSnapshot(io, snapshot.history)),
+    Match.when({ type: "output" }, ({ data }) => io.writeOutput(data)),
+    Match.when({ type: "cleared" }, () => io.writeOutput(ANSI_CLEAR_SCREEN)),
+    Match.when({ type: "error" }, ({ message }) => writeSystemMessage(io, message)),
+    Match.when({ type: "closed" }, () => writeSystemMessage(io, "Terminal closed")),
+    Match.orElse((next) => {
+      const details = [
+        typeof next.exitCode === "number" ? `code ${next.exitCode}` : null,
+        typeof next.exitSignal === "number" ? `signal ${next.exitSignal}` : null,
+      ]
+        .filter((value): value is string => value !== null)
+        .join(", ");
+      return writeSystemMessage(
+        io,
+        details.length > 0 ? `Process exited (${details})` : "Process exited",
       );
-  }
-
-  if (event.type === "output") {
-    return io.writeOutput(event.data);
-  }
-
-  if (event.type === "cleared") {
-    return io.writeOutput(ANSI_CLEAR_SCREEN);
-  }
-
-  if (event.type === "error") {
-    return writeSystemMessage(io, event.message);
-  }
-
-  if (event.type === "closed") {
-    return writeSystemMessage(io, "Terminal closed");
-  }
-
-  const details = [
-    typeof event.exitCode === "number" ? `code ${event.exitCode}` : null,
-    typeof event.exitSignal === "number" ? `signal ${event.exitSignal}` : null,
-  ]
-    .filter((value): value is string => value !== null)
-    .join(", ");
-  return writeSystemMessage(
-    io,
-    details.length > 0 ? `Process exited (${details})` : "Process exited",
+    }),
   );
+}
+
+function writeSnapshot(io: TerminalIo["Service"], history: string) {
+  return io
+    .writeOutput(ANSI_CLEAR_SCREEN)
+    .pipe(Effect.flatMap(() => (history.length > 0 ? io.writeOutput(history) : Effect.void)));
 }
 
 function writeSystemMessage(io: TerminalIo["Service"], message: string) {
