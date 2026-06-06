@@ -19,7 +19,10 @@ import type { T3Application, TerminalAttachTarget, TerminalRef } from "./service
 
 const rpcRetrySchedule = Schedule.exponential("100 millis").pipe(
   Schedule.take(4),
-  Schedule.collectWhile((metadata: Schedule.Metadata) => isRpcClientError(metadata.input)),
+  Schedule.collectWhile((metadata: Schedule.Metadata) => {
+    const input = metadata.input;
+    return typeof input === "object" && input !== null && isRpcClientError(input);
+  }),
 );
 
 export type CreateTerminalInput = {

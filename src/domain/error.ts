@@ -63,11 +63,12 @@ export type DomainError =
   | ThreadLookupError
   | ProjectCreateVisibilityError
   | TerminalLookupError;
+type TaggedLike = object & { readonly _tag?: string };
 
-export function isTerminalLookupError(error: unknown): error is TerminalLookupError {
+export function isTerminalLookupError(error: TaggedLike): error is TerminalLookupError {
   return hasTag(error, "TerminalLookupError");
 }
 
-function hasTag(error: unknown, tag: string): error is { readonly _tag: string } {
-  return typeof error === "object" && error !== null && Reflect.get(error, "_tag") === tag;
+function hasTag(error: TaggedLike, tag: string): error is { readonly _tag: string } {
+  return error?.["_tag"] === tag;
 }

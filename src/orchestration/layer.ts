@@ -19,7 +19,10 @@ import { T3Orchestration, type OpenThread } from "./service.ts";
 
 const rpcRetrySchedule = Schedule.exponential("100 millis").pipe(
   Schedule.take(4),
-  Schedule.collectWhile((metadata: Schedule.Metadata) => isRpcClientError(metadata.input)),
+  Schedule.collectWhile((metadata: Schedule.Metadata) => {
+    const input = metadata.input;
+    return typeof input === "object" && input !== null && isRpcClientError(input);
+  }),
 );
 
 function runRpc<A, E extends { readonly message: string }>(

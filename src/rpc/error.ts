@@ -43,15 +43,16 @@ export class RpcError extends Schema.TaggedErrorClass<RpcError>()("RpcError", {
 }) {}
 
 export type OrchestrationError = RpcError;
+type TaggedLike = object & { readonly _tag?: string };
 
-export function isRpcClientError(error: unknown): error is RpcClientError.RpcClientError {
+export function isRpcClientError(error: TaggedLike): error is RpcClientError.RpcClientError {
   return hasTag(error, "RpcClientError");
 }
 
-export function isRpcError(error: unknown): error is RpcError {
+export function isRpcError(error: TaggedLike): error is RpcError {
   return hasTag(error, "RpcError");
 }
 
-function hasTag(error: unknown, tag: string): error is { readonly _tag: string } {
-  return typeof error === "object" && error !== null && Reflect.get(error, "_tag") === tag;
+function hasTag(error: TaggedLike, tag: string): error is { readonly _tag: string } {
+  return error?.["_tag"] === tag;
 }
