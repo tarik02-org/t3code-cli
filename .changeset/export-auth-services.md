@@ -2,4 +2,4 @@
 "t3code-cli": minor
 ---
 
-Export local and pairing auth services, supporting environment and sqlite layers, and return auth tokens from their programmatic results.
+Export local and pairing auth services, supporting environment/config/sqlite layers, and split token issuance from config writes for programmatic auth flows.

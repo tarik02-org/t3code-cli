@@ -3,13 +3,14 @@ import type * as Effect from "effect/Effect";
 
 import type { AuthSessionState, AuthWebSocketTicketResult } from "./schema.ts";
 import type { AuthError } from "./error.ts";
-import type { LocalAuthInput, LocalAuthResult, PairResult } from "./type.ts";
+import type { AuthConfigInput, LocalAuthInput, LocalAuthResult, PairResult } from "./type.ts";
 
 export class T3Auth extends Context.Service<
   T3Auth,
   {
     readonly pair: (value: string) => Effect.Effect<PairResult, AuthError>;
     readonly local: (input: LocalAuthInput) => Effect.Effect<LocalAuthResult, AuthError>;
+    readonly writeConfig: (input: AuthConfigInput) => Effect.Effect<void, AuthError>;
     readonly status: () => Effect.Effect<AuthSessionState, AuthError>;
     readonly issueWebSocketTicket: () => Effect.Effect<AuthWebSocketTicketResult, AuthError>;
   }

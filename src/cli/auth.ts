@@ -35,6 +35,7 @@ const pairCommand = Command.make(
       const output = yield* T3Output;
       const resolvedFormat = resolveOutputFormat(format, environment, "json");
       const result = yield* auth.pair(url);
+      yield* auth.writeConfig(result);
       if (resolvedFormat === "json") {
         yield* output.printJson(result);
       } else {
@@ -66,6 +67,7 @@ const localCommand = Command.make(
         ...(Option.isSome(baseDir) ? { baseDir: baseDir.value } : {}),
         ...(Option.isSome(origin) ? { origin: origin.value } : {}),
       });
+      yield* auth.writeConfig(result);
       if (resolvedFormat === "json") {
         yield* output.printJson(formatAuthLocalJson(result));
       } else {

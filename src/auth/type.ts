@@ -7,6 +7,11 @@ export type PairingUrl = {
   readonly credential: string;
 };
 
+export type AuthConfigInput = {
+  readonly url: string;
+  readonly token: string;
+};
+
 export type PairResult = {
   readonly url: string;
   readonly token: string;

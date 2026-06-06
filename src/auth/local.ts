@@ -15,12 +15,10 @@ import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import { T3Config } from "../config/service.ts";
 import { normalizeHttpBaseUrl } from "../config/url.ts";
 import { Environment } from "../environment/service.ts";
 import { SqlClientFactory } from "../sql/service.ts";
 import {
-  AuthConfigError,
   AuthLocalDatabaseError,
   AuthLocalError,
   AuthLocalSecretError,
@@ -32,14 +30,11 @@ import type { LocalAuthInput, LocalAuthResult } from "./type.ts";
 export class T3LocalAuth extends Context.Service<
   T3LocalAuth,
   {
-    readonly local: (
-      input: LocalAuthInput,
-    ) => Effect.Effect<LocalAuthResult, AuthConfigError | AuthLocalError>;
+    readonly local: (input: LocalAuthInput) => Effect.Effect<LocalAuthResult, AuthLocalError>;
   }
 >()("t3cli/T3LocalAuth") {}
 
 export const makeT3LocalAuth = Effect.fn("makeT3LocalAuth")(function* () {
-  const config = yield* T3Config;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const environment = yield* Environment;
@@ -218,23 +213,6 @@ export const makeT3LocalAuth = Effect.fn("makeT3LocalAuth")(function* () {
     };
   });
 
-  function writeLocalConfig(input: { readonly url: string; readonly token: string }) {
-    return Effect.gen(function* () {
-      const existing = yield* config.readStored().pipe(
-        Effect.catchTags({
-          ConfigError: (error) =>
-            Effect.fail(new AuthConfigError({ message: "auth config failed", cause: error })),
-        }),
-      );
-      yield* config.writeStored({ ...existing, url: input.url, token: input.token }).pipe(
-        Effect.catchTags({
-          ConfigError: (error) =>
-            Effect.fail(new AuthConfigError({ message: "auth config failed", cause: error })),
-        }),
-      );
-    });
-  }
-
   const local = Effect.fn("T3LocalAuthLive.local")(function* (input: LocalAuthInput) {
     if (input.label.length === 0) {
       return yield* Effect.fail(
@@ -264,7 +242,6 @@ export const makeT3LocalAuth = Effect.fn("makeT3LocalAuth")(function* () {
       baseDir,
       ...(input.origin !== undefined ? { origin: input.origin } : {}),
     });
-    yield* writeLocalConfig({ url, token: session.token });
     return {
       url,
       token: session.token,

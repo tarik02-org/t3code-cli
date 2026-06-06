@@ -15,12 +15,8 @@ import { NodeSqlClientFactoryLive } from "./sql/node-sqlite-client.ts";
 export const T3AuthTransportLayer = T3AuthTransportLive.pipe(
   Layer.provide(NodeHttpClient.layerUndici),
 );
-export const T3LocalAuthLayer = T3LocalAuthLive.pipe(
-  Layer.provide(Layer.mergeAll(T3ConfigLive, NodeSqlClientFactoryLive)),
-);
-export const T3AuthPairingLayer = T3AuthPairingLive.pipe(
-  Layer.provide(Layer.mergeAll(T3ConfigLive, T3AuthTransportLayer)),
-);
+export const T3LocalAuthLayer = T3LocalAuthLive.pipe(Layer.provide(NodeSqlClientFactoryLive));
+export const T3AuthPairingLayer = T3AuthPairingLive.pipe(Layer.provide(T3AuthTransportLayer));
 export const T3AuthLayer = T3AuthLive.pipe(
   Layer.provide(
     Layer.mergeAll(T3ConfigLive, T3AuthTransportLayer, T3LocalAuthLayer, T3AuthPairingLayer),
