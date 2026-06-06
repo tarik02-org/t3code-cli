@@ -1,5 +1,5 @@
 ---
-"t3code-cli": patch
+"t3code-cli": minor
 ---
 
-issue local auth sessions directly in the t3code state database
+replace local auth's t3 cli dependency with direct t3code database session issuance, update pairing to exchange credentials through oauth token exchange, and align websocket auth with the current upstream ticket contract
