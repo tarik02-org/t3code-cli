@@ -1,5 +1,11 @@
 # t3code-cli
 
+## 0.5.0
+
+### Minor Changes
+
+- 8d1d06e: Export local and pairing auth services, supporting environment/config/sqlite layers, and split token issuance from config writes for programmatic auth flows.
+
 ## 0.4.0
 
 ### Minor Changes
