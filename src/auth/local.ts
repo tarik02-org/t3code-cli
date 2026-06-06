@@ -46,8 +46,49 @@ export const makeT3LocalAuth = Effect.fn("makeT3LocalAuth")(function* () {
   const crypto = yield* Crypto.Crypto;
   const sqlClientFactory = yield* SqlClientFactory;
 
-  const readSigningSecret = (secretPath: string) =>
-    fs.readFile(secretPath).pipe(
+  function resolveLocalBaseDir(input: string | undefined) {
+    const envBaseDir = environment.env["T3CODE_HOME"];
+    const raw = input ?? envBaseDir;
+    if (raw === undefined || raw.length === 0) {
+      return path.join(environment.homeDir, ".t3");
+    }
+    if (raw === "~") {
+      return environment.homeDir;
+    }
+    if (raw.startsWith("~/") || raw.startsWith("~\\")) {
+      return path.join(environment.homeDir, raw.slice(2));
+    }
+    return path.resolve(environment.cwd, raw);
+  }
+
+  function resolveLocalOrigin(input: { readonly baseDir: string; readonly origin?: string }) {
+    return Effect.gen(function* () {
+      if (input.origin !== undefined) {
+        return yield* normalizeLocalOrigin(input.origin);
+      }
+
+      const runtimeStatePath = path.join(input.baseDir, "userdata", "server-runtime.json");
+      const raw = yield* fs.readFileString(runtimeStatePath).pipe(
+        Effect.mapError(
+          (error) =>
+            new AuthLocalError({
+              message: `local runtime state not found: ${runtimeStatePath}. Make sure T3 Code is running with Network access enabled, or pass --origin manually.`,
+              cause: error,
+            }),
+        ),
+      );
+      const state = yield* decodeAuthLocalRuntimeStateFromJson(raw).pipe(
+        Effect.mapError(
+          (error) =>
+            new AuthLocalError({ message: "local runtime state has invalid shape", cause: error }),
+        ),
+      );
+      return yield* normalizeLocalOrigin(state.origin);
+    });
+  }
+
+  function readSigningSecret(secretPath: string) {
+    return fs.readFile(secretPath).pipe(
       Effect.map((bytes) => Uint8Array.from(bytes)),
       Effect.catchFilter(Filter.reason("PlatformError", "NotFound"), () =>
         Effect.succeed(undefined),
@@ -60,70 +101,21 @@ export const makeT3LocalAuth = Effect.fn("makeT3LocalAuth")(function* () {
           }),
       ),
     );
+  }
 
-  const getOrCreateSigningSecret = Effect.fn("getOrCreateSigningSecret")(function* (
+  const readRequiredSigningSecret = Effect.fn("readRequiredSigningSecret")(function* (
     secretsDir: string,
   ) {
     const secretPath = path.join(secretsDir, `${signingSecretName}.bin`);
-    const existing = yield* readSigningSecret(secretPath);
-    if (existing !== undefined) {
-      return existing;
+    const secret = yield* readSigningSecret(secretPath);
+    if (secret === undefined) {
+      return yield* Effect.fail(
+        new AuthLocalSecretError({
+          message: `local signing secret not found: ${secretPath}`,
+        }),
+      );
     }
-
-    yield* fs.makeDirectory(secretsDir, { recursive: true, mode: 0o700 }).pipe(
-      Effect.mapError(
-        (error) =>
-          new AuthLocalSecretError({
-            message: `failed to create secrets directory: ${secretsDir}`,
-            cause: error,
-          }),
-      ),
-    );
-    yield* fs.chmod(secretsDir, 0o700).pipe(
-      Effect.mapError(
-        (error) =>
-          new AuthLocalSecretError({
-            message: `failed to secure secrets directory: ${secretsDir}`,
-            cause: error,
-          }),
-      ),
-    );
-
-    const generated = yield* crypto.randomBytes(32).pipe(
-      Effect.mapError(
-        (error) =>
-          new AuthLocalSecretError({
-            message: "failed to generate signing secret",
-            cause: error,
-          }),
-      ),
-    );
-    return yield* fs.writeFile(secretPath, generated, { flag: "wx", mode: 0o600 }).pipe(
-      Effect.flatMap(() => fs.chmod(secretPath, 0o600)),
-      Effect.as(generated),
-      Effect.catchFilter(Filter.reason("PlatformError", "AlreadyExists"), () =>
-        readSigningSecret(secretPath).pipe(
-          Effect.flatMap((secret) =>
-            secret === undefined
-              ? Effect.fail(
-                  new AuthLocalSecretError({
-                    message: `signing secret disappeared after concurrent creation: ${secretPath}`,
-                  }),
-                )
-              : Effect.succeed(secret),
-          ),
-        ),
-      ),
-      Effect.catchTags({
-        PlatformError: (error) =>
-          Effect.fail(
-            new AuthLocalSecretError({
-              message: `failed to persist signing secret: ${secretPath}`,
-              cause: error,
-            }),
-          ),
-      }),
-    );
+    return secret;
   });
 
   const hmacSha256 = (secret: Uint8Array, payload: Uint8Array) =>
@@ -151,74 +143,31 @@ export const makeT3LocalAuth = Effect.fn("makeT3LocalAuth")(function* () {
       ),
     );
 
-  const insertAuthSession = (input: InsertAuthSessionInput) => {
-    const insert = Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`PRAGMA busy_timeout = 5000;`;
-      yield* sql`PRAGMA foreign_keys = ON;`;
-      const columns = yield* sql<{ readonly name: string }>`PRAGMA table_info(auth_sessions)`;
-      if (!columns.some((column) => column.name === "scopes")) {
-        return yield* Effect.fail(
-          new AuthLocalDatabaseError({
-            operation: "schema",
-            message: `local auth database is missing scoped auth_sessions schema: ${input.dbPath}`,
-          }),
-        );
-      }
-      yield* sql`
-            INSERT INTO auth_sessions (
-              session_id,
-              subject,
-              scopes,
-              method,
-              client_label,
-              client_ip_address,
-              client_user_agent,
-              client_device_type,
-              client_os,
-              client_browser,
-              issued_at,
-              expires_at,
-              revoked_at
-            )
-            VALUES (
-              ${input.sessionId},
-              ${input.subject},
-              ${JSON.stringify(input.scopes)},
-              ${"bearer-access-token"},
-              ${input.label},
-              NULL,
-              NULL,
-              ${"bot"},
-              NULL,
-              NULL,
-              ${input.issuedAt},
-              ${input.expiresAt},
-              NULL
-            )
-          `;
-      return undefined;
-    });
-    return Effect.gen(function* () {
-      const sql = yield* sqlClientFactory.sqliteClient({ filename: input.dbPath });
-      return yield* insert.pipe(Effect.provideService(SqlClient.SqlClient, sql));
-    }).pipe(
-      Effect.scoped,
+  function openAuthDatabase(dbPath: string) {
+    return sqlClientFactory.sqliteClient({ filename: dbPath }).pipe(
       Effect.catchTag("SqlError", (error) =>
         Effect.fail(
           new AuthLocalDatabaseError({
-            operation: Predicate.isTagged(error.reason, "ConnectionError") ? "connect" : "query",
+            operation: "connect",
             message: error.message,
           }),
         ),
       ),
     );
-  };
+  }
+
+  const provideAuthDatabase =
+    (dbPath: string) =>
+    <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      Effect.gen(function* () {
+        const sql = yield* openAuthDatabase(dbPath);
+        return yield* effect.pipe(Effect.provideService(SqlClient.SqlClient, sql));
+      }).pipe(Effect.scoped);
 
   const issueLocalDatabaseSession = Effect.fn("issueLocalDatabaseSession")(function* (
     input: LocalDatabaseSessionInput,
   ) {
-    const secret = yield* getOrCreateSigningSecret(input.secretsDir);
+    const secret = yield* readRequiredSigningSecret(input.secretsDir);
     const issuedAt = yield* DateTime.now;
     const expiresAt = DateTime.add(issuedAt, { milliseconds: defaultSessionTtlMs });
     const sessionId = yield* crypto.randomUUIDv4.pipe(
@@ -245,14 +194,23 @@ export const makeT3LocalAuth = Effect.fn("makeT3LocalAuth")(function* () {
     const encodedPayload = Encoding.encodeBase64Url(JSON.stringify(claims));
     const token = `${encodedPayload}.${yield* signPayload(encodedPayload, secret)}`;
     yield* insertAuthSession({
-      dbPath: input.dbPath,
       sessionId,
       subject: input.subject,
       scopes,
       label: input.label,
       issuedAt: DateTime.formatIso(issuedAt),
       expiresAt: DateTime.formatIso(expiresAt),
-    });
+    }).pipe(
+      provideAuthDatabase(input.dbPath),
+      Effect.catchTag("SqlError", (error) =>
+        Effect.fail(
+          new AuthLocalDatabaseError({
+            operation: Predicate.isTagged(error.reason, "ConnectionError") ? "connect" : "query",
+            message: error.message,
+          }),
+        ),
+      ),
+    );
     return {
       token,
       role: input.role,
@@ -260,25 +218,24 @@ export const makeT3LocalAuth = Effect.fn("makeT3LocalAuth")(function* () {
     };
   });
 
-  const resolveLocalBaseDir = (input: string | undefined) => {
-    const envBaseDir = environment.env["T3CODE_HOME"];
-    const raw = input ?? envBaseDir;
-    if (raw === undefined || raw.length === 0) {
-      return path.join(environment.homeDir, ".t3");
-    }
-    if (raw === "~") {
-      return environment.homeDir;
-    }
-    if (raw.startsWith("~/") || raw.startsWith("~\\")) {
-      return path.join(environment.homeDir, raw.slice(2));
-    }
-    return path.resolve(environment.cwd, raw);
-  };
+  function writeLocalConfig(input: { readonly url: string; readonly token: string }) {
+    return Effect.gen(function* () {
+      const existing = yield* config.readStored().pipe(
+        Effect.catchTags({
+          ConfigError: (error) =>
+            Effect.fail(new AuthConfigError({ message: "auth config failed", cause: error })),
+        }),
+      );
+      yield* config.writeStored({ ...existing, url: input.url, token: input.token }).pipe(
+        Effect.catchTags({
+          ConfigError: (error) =>
+            Effect.fail(new AuthConfigError({ message: "auth config failed", cause: error })),
+        }),
+      );
+    });
+  }
 
-  const issueLocalSession = Effect.fn("issueLocalSession")(function* (
-    input: Pick<LocalAuthInput, "baseDir" | "role" | "label" | "subject">,
-  ) {
-    const baseDir = resolveLocalBaseDir(input.baseDir);
+  const local = Effect.fn("T3LocalAuthLive.local")(function* (input: LocalAuthInput) {
     if (input.label.length === 0) {
       return yield* Effect.fail(
         new AuthLocalError({ message: "local auth label cannot be empty" }),
@@ -290,6 +247,7 @@ export const makeT3LocalAuth = Effect.fn("makeT3LocalAuth")(function* () {
       );
     }
 
+    const baseDir = resolveLocalBaseDir(input.baseDir);
     const session = yield* issueLocalDatabaseSession({
       dbPath: path.join(baseDir, "userdata", "state.sqlite"),
       secretsDir: path.join(baseDir, "userdata", "secrets"),
@@ -302,60 +260,17 @@ export const makeT3LocalAuth = Effect.fn("makeT3LocalAuth")(function* () {
           new AuthLocalError({ message: `local auth failed: ${error.message}`, cause: error }),
       ),
     );
-    return { baseDir, session } as const;
-  });
-
-  const resolveLocalOrigin = Effect.fn("resolveLocalOrigin")(function* (input: {
-    readonly baseDir: string;
-    readonly origin?: string;
-  }) {
-    if (input.origin !== undefined) {
-      return yield* normalizeLocalOrigin(input.origin);
-    }
-
-    const runtimeStatePath = path.join(input.baseDir, "userdata", "server-runtime.json");
-    const raw = yield* fs.readFileString(runtimeStatePath).pipe(
-      Effect.mapError(
-        (error) =>
-          new AuthLocalError({
-            message: `local runtime state not found: ${runtimeStatePath}. Make sure T3 Code is running with Network access enabled, or pass --origin manually.`,
-            cause: error,
-          }),
-      ),
-    );
-    const state = yield* decodeAuthLocalRuntimeStateFromJson(raw).pipe(
-      Effect.mapError(
-        (error) =>
-          new AuthLocalError({ message: "local runtime state has invalid shape", cause: error }),
-      ),
-    );
-    return yield* normalizeLocalOrigin(state.origin);
-  });
-
-  const local = Effect.fn("T3LocalAuthLive.local")(function* (input: LocalAuthInput) {
-    const issued = yield* issueLocalSession(input);
     const url = yield* resolveLocalOrigin({
-      baseDir: issued.baseDir,
+      baseDir,
       ...(input.origin !== undefined ? { origin: input.origin } : {}),
     });
-    const existing = yield* config.readStored().pipe(
-      Effect.catchTags({
-        ConfigError: (error) =>
-          Effect.fail(new AuthConfigError({ message: "auth config failed", cause: error })),
-      }),
-    );
-    yield* config.writeStored({ ...existing, url, token: issued.session.token }).pipe(
-      Effect.catchTags({
-        ConfigError: (error) =>
-          Effect.fail(new AuthConfigError({ message: "auth config failed", cause: error })),
-      }),
-    );
+    yield* writeLocalConfig({ url, token: session.token });
     return {
       url,
-      role: issued.session.role,
-      expiresAt: issued.session.expiresAt,
+      role: session.role,
+      expiresAt: session.expiresAt,
       source: "local" as const,
-      baseDir: issued.baseDir,
+      baseDir,
     };
   });
 
@@ -363,6 +278,56 @@ export const makeT3LocalAuth = Effect.fn("makeT3LocalAuth")(function* () {
 });
 
 export const T3LocalAuthLive = Layer.effect(T3LocalAuth, makeT3LocalAuth());
+
+function insertAuthSession(input: InsertAuthSessionInput) {
+  return Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    yield* sql`PRAGMA busy_timeout = 5000;`;
+    yield* sql`PRAGMA foreign_keys = ON;`;
+    const columns = yield* sql<{ readonly name: string }>`PRAGMA table_info(auth_sessions)`;
+    if (!columns.some((column) => column.name === "scopes")) {
+      return yield* Effect.fail(
+        new AuthLocalDatabaseError({
+          operation: "schema",
+          message: "local auth database is missing scoped auth_sessions schema",
+        }),
+      );
+    }
+    yield* sql`
+      INSERT INTO auth_sessions (
+        session_id,
+        subject,
+        scopes,
+        method,
+        client_label,
+        client_ip_address,
+        client_user_agent,
+        client_device_type,
+        client_os,
+        client_browser,
+        issued_at,
+        expires_at,
+        revoked_at
+      )
+      VALUES (
+        ${input.sessionId},
+        ${input.subject},
+        ${JSON.stringify(input.scopes)},
+        ${"bearer-access-token"},
+        ${input.label},
+        NULL,
+        NULL,
+        ${"bot"},
+        NULL,
+        NULL,
+        ${input.issuedAt},
+        ${input.expiresAt},
+        NULL
+      )
+    `;
+    return undefined;
+  });
+}
 
 function normalizeLocalOrigin(origin: string) {
   return normalizeHttpBaseUrl(origin).pipe(
@@ -389,11 +354,7 @@ type LocalDatabaseSessionInput = {
   readonly subject: string;
 };
 
-const defaultSessionTtlMs = 30 * 24 * 60 * 60 * 1000;
-const signingSecretName = "server-signing-key";
-
 type InsertAuthSessionInput = {
-  readonly dbPath: string;
   readonly sessionId: AuthSessionId;
   readonly subject: string;
   readonly scopes: ReadonlyArray<AuthEnvironmentScope>;
@@ -402,6 +363,8 @@ type InsertAuthSessionInput = {
   readonly expiresAt: string;
 };
 
+const defaultSessionTtlMs = 30 * 24 * 60 * 60 * 1000;
+const signingSecretName = "server-signing-key";
 const sha256BlockSize = 64;
 
 function concatBytes(first: Uint8Array, second: Uint8Array) {
