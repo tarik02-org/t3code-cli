@@ -6,11 +6,11 @@ import { AuthConfigError } from "./error.ts";
 import { T3LocalAuth } from "./local.ts";
 import { T3AuthPairing } from "./pairing.ts";
 import { T3Auth } from "./service.ts";
-import { makeAuthTransport } from "./transport.ts";
+import { T3AuthTransport } from "./transport.ts";
 
 export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
   const config = yield* T3Config;
-  const transport = yield* makeAuthTransport();
+  const transport = yield* T3AuthTransport;
   const localAuth = yield* T3LocalAuth;
   const pairing = yield* T3AuthPairing;
 

@@ -5,7 +5,7 @@ import { Url } from "effect/unstable/http";
 
 import { T3Config } from "../config/service.ts";
 import { AuthConfigError, AuthPairingUrlError, AuthTransportError } from "./error.ts";
-import { makeAuthTransport } from "./transport.ts";
+import { T3AuthTransport } from "./transport.ts";
 import type { PairingUrl, PairResult } from "./type.ts";
 
 export class T3AuthPairing extends Context.Service<
@@ -19,7 +19,7 @@ export class T3AuthPairing extends Context.Service<
 
 export const makeT3AuthPairing = Effect.fn("makeT3AuthPairing")(function* () {
   const config = yield* T3Config;
-  const transport = yield* makeAuthTransport();
+  const transport = yield* T3AuthTransport;
 
   const pair = Effect.fn("T3AuthPairingLive.pair")(function* (pairingUrl: string) {
     const parsed = yield* parsePairingUrl(pairingUrl);
