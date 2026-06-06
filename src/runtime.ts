@@ -12,14 +12,16 @@ import { T3OrchestrationLive } from "./orchestration/layer.ts";
 import { T3RpcLive } from "./rpc/layer.ts";
 import { NodeSqlClientFactoryLive } from "./sql/node-sqlite-client.ts";
 
-const T3AuthTransportLayer = T3AuthTransportLive.pipe(Layer.provide(NodeHttpClient.layerUndici));
-const T3LocalAuthLayer = T3LocalAuthLive.pipe(
+export const T3AuthTransportLayer = T3AuthTransportLive.pipe(
+  Layer.provide(NodeHttpClient.layerUndici),
+);
+export const T3LocalAuthLayer = T3LocalAuthLive.pipe(
   Layer.provide(Layer.mergeAll(T3ConfigLive, NodeSqlClientFactoryLive)),
 );
-const T3AuthPairingLayer = T3AuthPairingLive.pipe(
+export const T3AuthPairingLayer = T3AuthPairingLive.pipe(
   Layer.provide(Layer.mergeAll(T3ConfigLive, T3AuthTransportLayer)),
 );
-const T3AuthLayer = T3AuthLive.pipe(
+export const T3AuthLayer = T3AuthLive.pipe(
   Layer.provide(
     Layer.mergeAll(T3ConfigLive, T3AuthTransportLayer, T3LocalAuthLayer, T3AuthPairingLayer),
   ),

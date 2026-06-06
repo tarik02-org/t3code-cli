@@ -9,6 +9,7 @@ export type PairingUrl = {
 
 export type PairResult = {
   readonly url: string;
+  readonly token: string;
   readonly role: AuthBearerBootstrapResult["role"];
   readonly expiresAt: string;
 };
@@ -23,6 +24,7 @@ export type LocalAuthInput = {
 
 export type LocalAuthResult = {
   readonly url: string;
+  readonly token: string;
   readonly role: AuthSessionRole;
   readonly expiresAt: string;
   readonly source: "local";

@@ -267,6 +267,7 @@ export const makeT3LocalAuth = Effect.fn("makeT3LocalAuth")(function* () {
     yield* writeLocalConfig({ url, token: session.token });
     return {
       url,
+      token: session.token,
       role: session.role,
       expiresAt: session.expiresAt,
       source: "local" as const,

@@ -38,7 +38,12 @@ export const makeT3AuthPairing = Effect.fn("makeT3AuthPairing")(function* () {
             Effect.fail(new AuthConfigError({ message: "auth config failed", cause: error })),
         }),
       );
-    return { url: parsed.baseUrl, role: result.role, expiresAt: result.expiresAt };
+    return {
+      url: parsed.baseUrl,
+      token: result.sessionToken,
+      role: result.role,
+      expiresAt: result.expiresAt,
+    };
   });
 
   return { pair };
