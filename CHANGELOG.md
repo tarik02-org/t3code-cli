@@ -1,5 +1,11 @@
 # t3code-cli
 
+## 0.4.0
+
+### Minor Changes
+
+- f882df4: replace local auth's t3 cli dependency with direct t3code database session issuance, update pairing to exchange credentials through oauth token exchange, and align websocket auth with the current upstream ticket contract
+
 ## 0.3.0
 
 ### Minor Changes
