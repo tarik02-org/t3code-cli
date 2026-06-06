@@ -57,8 +57,9 @@ export class AuthLocalDatabaseError extends Schema.TaggedErrorClass<AuthLocalDat
 export class AuthLocalSigningError extends Schema.TaggedErrorClass<AuthLocalSigningError>()(
   "AuthLocalSigningError",
   {
-    operation: Schema.Literals(["import-key", "sign"]),
+    operation: Schema.Literals(["sign"]),
     message: Schema.String,
+    cause: Schema.optionalKey(Schema.instanceOf(PlatformError)),
   },
 ) {}
 

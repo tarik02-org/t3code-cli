@@ -3,7 +3,6 @@ import {
   AuthSessionId,
   type AuthEnvironmentScope,
 } from "#t3tools/contracts";
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Encoding from "effect/Encoding";
@@ -19,6 +18,7 @@ import {
   AuthLocalSecretError,
   AuthLocalSigningError,
 } from "./error.ts";
+import { LocalAuthSqlite, LocalAuthSqliteLive } from "./local-sqlite.ts";
 import { decodeAuthLocalRuntimeStateFromJson } from "./schema.ts";
 import type { LocalAuthInput } from "./type.ts";
 
@@ -230,14 +230,15 @@ const getOrCreateSigningSecret = Effect.fn("getOrCreateSigningSecret")(function*
         ),
       ),
     ),
-    Effect.mapError((error) =>
-      error instanceof AuthLocalSecretError
-        ? error
-        : new AuthLocalSecretError({
+    Effect.catchTags({
+      PlatformError: (error) =>
+        Effect.fail(
+          new AuthLocalSecretError({
             message: `failed to persist signing secret: ${secretPath}`,
             cause: error,
           }),
-    ),
+        ),
+    }),
   );
 });
 
@@ -271,23 +272,21 @@ type InsertAuthSessionInput = {
 };
 
 function insertAuthSession(input: InsertAuthSessionInput) {
-  return Effect.scoped(
-    withLocalDatabase(input.dbPath, (db) =>
-      Effect.gen(function* () {
-        yield* executeSql(db, "PRAGMA busy_timeout = 5000;");
-        yield* executeSql(db, "PRAGMA foreign_keys = ON;");
-        const columns = yield* tableInfo(db, "auth_sessions");
-        if (!columns.some((column) => column.name === "scopes")) {
-          return yield* Effect.fail(
-            new AuthLocalDatabaseError({
-              operation: "schema",
-              message: `local auth database is missing scoped auth_sessions schema: ${input.dbPath}`,
-            }),
-          );
-        }
-        yield* runStatement(
-          db,
-          `
+  return Effect.gen(function* () {
+    const db = yield* LocalAuthSqlite;
+    yield* db.execute("PRAGMA busy_timeout = 5000;");
+    yield* db.execute("PRAGMA foreign_keys = ON;");
+    const columns = yield* db.tableInfo("auth_sessions");
+    if (!columns.some((column) => column.name === "scopes")) {
+      return yield* Effect.fail(
+        new AuthLocalDatabaseError({
+          operation: "schema",
+          message: `local auth database is missing scoped auth_sessions schema: ${input.dbPath}`,
+        }),
+      );
+    }
+    yield* db.run(
+      `
           INSERT INTO auth_sessions (
             session_id,
             subject,
@@ -305,145 +304,54 @@ function insertAuthSession(input: InsertAuthSessionInput) {
           )
           VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, NULL, NULL, ?, ?, NULL)
         `,
-          [
-            input.sessionId,
-            input.subject,
-            JSON.stringify(input.scopes),
-            "bearer-access-token",
-            input.label,
-            "bot",
-            input.issuedAt,
-            input.expiresAt,
-          ],
-        );
-        return undefined;
-      }),
+      [
+        input.sessionId,
+        input.subject,
+        JSON.stringify(input.scopes),
+        "bearer-access-token",
+        input.label,
+        "bot",
+        input.issuedAt,
+        input.expiresAt,
+      ],
+    );
+    return undefined;
+  }).pipe(Effect.provide(LocalAuthSqliteLive({ filename: input.dbPath })), Effect.scoped);
+}
+
+function signPayload(payload: string, secret: Uint8Array) {
+  return hmacSha256(secret, new TextEncoder().encode(payload)).pipe(
+    Effect.map(Encoding.encodeBase64Url),
+    Effect.mapError(
+      (error) =>
+        new AuthLocalSigningError({
+          operation: "sign",
+          message: "failed to sign local auth payload",
+          cause: error,
+        }),
     ),
   );
 }
 
-function withLocalDatabase<A>(
-  dbPath: string,
-  use: (db: DatabaseSync) => Effect.Effect<A, AuthLocalDatabaseError>,
-) {
-  return Effect.acquireRelease(openLocalDatabase(dbPath), closeLocalDatabase).pipe(
-    Effect.flatMap(use),
-  );
-}
-
-function openLocalDatabase(dbPath: string) {
-  return Effect.try({
-    try: () => new DatabaseSync(dbPath),
-    catch: (error) =>
-      new AuthLocalDatabaseError({
-        operation: "connect",
-        message: sqliteErrorMessage(error),
-      }),
-  });
-}
-
-function closeLocalDatabase(db: DatabaseSync) {
-  return Effect.sync(() => {
-    try {
-      db.close();
-    } catch {
-      // Closing happens after the main operation has already produced its result.
-    }
-  });
-}
-
-function executeSql(db: DatabaseSync, sql: string) {
-  return Effect.try({
-    try: () => db.exec(sql),
-    catch: (error) =>
-      new AuthLocalDatabaseError({
-        operation: "query",
-        message: sqliteErrorMessage(error),
-      }),
-  });
-}
-
-function tableInfo(db: DatabaseSync, tableName: "auth_sessions") {
-  return Effect.try({
-    try: () => db.prepare(`PRAGMA table_info(${tableName})`).all(),
-    catch: (error) =>
-      new AuthLocalDatabaseError({
-        operation: "query",
-        message: sqliteErrorMessage(error),
-      }),
-  }).pipe(
-    Effect.flatMap((rows) => {
-      const columns = rows.flatMap((row) =>
-        typeof row["name"] === "string" ? [{ name: row["name"] }] : [],
-      );
-      if (columns.length !== rows.length) {
-        return Effect.fail(
-          new AuthLocalDatabaseError({
-            operation: "schema",
-            message: `local auth database returned invalid ${tableName} table info`,
-          }),
-        );
-      }
-      return Effect.succeed(columns);
-    }),
-  );
-}
-
-function runStatement(db: DatabaseSync, sql: string, params: ReadonlyArray<SQLInputValue>) {
-  return Effect.try({
-    try: () => db.prepare(sql).run(...params),
-    catch: (error) =>
-      new AuthLocalDatabaseError({
-        operation: "query",
-        message: sqliteErrorMessage(error),
-      }),
-  });
-}
-
-function sqliteErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "sqlite operation failed";
-}
-
-function signPayload(payload: string, secret: Uint8Array) {
+function hmacSha256(secret: Uint8Array, payload: Uint8Array) {
   return Effect.gen(function* () {
-    const subtle = globalThis.crypto?.subtle;
-    if (subtle === undefined) {
-      return yield* Effect.fail(
-        new AuthLocalSigningError({
-          operation: "import-key",
-          message: "globalThis.crypto.subtle is not available",
-        }),
-      );
-    }
-    const key = yield* Effect.tryPromise({
-      try: () =>
-        subtle.importKey("raw", toArrayBuffer(secret), { name: "HMAC", hash: "SHA-256" }, false, [
-          "sign",
-        ]),
-      catch: (error) =>
-        new AuthLocalSigningError({
-          operation: "import-key",
-          message: webCryptoErrorMessage(error),
-        }),
-    });
-    const signature = yield* Effect.tryPromise({
-      try: () => subtle.sign("HMAC", key, new TextEncoder().encode(payload)),
-      catch: (error) =>
-        new AuthLocalSigningError({
-          operation: "sign",
-          message: webCryptoErrorMessage(error),
-        }),
-    });
-    return Encoding.encodeBase64Url(new Uint8Array(signature));
+    const crypto = yield* Crypto.Crypto;
+    const key =
+      secret.byteLength > sha256BlockSize ? yield* crypto.digest("SHA-256", secret) : secret;
+    const block = new Uint8Array(sha256BlockSize);
+    block.set(key);
+    const outerPad = block.map((byte) => byte ^ 0x5c);
+    const innerPad = block.map((byte) => byte ^ 0x36);
+    const innerHash = yield* crypto.digest("SHA-256", concatBytes(innerPad, payload));
+    return yield* crypto.digest("SHA-256", concatBytes(outerPad, innerHash));
   });
 }
 
-function webCryptoErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "webcrypto operation failed";
-}
+const sha256BlockSize = 64;
 
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  const buffer = new ArrayBuffer(bytes.byteLength);
-  new Uint8Array(buffer).set(bytes);
-  return buffer;
+function concatBytes(first: Uint8Array, second: Uint8Array) {
+  const bytes = new Uint8Array(first.byteLength + second.byteLength);
+  bytes.set(first);
+  bytes.set(second, first.byteLength);
+  return bytes;
 }
