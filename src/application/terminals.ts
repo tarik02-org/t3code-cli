@@ -15,7 +15,7 @@ import { ProjectLookupError, TerminalLookupError, ThreadLookupError } from "../d
 import { findProjectById } from "../domain/helpers.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import { RpcError } from "../rpc/error.ts";
-import { T3Rpc, type WsClient } from "../rpc/service.ts";
+import { T3Rpc } from "../rpc/service.ts";
 import type { T3Application, TerminalAttachTarget, TerminalRef } from "./service.ts";
 
 const rpcRetrySchedule = Schedule.exponential("100 millis").pipe(
@@ -30,6 +30,7 @@ const rpcRetrySchedule = Schedule.exponential("100 millis").pipe(
     );
   }),
 );
+type RpcOperationError = RpcClientError.RpcClientError | RpcError | { readonly message: string };
 
 export type CreateTerminalInput = {
   readonly threadId: string;
@@ -108,22 +109,34 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
 
     const terminalId = input.terminalId ?? `t3cli-${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`;
     const cwd = thread.worktreePath ?? project.workspaceRoot;
-    const opened = yield* runRpc(rpc, WS_METHODS.terminalOpen, (client) =>
-      client[WS_METHODS.terminalOpen]({
-        threadId: thread.id,
-        terminalId,
-        cwd,
-        worktreePath: thread.worktreePath ?? null,
-      }),
+    const opened = yield* runRpc(
+      rpc,
+      WS_METHODS.terminalOpen,
+      rpc.getClient.pipe(
+        Effect.flatMap((client) =>
+          client[WS_METHODS.terminalOpen]({
+            threadId: thread.id,
+            terminalId,
+            cwd,
+            worktreePath: thread.worktreePath ?? null,
+          }),
+        ),
+      ),
     );
 
     if (input.command !== undefined) {
-      yield* runRpc(rpc, WS_METHODS.terminalWrite, (client) =>
-        client[WS_METHODS.terminalWrite]({
-          threadId: thread.id,
-          terminalId,
-          data: `${input.command}\r`,
-        }),
+      yield* runRpc(
+        rpc,
+        WS_METHODS.terminalWrite,
+        rpc.getClient.pipe(
+          Effect.flatMap((client) =>
+            client[WS_METHODS.terminalWrite]({
+              threadId: thread.id,
+              terminalId,
+              data: `${input.command}\r`,
+            }),
+          ),
+        ),
       );
     }
 
@@ -135,22 +148,34 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
     readonly cols?: number;
     readonly rows?: number;
   }): Stream.Stream<TerminalAttachStreamEvent, RpcError> =>
-    subscribeRpc(rpc, WS_METHODS.terminalAttach, (client) =>
-      client[WS_METHODS.terminalAttach]({
-        threadId: input.terminal.threadId,
-        terminalId: input.terminal.terminalId,
-        cwd: input.terminal.cwd,
-        worktreePath: input.terminal.worktreePath,
-        ...(input.cols !== undefined ? { cols: input.cols } : {}),
-        ...(input.rows !== undefined ? { rows: input.rows } : {}),
-      }),
+    subscribeRpc(
+      rpc,
+      WS_METHODS.terminalAttach,
+      Stream.unwrap(
+        rpc.getClient.pipe(
+          Effect.map((client) =>
+            client[WS_METHODS.terminalAttach]({
+              threadId: input.terminal.threadId,
+              terminalId: input.terminal.terminalId,
+              cwd: input.terminal.cwd,
+              worktreePath: input.terminal.worktreePath,
+              ...(input.cols !== undefined ? { cols: input.cols } : {}),
+              ...(input.rows !== undefined ? { rows: input.rows } : {}),
+            }),
+          ),
+        ),
+      ),
     );
 
   const watchTerminalEvents: TerminalApplicationService["watchTerminalEvents"] = (
     terminal: TerminalRef,
   ): Stream.Stream<TerminalEvent, RpcError> =>
-    subscribeRpc(rpc, WS_METHODS.subscribeTerminalEvents, (client) =>
-      client[WS_METHODS.subscribeTerminalEvents]({}),
+    subscribeRpc(
+      rpc,
+      WS_METHODS.subscribeTerminalEvents,
+      Stream.unwrap(
+        rpc.getClient.pipe(Effect.map((client) => client[WS_METHODS.subscribeTerminalEvents]({}))),
+      ),
     ).pipe(
       Stream.filter(
         (event) => event.threadId === terminal.threadId && event.terminalId === terminal.terminalId,
@@ -160,12 +185,18 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
   const writeTerminal: TerminalApplicationService["writeTerminal"] = Effect.fn(
     "T3ApplicationLive.writeTerminal",
   )(function* (input: { readonly terminal: TerminalRef; readonly data: string }) {
-    yield* runRpc(rpc, WS_METHODS.terminalWrite, (client) =>
-      client[WS_METHODS.terminalWrite]({
-        threadId: input.terminal.threadId,
-        terminalId: input.terminal.terminalId,
-        data: input.data,
-      }),
+    yield* runRpc(
+      rpc,
+      WS_METHODS.terminalWrite,
+      rpc.getClient.pipe(
+        Effect.flatMap((client) =>
+          client[WS_METHODS.terminalWrite]({
+            threadId: input.terminal.threadId,
+            terminalId: input.terminal.terminalId,
+            data: input.data,
+          }),
+        ),
+      ),
     );
   });
 
@@ -176,25 +207,37 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
     readonly cols: number;
     readonly rows: number;
   }) {
-    yield* runRpc(rpc, WS_METHODS.terminalResize, (client) =>
-      client[WS_METHODS.terminalResize]({
-        threadId: input.terminal.threadId,
-        terminalId: input.terminal.terminalId,
-        cols: input.cols,
-        rows: input.rows,
-      }),
+    yield* runRpc(
+      rpc,
+      WS_METHODS.terminalResize,
+      rpc.getClient.pipe(
+        Effect.flatMap((client) =>
+          client[WS_METHODS.terminalResize]({
+            threadId: input.terminal.threadId,
+            terminalId: input.terminal.terminalId,
+            cols: input.cols,
+            rows: input.rows,
+          }),
+        ),
+      ),
     );
   });
 
   const destroyTerminal: TerminalApplicationService["destroyTerminal"] = Effect.fn(
     "T3ApplicationLive.destroyTerminal",
   )(function* (terminal: TerminalRef) {
-    yield* runRpc(rpc, WS_METHODS.terminalClose, (client) =>
-      client[WS_METHODS.terminalClose]({
-        threadId: terminal.threadId,
-        terminalId: terminal.terminalId,
-        deleteHistory: true,
-      }),
+    yield* runRpc(
+      rpc,
+      WS_METHODS.terminalClose,
+      rpc.getClient.pipe(
+        Effect.flatMap((client) =>
+          client[WS_METHODS.terminalClose]({
+            threadId: terminal.threadId,
+            terminalId: terminal.terminalId,
+            deleteHistory: true,
+          }),
+        ),
+      ),
     );
   });
 
@@ -237,8 +280,14 @@ function getTerminalMetadataSnapshot(
 ): Effect.Effect<ReadonlyArray<TerminalSummary>, RpcError> {
   return Effect.gen(function* () {
     const item = yield* Stream.runHead(
-      subscribeRpc(rpc, WS_METHODS.subscribeTerminalMetadata, (client) =>
-        client[WS_METHODS.subscribeTerminalMetadata]({}),
+      subscribeRpc(
+        rpc,
+        WS_METHODS.subscribeTerminalMetadata,
+        Stream.unwrap(
+          rpc.getClient.pipe(
+            Effect.map((client) => client[WS_METHODS.subscribeTerminalMetadata]({})),
+          ),
+        ),
       ),
     );
     const value = Option.getOrUndefined(item);
@@ -254,41 +303,37 @@ function getTerminalMetadataSnapshot(
   });
 }
 
-function runRpc<A, E extends { readonly message: string }>(
+function runRpc<A>(
   rpc: T3Rpc["Service"],
   method: string,
-  f: (client: WsClient) => Effect.Effect<A, E | RpcClientError.RpcClientError | RpcError>,
+  effect: Effect.Effect<A, RpcOperationError>,
 ): Effect.Effect<A, RpcError> {
-  return Effect.gen(function* () {
-    const client = yield* rpc.getClient;
-    return yield* f(client);
-  }).pipe(
-    Effect.tapError((error) =>
-      "_tag" in error && error["_tag"] === "RpcClientError" ? rpc.disconnect : Effect.void,
-    ),
+  return effect.pipe(
+    Effect.tapError((error) => (isRpcClientTransportError(error) ? rpc.disconnect : Effect.void)),
     Effect.retry(rpcRetrySchedule),
     Effect.mapError((error) => toRpcError(error, method)),
   );
 }
 
-function subscribeRpc<A, E extends { readonly message: string }>(
+function subscribeRpc<A>(
   rpc: T3Rpc["Service"],
   method: string,
-  f: (client: WsClient) => Stream.Stream<A, E | RpcClientError.RpcClientError | RpcError>,
+  stream: Stream.Stream<A, RpcOperationError>,
 ): Stream.Stream<A, RpcError> {
-  return Stream.unwrap(Effect.map(rpc.getClient, f)).pipe(
-    Stream.tapError((error) =>
-      "_tag" in error && error["_tag"] === "RpcClientError" ? rpc.disconnect : Effect.void,
-    ),
+  return stream.pipe(
+    Stream.tapError((error) => (isRpcClientTransportError(error) ? rpc.disconnect : Effect.void)),
     Stream.retry(rpcRetrySchedule),
     Stream.mapError((error) => toRpcError(error, method)),
   );
 }
 
-function toRpcError(
-  error: RpcClientError.RpcClientError | RpcError | { readonly message: string },
-  method: string,
-) {
+function isRpcClientTransportError(
+  error: RpcOperationError,
+): error is RpcClientError.RpcClientError {
+  return "_tag" in error && error["_tag"] === "RpcClientError";
+}
+
+function toRpcError(error: RpcOperationError, method: string) {
   if ("_tag" in error && error["_tag"] === "RpcError") {
     return error;
   }
