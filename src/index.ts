@@ -33,6 +33,8 @@ export type {
   PairingUrl,
   PairResult,
 } from "./auth/type.ts";
+export { Environment } from "./environment/service.ts";
+export type { EnvironmentShape } from "./environment/service.ts";
 export { NodeEnvironmentLive } from "./environment/layer.ts";
 export {
   AppLayer,
@@ -42,6 +44,13 @@ export {
   T3AuthTransportLayer,
   T3LocalAuthLayer,
 } from "./runtime.ts";
+export { SqlClientFactory } from "./sql/service.ts";
+export type { SqlClientFactoryShape, SqliteClientConfig } from "./sql/service.ts";
+export {
+  NodeSqlClientFactoryLive,
+  NodeSqliteClientLive,
+  makeNodeSqliteClient,
+} from "./sql/node-sqlite-client.ts";
 export type {
   OrchestrationMessage,
   OrchestrationProjectShell,
