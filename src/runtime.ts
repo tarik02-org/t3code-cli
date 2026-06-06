@@ -28,7 +28,9 @@ const T3RpcLayer = T3RpcLive.pipe(
   Layer.provide(Layer.mergeAll(T3ConfigLive, T3AuthLayer, NodeSocket.layerWebSocketConstructor)),
 );
 const T3OrchestrationLayer = T3OrchestrationLive.pipe(Layer.provide(T3RpcLayer));
-const T3ApplicationLayer = T3ApplicationLive.pipe(Layer.provide(T3OrchestrationLayer));
+const T3ApplicationLayer = T3ApplicationLive.pipe(
+  Layer.provide(Layer.mergeAll(T3RpcLayer, T3OrchestrationLayer)),
+);
 
 export const AuthAppLayer = Layer.mergeAll(T3ConfigLive, T3AuthLayer);
 

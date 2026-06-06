@@ -10,6 +10,10 @@ import type {
   OrchestrationThread,
   OrchestrationThreadShell,
   ServerProvider,
+  TerminalAttachStreamEvent,
+  TerminalEvent,
+  TerminalSessionSnapshot,
+  TerminalSummary,
 } from "#t3tools/contracts";
 
 import type { ApplicationError } from "./error.ts";
@@ -28,6 +32,22 @@ export type SendThreadInput = {
   readonly threadId: string;
   readonly message: string;
   readonly options?: NonNullable<ModelSelection["options"]>;
+};
+
+export type CreateTerminalInput = {
+  readonly threadId: string;
+  readonly terminalId?: string;
+  readonly command?: string;
+};
+
+export type TerminalRef = {
+  readonly threadId: string;
+  readonly terminalId: string;
+};
+
+export type TerminalAttachTarget = TerminalRef & {
+  readonly cwd: string;
+  readonly worktreePath: string | null;
 };
 
 export type StartThreadPolicy = {
@@ -65,6 +85,33 @@ export class T3Application extends Context.Service<
     readonly getThreadMessages: (
       threadId: string,
     ) => Effect.Effect<OrchestrationThread, ApplicationError>;
+    readonly listTerminals: (
+      threadId: string,
+    ) => Effect.Effect<ReadonlyArray<TerminalSummary>, ApplicationError>;
+    readonly getTerminal: (
+      terminal: TerminalRef,
+    ) => Effect.Effect<TerminalSummary, ApplicationError>;
+    readonly createTerminal: (
+      input: CreateTerminalInput,
+    ) => Effect.Effect<TerminalSessionSnapshot, ApplicationError>;
+    readonly attachTerminal: (input: {
+      readonly terminal: TerminalAttachTarget;
+      readonly cols?: number;
+      readonly rows?: number;
+    }) => Stream.Stream<TerminalAttachStreamEvent, ApplicationError>;
+    readonly watchTerminalEvents: (
+      terminal: TerminalRef,
+    ) => Stream.Stream<TerminalEvent, ApplicationError>;
+    readonly writeTerminal: (input: {
+      readonly terminal: TerminalRef;
+      readonly data: string;
+    }) => Effect.Effect<void, ApplicationError>;
+    readonly resizeTerminal: (input: {
+      readonly terminal: TerminalRef;
+      readonly cols: number;
+      readonly rows: number;
+    }) => Effect.Effect<void, ApplicationError>;
+    readonly destroyTerminal: (terminal: TerminalRef) => Effect.Effect<void, ApplicationError>;
     readonly archiveThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
     readonly startThread: (
       input: StartThreadInput,

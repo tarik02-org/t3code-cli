@@ -16,10 +16,7 @@ import { RpcClientError } from "effect/unstable/rpc";
 
 import { RpcError } from "../rpc/error.ts";
 import { T3Rpc, type WsClient } from "../rpc/service.ts";
-import type { CliRpcRequestError } from "../rpc/ws-group.ts";
 import { T3Orchestration, type OpenThread } from "./service.ts";
-
-type RpcRequestError = RpcClientError.RpcClientError | CliRpcRequestError;
 
 const rpcRetrySchedule = Schedule.exponential("100 millis").pipe(
   Schedule.take(4),
@@ -31,7 +28,7 @@ const rpcRetrySchedule = Schedule.exponential("100 millis").pipe(
 function runRpc<A>(
   rpc: T3Rpc["Service"],
   method: string,
-  f: (client: WsClient) => Effect.Effect<A, RpcRequestError>,
+  f: (client: WsClient) => Effect.Effect<A, unknown>,
 ): Effect.Effect<A, RpcError> {
   return Effect.gen(function* () {
     const client = yield* rpc.getClient;
@@ -41,37 +38,21 @@ function runRpc<A>(
       error instanceof RpcClientError.RpcClientError ? rpc.disconnect : Effect.void,
     ),
     Effect.retry(rpcRetrySchedule),
-    Effect.catchTags({
-      RpcError: (error) => Effect.fail(error),
-      EnvironmentAuthorizationError: (error) => Effect.fail(toRpcRequestError(error, method)),
-      RpcClientError: (error) => Effect.fail(toRpcRequestError(error, method)),
-      KeybindingsConfigParseError: (error) => Effect.fail(toRpcRequestError(error, method)),
-      OrchestrationDispatchCommandError: (error) => Effect.fail(toRpcRequestError(error, method)),
-      OrchestrationGetSnapshotError: (error) => Effect.fail(toRpcRequestError(error, method)),
-      ServerSettingsError: (error) => Effect.fail(toRpcRequestError(error, method)),
-    }),
+    Effect.mapError((error) => toRpcError(error, method)),
   );
 }
 
 function subscribeRpc<A>(
   rpc: T3Rpc["Service"],
   method: string,
-  f: (client: WsClient) => Stream.Stream<A, RpcRequestError>,
+  f: (client: WsClient) => Stream.Stream<A, unknown>,
 ): Stream.Stream<A, RpcError> {
   return Stream.unwrap(Effect.map(rpc.getClient, f)).pipe(
     Stream.tapError((error) =>
       error instanceof RpcClientError.RpcClientError ? rpc.disconnect : Effect.void,
     ),
     Stream.retry(rpcRetrySchedule),
-    Stream.catchTags({
-      RpcError: (error) => Stream.fail(error),
-      EnvironmentAuthorizationError: (error) => Stream.fail(toRpcRequestError(error, method)),
-      RpcClientError: (error) => Stream.fail(toRpcRequestError(error, method)),
-      KeybindingsConfigParseError: (error) => Stream.fail(toRpcRequestError(error, method)),
-      OrchestrationDispatchCommandError: (error) => Stream.fail(toRpcRequestError(error, method)),
-      OrchestrationGetSnapshotError: (error) => Stream.fail(toRpcRequestError(error, method)),
-      ServerSettingsError: (error) => Stream.fail(toRpcRequestError(error, method)),
-    }),
+    Stream.mapError((error) => toRpcError(error, method)),
   );
 }
 
@@ -177,10 +158,12 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
 
 export const T3OrchestrationLive = Layer.effect(T3Orchestration, makeT3Orchestration());
 
-function toRpcRequestError(error: RpcRequestError, method: string) {
+function toRpcError(error: unknown, method: string) {
+  if (error instanceof RpcError) {
+    return error;
+  }
   return new RpcError({
-    message: error.message,
+    message: error instanceof Error ? error.message : String(error),
     method,
-    cause: error,
   });
 }

@@ -30,6 +30,14 @@ export class ThreadSessionError extends Schema.TaggedErrorClass<ThreadSessionErr
   },
 ) {}
 
+export class ThreadLookupError extends Schema.TaggedErrorClass<ThreadLookupError>()(
+  "ThreadLookupError",
+  {
+    message: Schema.String,
+    threadId: Schema.String,
+  },
+) {}
+
 export class ProjectCreateVisibilityError extends Schema.TaggedErrorClass<ProjectCreateVisibilityError>()(
   "ProjectCreateVisibilityError",
   {
@@ -38,9 +46,20 @@ export class ProjectCreateVisibilityError extends Schema.TaggedErrorClass<Projec
   },
 ) {}
 
+export class TerminalLookupError extends Schema.TaggedErrorClass<TerminalLookupError>()(
+  "TerminalLookupError",
+  {
+    message: Schema.String,
+    threadId: Schema.String,
+    terminalId: Schema.String,
+  },
+) {}
+
 export type DomainError =
   | ProjectLookupError
   | ModelSelectionError
   | ThreadEventError
   | ThreadSessionError
-  | ProjectCreateVisibilityError;
+  | ThreadLookupError
+  | ProjectCreateVisibilityError
+  | TerminalLookupError;
