@@ -128,7 +128,7 @@ function toSqlInputValue(value: unknown): SQLInputValue {
   if (typeof value === "boolean") {
     return value ? 1 : 0;
   }
-  if (isDate(value)) {
+  if (value instanceof Date) {
     return value.toISOString();
   }
   if (ArrayBuffer.isView(value)) {
@@ -138,8 +138,4 @@ function toSqlInputValue(value: unknown): SQLInputValue {
     return copy;
   }
   return JSON.stringify(value) ?? null;
-}
-
-function isDate(value: unknown): value is Date {
-  return Object.prototype.toString.call(value) === "[object Date]";
 }
