@@ -8,3 +8,7 @@ export class TerminalCliError extends Schema.TaggedErrorClass<TerminalCliError>(
     terminalId: Schema.optionalKey(Schema.String),
   },
 ) {}
+
+export class TerminalIoError extends Schema.TaggedErrorClass<TerminalIoError>()("TerminalIoError", {
+  message: Schema.String,
+}) {}

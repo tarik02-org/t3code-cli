@@ -13,10 +13,9 @@ import type {
   TerminalRef,
 } from "../../application/service.ts";
 import type { ApplicationError } from "../../application/error.ts";
-import { TerminalCliError } from "./error.ts";
+import { TerminalCliError, TerminalIoError } from "./error.ts";
+import { TerminalIo } from "./io-service.ts";
 
-const DEFAULT_COLS = 80;
-const DEFAULT_ROWS = 24;
 const DETACH_BYTE = 0x1d;
 const ANSI_CLEAR_SCREEN = "\u001bc";
 
@@ -25,18 +24,10 @@ export function runAttachedTerminalSession(input: {
   readonly terminal: TerminalAttachTarget;
 }) {
   return Effect.gen(function* () {
-    if (!process.stdin.isTTY || !process.stdout.isTTY || process.stdin.setRawMode === undefined) {
-      return yield* Effect.fail(
-        new TerminalCliError({
-          message: "terminal attach requires an interactive TTY on stdin and stdout",
-          threadId: input.terminal.threadId,
-          terminalId: input.terminal.terminalId,
-        }),
-      );
-    }
-
-    const cols = process.stdout.columns ?? DEFAULT_COLS;
-    const rows = process.stdout.rows ?? DEFAULT_ROWS;
+    const io = yield* TerminalIo;
+    const { cols, rows } = yield* io.getWindowSize.pipe(
+      Effect.mapError((error) => mapTerminalIoError(error, input.terminal)),
+    );
     const stream = input.application.attachTerminal({
       terminal: input.terminal,
       cols,
@@ -45,17 +36,9 @@ export function runAttachedTerminalSession(input: {
 
     return yield* Effect.callback<void, ApplicationError | TerminalCliError>((resume) => {
       let settled = false;
-      const stdin = process.stdin;
-      const stdout = process.stdout;
-      stdin.resume();
-      stdin.setRawMode(true);
 
       const streamFiber = Effect.runFork(
-        Stream.runForEach(stream, (event) =>
-          Effect.sync(() => {
-            applyAttachEvent(event);
-          }),
-        ).pipe(
+        Stream.runForEach(stream, (event) => applyAttachEvent(io, event)).pipe(
           Effect.match({
             onFailure: (error) => finish(error),
             onSuccess: () => finish(),
@@ -63,75 +46,60 @@ export function runAttachedTerminalSession(input: {
         ),
       );
 
-      const cleanup = () => {
-        stdin.off("data", onData);
-        process.off("SIGWINCH", onResize);
-        stdin.setRawMode(false);
-        stdin.pause();
-      };
-
       const finish = (error?: ApplicationError | TerminalCliError, message?: string) => {
         if (settled) {
           return;
         }
         settled = true;
-        cleanup();
         if (message !== undefined) {
-          writeSystemMessage(message);
+          Effect.runFork(writeSystemMessage(io, message));
         }
         Effect.runFork(Fiber.interrupt(streamFiber));
         resume(error !== undefined ? Effect.fail(error) : Effect.void);
       };
 
-      const sendResize = () => {
-        const nextCols = stdout.columns ?? DEFAULT_COLS;
-        const nextRows = stdout.rows ?? DEFAULT_ROWS;
-        Effect.runFork(
-          input.application
-            .resizeTerminal({
+      const session = io
+        .withRawSession({
+          onResize: ({ cols: nextCols, rows: nextRows }) =>
+            input.application.resizeTerminal({
               terminal: input.terminal,
               cols: nextCols,
               rows: nextRows,
-            })
-            .pipe(
-              Effect.match({
-                onFailure: (error) => finish(error),
-                onSuccess: () => undefined,
-              }),
-            ),
-        );
-      };
-
-      const onResize = () => {
-        sendResize();
-      };
-
-      const onData = (chunk: Buffer | string) => {
-        const buffer = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
-        const detachOffset = buffer.indexOf(DETACH_BYTE);
-        const payload = detachOffset === -1 ? buffer : buffer.subarray(0, detachOffset);
-        if (payload.length > 0) {
-          Effect.runFork(
-            input.application
-              .writeTerminal({
-                terminal: input.terminal,
-                data: payload.toString("utf8"),
-              })
-              .pipe(
-                Effect.match({
-                  onFailure: (error) => finish(error),
-                  onSuccess: () => undefined,
-                }),
+            }),
+          onData: (buffer: Buffer) => {
+            const detachOffset = buffer.indexOf(DETACH_BYTE);
+            const payload = detachOffset === -1 ? buffer : buffer.subarray(0, detachOffset);
+            if (payload.length === 0 && detachOffset === -1) {
+              return Effect.void;
+            }
+            return Effect.gen(function* () {
+              if (payload.length > 0) {
+                yield* input.application.writeTerminal({
+                  terminal: input.terminal,
+                  data: payload.toString("utf8"),
+                });
+              }
+              if (detachOffset !== -1) {
+                yield* Effect.sync(() => {
+                  finish(undefined, "detached");
+                });
+              }
+            });
+          },
+        })
+        .pipe(
+          Effect.match({
+            onFailure: (error) =>
+              finish(
+                error["_tag"] === "TerminalIoError"
+                  ? mapTerminalIoError(error, input.terminal)
+                  : error,
               ),
-          );
-        }
-        if (detachOffset !== -1) {
-          finish(undefined, "detached");
-        }
-      };
+            onSuccess: () => finish(),
+          }),
+        );
 
-      process.on("SIGWINCH", onResize);
-      stdin.on("data", onData);
+      Effect.runFork(session);
 
       return Effect.sync(() => {
         finish();
@@ -140,37 +108,46 @@ export function runAttachedTerminalSession(input: {
   });
 }
 
-function applyAttachEvent(event: TerminalAttachStreamEvent) {
+function mapTerminalIoError(
+  error: TerminalIoError,
+  terminal: TerminalAttachTarget,
+): TerminalCliError {
+  return new TerminalCliError({
+    message: error.message,
+    threadId: terminal.threadId,
+    terminalId: terminal.terminalId,
+  });
+}
+
+function applyAttachEvent(io: TerminalIo["Service"], event: TerminalAttachStreamEvent) {
   if (event.type === "activity") {
-    return;
+    return Effect.void;
   }
 
   if (event.type === "snapshot" || event.type === "restarted") {
-    process.stdout.write(ANSI_CLEAR_SCREEN);
-    if (event.snapshot.history.length > 0) {
-      process.stdout.write(event.snapshot.history);
-    }
-    return;
+    return io
+      .writeOutput(ANSI_CLEAR_SCREEN)
+      .pipe(
+        Effect.flatMap(() =>
+          event.snapshot.history.length > 0 ? io.writeOutput(event.snapshot.history) : Effect.void,
+        ),
+      );
   }
 
   if (event.type === "output") {
-    process.stdout.write(event.data);
-    return;
+    return io.writeOutput(event.data);
   }
 
   if (event.type === "cleared") {
-    process.stdout.write(ANSI_CLEAR_SCREEN);
-    return;
+    return io.writeOutput(ANSI_CLEAR_SCREEN);
   }
 
   if (event.type === "error") {
-    writeSystemMessage(event.message);
-    return;
+    return writeSystemMessage(io, event.message);
   }
 
   if (event.type === "closed") {
-    writeSystemMessage("Terminal closed");
-    return;
+    return writeSystemMessage(io, "Terminal closed");
   }
 
   const details = [
@@ -179,11 +156,14 @@ function applyAttachEvent(event: TerminalAttachStreamEvent) {
   ]
     .filter((value): value is string => value !== null)
     .join(", ");
-  writeSystemMessage(details.length > 0 ? `Process exited (${details})` : "Process exited");
+  return writeSystemMessage(
+    io,
+    details.length > 0 ? `Process exited (${details})` : "Process exited",
+  );
 }
 
-function writeSystemMessage(message: string) {
-  process.stdout.write(`\r\n[terminal] ${message}\r\n`);
+function writeSystemMessage(io: TerminalIo["Service"], message: string) {
+  return io.writeOutput(`\r\n[terminal] ${message}\r\n`);
 }
 
 export function toTerminalAttachTarget(terminal: TerminalSummary): TerminalAttachTarget {
