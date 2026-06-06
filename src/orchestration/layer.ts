@@ -1,7 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Schedule from "effect/Schedule";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import {
@@ -12,49 +11,11 @@ import {
   type OrchestrationShellStreamItem,
   type OrchestrationThreadStreamItem,
 } from "#t3tools/contracts";
-import { RpcClientError } from "effect/unstable/rpc";
 
 import { RpcError } from "../rpc/error.ts";
+import { runRpc, subscribeRpc } from "../rpc/operation.ts";
 import { T3Rpc } from "../rpc/service.ts";
 import { T3Orchestration, type OpenThread } from "./service.ts";
-
-const rpcRetrySchedule = Schedule.exponential("100 millis").pipe(
-  Schedule.take(4),
-  Schedule.collectWhile((metadata: Schedule.Metadata) => {
-    const input = metadata.input;
-    return (
-      typeof input === "object" &&
-      input !== null &&
-      "_tag" in input &&
-      input["_tag"] === "RpcClientError"
-    );
-  }),
-);
-type RpcOperationError = RpcClientError.RpcClientError | RpcError | { readonly message: string };
-
-function runRpc<A>(
-  rpc: T3Rpc["Service"],
-  method: string,
-  effect: Effect.Effect<A, RpcOperationError>,
-): Effect.Effect<A, RpcError> {
-  return effect.pipe(
-    Effect.tapError((error) => (isRpcClientTransportError(error) ? rpc.disconnect : Effect.void)),
-    Effect.retry(rpcRetrySchedule),
-    Effect.mapError((error) => toRpcError(error, method)),
-  );
-}
-
-function subscribeRpc<A>(
-  rpc: T3Rpc["Service"],
-  method: string,
-  stream: Stream.Stream<A, RpcOperationError>,
-): Stream.Stream<A, RpcError> {
-  return stream.pipe(
-    Stream.tapError((error) => (isRpcClientTransportError(error) ? rpc.disconnect : Effect.void)),
-    Stream.retry(rpcRetrySchedule),
-    Stream.mapError((error) => toRpcError(error, method)),
-  );
-}
 
 export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* () {
   const rpc = yield* T3Rpc;
@@ -193,19 +154,3 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
 });
 
 export const T3OrchestrationLive = Layer.effect(T3Orchestration, makeT3Orchestration());
-
-function toRpcError(error: RpcOperationError, method: string) {
-  if ("_tag" in error && error["_tag"] === "RpcError") {
-    return error;
-  }
-  return new RpcError({
-    message: error.message,
-    method,
-  });
-}
-
-function isRpcClientTransportError(
-  error: RpcOperationError,
-): error is RpcClientError.RpcClientError {
-  return "_tag" in error && error["_tag"] === "RpcClientError";
-}

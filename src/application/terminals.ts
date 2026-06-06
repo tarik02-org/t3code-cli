@@ -1,7 +1,6 @@
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import {
   WS_METHODS,
@@ -9,28 +8,14 @@ import {
   type TerminalEvent,
   type TerminalSummary,
 } from "#t3tools/contracts";
-import { RpcClientError } from "effect/unstable/rpc";
 
 import { ProjectLookupError, TerminalLookupError, ThreadLookupError } from "../domain/error.ts";
 import { findProjectById } from "../domain/helpers.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import { RpcError } from "../rpc/error.ts";
+import { runRpc, subscribeRpc } from "../rpc/operation.ts";
 import { T3Rpc } from "../rpc/service.ts";
 import type { T3Application, TerminalAttachTarget, TerminalRef } from "./service.ts";
-
-const rpcRetrySchedule = Schedule.exponential("100 millis").pipe(
-  Schedule.take(4),
-  Schedule.collectWhile((metadata: Schedule.Metadata) => {
-    const input = metadata.input;
-    return (
-      typeof input === "object" &&
-      input !== null &&
-      "_tag" in input &&
-      input["_tag"] === "RpcClientError"
-    );
-  }),
-);
-type RpcOperationError = RpcClientError.RpcClientError | RpcError | { readonly message: string };
 
 export type CreateTerminalInput = {
   readonly threadId: string;
@@ -300,45 +285,5 @@ function getTerminalMetadataSnapshot(
       );
     }
     return value.terminals;
-  });
-}
-
-function runRpc<A>(
-  rpc: T3Rpc["Service"],
-  method: string,
-  effect: Effect.Effect<A, RpcOperationError>,
-): Effect.Effect<A, RpcError> {
-  return effect.pipe(
-    Effect.tapError((error) => (isRpcClientTransportError(error) ? rpc.disconnect : Effect.void)),
-    Effect.retry(rpcRetrySchedule),
-    Effect.mapError((error) => toRpcError(error, method)),
-  );
-}
-
-function subscribeRpc<A>(
-  rpc: T3Rpc["Service"],
-  method: string,
-  stream: Stream.Stream<A, RpcOperationError>,
-): Stream.Stream<A, RpcError> {
-  return stream.pipe(
-    Stream.tapError((error) => (isRpcClientTransportError(error) ? rpc.disconnect : Effect.void)),
-    Stream.retry(rpcRetrySchedule),
-    Stream.mapError((error) => toRpcError(error, method)),
-  );
-}
-
-function isRpcClientTransportError(
-  error: RpcOperationError,
-): error is RpcClientError.RpcClientError {
-  return "_tag" in error && error["_tag"] === "RpcClientError";
-}
-
-function toRpcError(error: RpcOperationError, method: string) {
-  if ("_tag" in error && error["_tag"] === "RpcError") {
-    return error;
-  }
-  return new RpcError({
-    message: error.message,
-    method,
   });
 }

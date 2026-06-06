@@ -1,4 +1,3 @@
-import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
@@ -38,7 +37,7 @@ export const waitTerminalCommand = Command.make(
       );
 
       if (Exit.isFailure(currentResult)) {
-        const failure = Cause.findErrorOption(currentResult.cause);
+        const failure = Exit.findErrorOption(currentResult);
         if (Option.isNone(failure)) {
           yield* Effect.fail(
             new TerminalCliError({
@@ -50,7 +49,6 @@ export const waitTerminalCommand = Command.make(
         } else {
           const error = failure.value;
           if (
-            "_tag" in error &&
             error["_tag"] === "TerminalLookupError" &&
             (target === "closed" || target === "ended")
           ) {
