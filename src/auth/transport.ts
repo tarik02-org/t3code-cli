@@ -1,4 +1,10 @@
+import {
+  AuthAccessTokenType,
+  AuthEnvironmentBootstrapTokenType,
+  AuthTokenExchangeGrantType,
+} from "#t3tools/contracts";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http";
@@ -8,7 +14,7 @@ import { toHttpEndpointUrl } from "../config/url.ts";
 import { AuthTransportError } from "./error.ts";
 import {
   type AuthBearerBootstrapResult,
-  decodeAuthBearerBootstrapResult,
+  decodeAuthAccessTokenResult,
   type AuthSessionState,
   decodeAuthSessionState,
   type AuthWebSocketTokenResult,
@@ -38,10 +44,15 @@ const makeT3AuthTransport = Effect.fn("makeT3AuthTransport")(function* () {
     readonly baseUrl: string;
     readonly credential: string;
   }) {
-    const url = yield* makeHttpEndpointUrl(input.baseUrl, "/api/auth/bootstrap/bearer");
+    const url = yield* makeHttpEndpointUrl(input.baseUrl, "/oauth/token");
     const request = HttpClientRequest.post(url).pipe(
       HttpClientRequest.acceptJson,
-      HttpClientRequest.bodyJsonUnsafe({ credential: input.credential }),
+      HttpClientRequest.bodyUrlParams({
+        grant_type: AuthTokenExchangeGrantType,
+        subject_token: input.credential,
+        subject_token_type: AuthEnvironmentBootstrapTokenType,
+        requested_token_type: AuthAccessTokenType,
+      }),
     );
     const response = yield* client.execute(request).pipe(
       Effect.catchTags({
@@ -54,8 +65,8 @@ const makeT3AuthTransport = Effect.fn("makeT3AuthTransport")(function* () {
           ),
       }),
     );
-    return yield* response.json.pipe(
-      Effect.flatMap(decodeAuthBearerBootstrapResult),
+    const result = yield* response.json.pipe(
+      Effect.flatMap(decodeAuthAccessTokenResult),
       Effect.catchTags({
         HttpClientError: (error) =>
           Effect.fail(
@@ -70,6 +81,14 @@ const makeT3AuthTransport = Effect.fn("makeT3AuthTransport")(function* () {
           ),
       }),
     );
+    const now = yield* DateTime.now;
+    return {
+      authenticated: true,
+      role: result.scope.split(/\s+/u).includes("access:write") ? "owner" : "client",
+      sessionMethod: "bearer-access-token",
+      expiresAt: DateTime.formatIso(DateTime.add(now, { seconds: result.expires_in })),
+      sessionToken: result.access_token,
+    } satisfies AuthBearerBootstrapResult;
   });
 
   const getSession = Effect.fn("AuthTransport.getSession")(function* (config: ResolvedConfig) {
