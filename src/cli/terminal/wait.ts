@@ -6,7 +6,6 @@ import * as Stream from "effect/Stream";
 import type { TerminalEvent, TerminalSummary } from "#t3tools/contracts";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
-import { isTerminalLookupError } from "../../domain/error.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
 import { humanJsonFormatChoices, resolveOutputFormat } from "../output-format.ts";
@@ -50,7 +49,11 @@ export const waitTerminalCommand = Command.make(
           );
         } else {
           const error = failure.value;
-          if (isTerminalLookupError(error) && (target === "closed" || target === "ended")) {
+          if (
+            "_tag" in error &&
+            error["_tag"] === "TerminalLookupError" &&
+            (target === "closed" || target === "ended")
+          ) {
             const result = {
               threadId: thread,
               terminalId,

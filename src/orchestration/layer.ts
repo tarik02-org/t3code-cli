@@ -12,8 +12,9 @@ import {
   type OrchestrationShellStreamItem,
   type OrchestrationThreadStreamItem,
 } from "#t3tools/contracts";
+import { RpcClientError } from "effect/unstable/rpc";
 
-import { isRpcClientError, isRpcError, RpcError } from "../rpc/error.ts";
+import { RpcError } from "../rpc/error.ts";
 import { T3Rpc, type WsClient } from "../rpc/service.ts";
 import { T3Orchestration, type OpenThread } from "./service.ts";
 
@@ -21,20 +22,27 @@ const rpcRetrySchedule = Schedule.exponential("100 millis").pipe(
   Schedule.take(4),
   Schedule.collectWhile((metadata: Schedule.Metadata) => {
     const input = metadata.input;
-    return typeof input === "object" && input !== null && isRpcClientError(input);
+    return (
+      typeof input === "object" &&
+      input !== null &&
+      "_tag" in input &&
+      input["_tag"] === "RpcClientError"
+    );
   }),
 );
 
 function runRpc<A, E extends { readonly message: string }>(
   rpc: T3Rpc["Service"],
   method: string,
-  f: (client: WsClient) => Effect.Effect<A, E | RpcError>,
+  f: (client: WsClient) => Effect.Effect<A, E | RpcClientError.RpcClientError | RpcError>,
 ): Effect.Effect<A, RpcError> {
   return Effect.gen(function* () {
     const client = yield* rpc.getClient;
     return yield* f(client);
   }).pipe(
-    Effect.tapError((error) => (isRpcClientError(error) ? rpc.disconnect : Effect.void)),
+    Effect.tapError((error) =>
+      "_tag" in error && error["_tag"] === "RpcClientError" ? rpc.disconnect : Effect.void,
+    ),
     Effect.retry(rpcRetrySchedule),
     Effect.mapError((error) => toRpcError(error, method)),
   );
@@ -43,10 +51,12 @@ function runRpc<A, E extends { readonly message: string }>(
 function subscribeRpc<A, E extends { readonly message: string }>(
   rpc: T3Rpc["Service"],
   method: string,
-  f: (client: WsClient) => Stream.Stream<A, E | RpcError>,
+  f: (client: WsClient) => Stream.Stream<A, E | RpcClientError.RpcClientError | RpcError>,
 ): Stream.Stream<A, RpcError> {
   return Stream.unwrap(Effect.map(rpc.getClient, f)).pipe(
-    Stream.tapError((error) => (isRpcClientError(error) ? rpc.disconnect : Effect.void)),
+    Stream.tapError((error) =>
+      "_tag" in error && error["_tag"] === "RpcClientError" ? rpc.disconnect : Effect.void,
+    ),
     Stream.retry(rpcRetrySchedule),
     Stream.mapError((error) => toRpcError(error, method)),
   );
@@ -154,8 +164,11 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
 
 export const T3OrchestrationLive = Layer.effect(T3Orchestration, makeT3Orchestration());
 
-function toRpcError(error: RpcError | { readonly message: string }, method: string) {
-  if (isRpcError(error)) {
+function toRpcError(
+  error: RpcClientError.RpcClientError | RpcError | { readonly message: string },
+  method: string,
+) {
+  if ("_tag" in error && error["_tag"] === "RpcError") {
     return error;
   }
   return new RpcError({
