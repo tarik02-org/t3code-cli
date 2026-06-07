@@ -9,13 +9,9 @@ import {
 import { HttpClientError } from "effect/unstable/http";
 import { RpcClientError } from "effect/unstable/rpc";
 
-import {
-  AuthConfigError,
-  AuthLocalError,
-  AuthPairingUrlError,
-  AuthTransportError,
-} from "../auth/error.ts";
-import { ConfigError, UrlError } from "../config/error.ts";
+import { AuthTransportError } from "../auth/error.ts";
+import { T3CodeConnectionError } from "../connection/error.ts";
+import { UrlError } from "../config/error.ts";
 
 const RpcErrorCauseSchema = Schema.Union([
   RpcClientError.RpcClientError,
@@ -24,11 +20,8 @@ const RpcErrorCauseSchema = Schema.Union([
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
   ServerSettingsError,
-  AuthConfigError,
-  AuthLocalError,
-  AuthPairingUrlError,
   AuthTransportError,
-  ConfigError,
+  T3CodeConnectionError,
   HttpClientError.HttpClientErrorSchema,
   UrlError,
   Schema.instanceOf(Schema.SchemaError),
