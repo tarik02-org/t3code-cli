@@ -48,7 +48,7 @@ t3cli thread wait [--thread <id>]
 t3cli thread archive [--thread <id>]
 ```
 
-`--project` accepts a project id or path. When omitted, the CLI resolves the project from the current directory. Paths inside a registered project (including worktrees) resolve to that project; `thread start` infers the worktree from cwd unless `--worktree` or `T3CODE_WORKTREE_PATH` is set.
+`--project` accepts a project id or path. When omitted, the CLI resolves the project from the current directory: under a registered `workspaceRoot`, or under a known thread `worktreePath` from the server snapshot (including wt sibling worktrees used before). `thread start` infers the worktree from cwd unless `--worktree` or `T3CODE_WORKTREE_PATH` is set.
 
 Thread-targeting commands accept `--thread` or fall back to `T3CODE_THREAD_ID`.
 
