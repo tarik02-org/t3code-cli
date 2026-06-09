@@ -35,6 +35,16 @@ export function resolveProjectScope(
     return byAncestor;
   }
 
+  const byKnownWorktree = findProjectByKnownWorktreePath(
+    snapshot,
+    absoluteRef,
+    input.path,
+    input.cwd,
+  );
+  if (byKnownWorktree !== null) {
+    return byKnownWorktree;
+  }
+
   throw new ProjectLookupError({ message: `project not found: ${ref}`, ref });
 }
 
@@ -107,6 +117,55 @@ function findProjectByAncestorPath(
 
   if (absolutePath === bestWorkspaceRoot) {
     return { project: bestProject };
+  }
+
+  return {
+    project: bestProject,
+    inferredWorktreePath: absolutePath,
+  };
+}
+
+function findProjectByKnownWorktreePath(
+  snapshot: OrchestrationShellSnapshot,
+  absolutePath: string,
+  path: Path.Path,
+  cwd: string,
+): ResolvedProjectScope | null {
+  const projectsById = new Map(snapshot.projects.map((project) => [project.id, project]));
+  let bestProject: OrchestrationProjectShell | null = null;
+  let bestKnownPath = "";
+
+  for (const thread of snapshot.threads) {
+    if (thread.worktreePath === null) {
+      continue;
+    }
+    const project = projectsById.get(thread.projectId);
+    if (project === undefined) {
+      continue;
+    }
+    const knownPath = resolveAbsolutePath(path, thread.worktreePath, cwd);
+    if (!isDescendantPath(path, knownPath, absolutePath)) {
+      continue;
+    }
+    if (knownPath.length > bestKnownPath.length) {
+      bestProject = project;
+      bestKnownPath = knownPath;
+    }
+  }
+
+  if (bestProject === null) {
+    return null;
+  }
+
+  const workspaceRoot = resolveAbsolutePath(path, bestProject.workspaceRoot, cwd);
+  if (absolutePath === workspaceRoot) {
+    return { project: bestProject };
+  }
+
+  if (absolutePath === bestKnownPath) {
+    return bestKnownPath === workspaceRoot
+      ? { project: bestProject }
+      : { project: bestProject, inferredWorktreePath: bestKnownPath };
   }
 
   return {
