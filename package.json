@@ -37,6 +37,46 @@
     ".": {
       "types": "./dist/src/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./application": {
+      "types": "./dist/src/application/index.d.ts",
+      "default": "./dist/application.js"
+    },
+    "./auth": {
+      "types": "./dist/src/auth/index.d.ts",
+      "default": "./dist/auth.js"
+    },
+    "./config": {
+      "types": "./dist/src/config/index.d.ts",
+      "default": "./dist/config.js"
+    },
+    "./connection": {
+      "types": "./dist/src/connection/index.d.ts",
+      "default": "./dist/connection.js"
+    },
+    "./contracts": {
+      "types": "./dist/src/contracts/index.d.ts",
+      "default": "./dist/contracts.js"
+    },
+    "./t3tools": {
+      "types": "./dist/upstream-t3code/packages/contracts/src/index.d.ts",
+      "default": "./dist/t3tools.js"
+    },
+    "./layout": {
+      "types": "./dist/src/layout/index.d.ts",
+      "default": "./dist/layout.js"
+    },
+    "./orchestration": {
+      "types": "./dist/src/orchestration/index.d.ts",
+      "default": "./dist/orchestration.js"
+    },
+    "./rpc": {
+      "types": "./dist/src/rpc/index.d.ts",
+      "default": "./dist/rpc.js"
+    },
+    "./runtime": {
+      "types": "./dist/src/runtime/index.d.ts",
+      "default": "./dist/runtime.js"
     }
   },
   "scripts": {

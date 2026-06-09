@@ -9,6 +9,16 @@ export default defineConfig({
     entry: {
       bin: "src/bin.ts",
       index: "src/index.ts",
+      application: "src/application/index.ts",
+      auth: "src/auth/index.ts",
+      config: "src/config/index.ts",
+      connection: "src/connection/index.ts",
+      contracts: "src/contracts/index.ts",
+      layout: "src/layout/index.ts",
+      orchestration: "src/orchestration/index.ts",
+      rpc: "src/rpc/index.ts",
+      runtime: "src/runtime/index.ts",
+      t3tools: "src/t3tools/index.ts",
     },
     deps: {
       alwaysBundle: /^.+$/,

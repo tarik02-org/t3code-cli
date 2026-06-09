@@ -7,5 +7,17 @@
     "noEmit": false,
     "rootDir": "."
   },
-  "include": ["src/index.ts"]
+  "include": [
+    "src/index.ts",
+    "src/application/index.ts",
+    "src/auth/index.ts",
+    "src/config/index.ts",
+    "src/connection/index.ts",
+    "src/contracts/index.ts",
+    "src/layout/index.ts",
+    "src/orchestration/index.ts",
+    "src/rpc/index.ts",
+    "src/runtime/index.ts",
+    "src/t3tools/index.ts"
+  ]
 }

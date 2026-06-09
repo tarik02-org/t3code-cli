@@ -1,22 +1,18 @@
-import type * as Path from "effect/Path";
+import * as Effect from "effect/Effect";
 
-import type { EnvironmentShape } from "../environment/service.ts";
+import { Environment } from "../environment/service.ts";
+import { resolveT3BaseDir } from "../layout/base-dir.ts";
 
-export function resolveLocalBaseDir(input: {
-  readonly baseDir: string | undefined;
-  readonly environment: EnvironmentShape;
-  readonly path: Path.Path;
+export const resolveLocalBaseDir = Effect.fn("resolveLocalBaseDir")(function* (input: {
+  readonly baseDir?: string | undefined;
 }) {
-  const envBaseDir = input.environment.env["T3CODE_HOME"];
-  const raw = input.baseDir ?? envBaseDir;
-  if (raw === undefined || raw.length === 0) {
-    return input.path.join(input.environment.homeDir, ".t3");
-  }
-  if (raw === "~") {
-    return input.environment.homeDir;
-  }
-  if (raw.startsWith("~/") || raw.startsWith("~\\")) {
-    return input.path.join(input.environment.homeDir, raw.slice(2));
-  }
-  return input.path.resolve(input.environment.cwd, raw);
-}
+  const environment = yield* Environment;
+  return yield* resolveT3BaseDir({
+    layout: {
+      cwd: environment.cwd,
+      homeDir: environment.homeDir,
+      t3codeHome: environment.env["T3CODE_HOME"],
+    },
+    baseDir: input.baseDir,
+  });
+});
