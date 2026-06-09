@@ -3,20 +3,20 @@ import * as Layer from "effect/Layer";
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import * as NodeSocket from "@effect/platform-node/NodeSocket";
 
-import { T3AuthLive } from "./auth/layer.ts";
-import { T3LocalAuthLive } from "./auth/local.ts";
-import { T3LocalAuthOriginLive } from "./auth/local-origin.ts";
-import { T3LocalAuthTokenLive } from "./auth/local-token.ts";
-import { T3AuthPairingLive } from "./auth/pairing.ts";
-import { T3AuthTransportLive } from "./auth/transport.ts";
-import { T3CodeConnectionError } from "./connection/error.ts";
-import { T3CodeConnectionProvider, makeT3CodeConnectionProvider } from "./connection/service.ts";
-import { T3ConfigLive } from "./config/layer.ts";
-import { T3Config } from "./config/service.ts";
-import { T3ApplicationLive } from "./application/layer.ts";
-import { T3OrchestrationLive } from "./orchestration/layer.ts";
-import { T3RpcLive } from "./rpc/layer.ts";
-import { NodeSqlClientFactoryLive } from "./sql/node-sqlite-client.ts";
+import { T3ApplicationLive } from "../application/layer.ts";
+import { T3AuthLive } from "../auth/layer.ts";
+import { T3LocalAuthLive } from "../auth/local.ts";
+import { T3LocalAuthOriginLive } from "../auth/local-origin.ts";
+import { T3LocalAuthTokenLive } from "../auth/local-token.ts";
+import { T3AuthPairingLive } from "../auth/pairing.ts";
+import { T3AuthTransportLive } from "../auth/transport.ts";
+import { T3ConfigLive } from "../config/layer.ts";
+import { T3Config } from "../config/service.ts";
+import { T3CodeConnectionError } from "../connection/error.ts";
+import { T3CodeConnectionProvider, makeT3CodeConnectionProvider } from "../connection/service.ts";
+import { T3OrchestrationLive } from "../orchestration/layer.ts";
+import { T3RpcLive } from "../rpc/layer.ts";
+import { NodeSqlClientFactoryLive } from "../sql/node-sqlite-client.ts";
 
 export const T3AuthTransportLayer = T3AuthTransportLive.pipe(
   Layer.provide(NodeHttpClient.layerUndici),

@@ -1,9 +1,9 @@
-export { T3Application } from "./application/service.ts";
+export { T3Application } from "./application/index.ts";
 export type {
   SendThreadInput,
   StartThreadInput,
   StartThreadPolicy,
   WaitEvent,
-} from "./application/service.ts";
-export type { ApplicationError } from "./application/error.ts";
-export { AppLayer, AuthAppLayer } from "./runtime.ts";
+} from "./application/index.ts";
+export type { ApplicationError } from "./application/index.ts";
+export { AppLayer, AuthAppLayer } from "./runtime/index.ts";

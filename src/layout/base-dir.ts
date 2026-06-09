@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
-import type * as Path from "effect/Path";
+import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
 
 export type T3Layout = {
   readonly cwd: string;
@@ -15,20 +16,20 @@ export function readT3LayoutFromNodeProcess(): T3Layout {
   };
 }
 
-export function resolveT3BaseDir(input: {
+export const resolveT3BaseDir = Effect.fn("resolveT3BaseDir")(function* (input: {
   readonly layout: T3Layout;
   readonly baseDir?: string | undefined;
-  readonly path: Path.Path;
-}): string {
+}) {
+  const path = yield* Path.Path;
   const raw = input.baseDir ?? input.layout.t3codeHome;
   if (raw === undefined || raw.length === 0) {
-    return input.path.join(input.layout.homeDir, ".t3");
+    return path.join(input.layout.homeDir, ".t3");
   }
   if (raw === "~") {
     return input.layout.homeDir;
   }
   if (raw.startsWith("~/") || raw.startsWith("~\\")) {
-    return input.path.join(input.layout.homeDir, raw.slice(2));
+    return path.join(input.layout.homeDir, raw.slice(2));
   }
-  return input.path.resolve(input.layout.cwd, raw);
-}
+  return path.resolve(input.layout.cwd, raw);
+});

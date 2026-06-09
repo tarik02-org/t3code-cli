@@ -39,39 +39,39 @@
       "default": "./dist/index.js"
     },
     "./application": {
-      "types": "./dist/src/exports/application.d.ts",
+      "types": "./dist/src/application/index.d.ts",
       "default": "./dist/application.js"
     },
     "./auth": {
-      "types": "./dist/src/exports/auth.d.ts",
+      "types": "./dist/src/auth/index.d.ts",
       "default": "./dist/auth.js"
     },
     "./config": {
-      "types": "./dist/src/exports/config.d.ts",
+      "types": "./dist/src/config/index.d.ts",
       "default": "./dist/config.js"
     },
     "./connection": {
-      "types": "./dist/src/exports/connection.d.ts",
+      "types": "./dist/src/connection/index.d.ts",
       "default": "./dist/connection.js"
     },
     "./contracts": {
-      "types": "./dist/src/exports/contracts.d.ts",
+      "types": "./dist/src/contracts/index.d.ts",
       "default": "./dist/contracts.js"
     },
     "./layout": {
-      "types": "./dist/src/exports/layout.d.ts",
+      "types": "./dist/src/layout/index.d.ts",
       "default": "./dist/layout.js"
     },
     "./orchestration": {
-      "types": "./dist/src/exports/orchestration.d.ts",
+      "types": "./dist/src/orchestration/index.d.ts",
       "default": "./dist/orchestration.js"
     },
     "./rpc": {
-      "types": "./dist/src/exports/rpc.d.ts",
+      "types": "./dist/src/rpc/index.d.ts",
       "default": "./dist/rpc.js"
     },
     "./runtime": {
-      "types": "./dist/src/exports/runtime.d.ts",
+      "types": "./dist/src/runtime/index.d.ts",
       "default": "./dist/runtime.js"
     }
   },

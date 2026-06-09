@@ -3,5 +3,5 @@ export {
   type OpenThread,
   type Orchestration,
   type OrchestrationError,
-} from "../orchestration/service.ts";
-export { T3OrchestrationLayer } from "../runtime.ts";
+} from "./service.ts";
+export { T3OrchestrationLayer } from "../runtime/layer.ts";

@@ -26,7 +26,10 @@ export const makeT3LocalAuthOrigin = Effect.fn("makeT3LocalAuthOrigin")(function
   const resolve = Effect.fn("T3LocalAuthOriginLive.resolve")(function* (
     input?: LocalAuthOriginInput,
   ) {
-    const baseDir = resolveLocalBaseDir({ baseDir: input?.baseDir, environment, path });
+    const baseDir = yield* resolveLocalBaseDir({ baseDir: input?.baseDir }).pipe(
+      Effect.provideService(Environment, environment),
+      Effect.provideService(Path.Path, path),
+    );
     if (input?.origin !== undefined) {
       return yield* normalizeLocalOrigin(input.origin);
     }

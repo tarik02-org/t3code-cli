@@ -9,14 +9,14 @@
   },
   "include": [
     "src/index.ts",
-    "src/exports/application.ts",
-    "src/exports/auth.ts",
-    "src/exports/config.ts",
-    "src/exports/connection.ts",
-    "src/exports/contracts.ts",
-    "src/exports/layout.ts",
-    "src/exports/orchestration.ts",
-    "src/exports/rpc.ts",
-    "src/exports/runtime.ts"
+    "src/application/index.ts",
+    "src/auth/index.ts",
+    "src/config/index.ts",
+    "src/connection/index.ts",
+    "src/contracts/index.ts",
+    "src/layout/index.ts",
+    "src/orchestration/index.ts",
+    "src/rpc/index.ts",
+    "src/runtime/index.ts"
   ]
 }
