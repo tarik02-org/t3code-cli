@@ -5,6 +5,7 @@ import { Argument, Command, Flag } from "effect/unstable/cli";
 import { modelFlags, threadFlag, threadFormatFlag } from "../flags.ts";
 import { readInitialMessage } from "../message-input.ts";
 import { buildModelOptions } from "../model-options.ts";
+import { MissingThreadError } from "../error.ts";
 import { resolveThreadId } from "../scope.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
@@ -41,7 +42,14 @@ export const sendThreadCommand = Command.make(
       const application = yield* T3Application;
       const environment = yield* Environment;
       const output = yield* T3Output;
-      const threadId = yield* resolveThreadId(thread, environment.env);
+      const threadId = resolveThreadId(thread, environment.env);
+      if (threadId === undefined) {
+        return yield* Effect.fail(
+          new MissingThreadError({
+            message: "thread id is required: pass --thread or set T3CODE_THREAD_ID",
+          }),
+        );
+      }
       const input = {
         message: text,
         threadId,
@@ -55,32 +63,30 @@ export const sendThreadCommand = Command.make(
         if (wait) {
           yield* printWaitEventsNdjson(output, application.watchThread(sent.threadId));
         }
-        return;
+        return yield* Effect.void;
       }
 
       if (wait) {
         const sent = yield* application.sendThread(input, { until: "dispatch" });
         if (resolvedFormat === "json") {
           const finalThread = yield* application.waitForThread(sent.threadId);
-          yield* output.printJson({
+          return yield* output.printJson({
             dispatch: sent.dispatch,
             threadId: sent.threadId,
             thread: finalThread,
           });
-          return;
         }
         yield* printWaitEventsHuman(output, application.watchThread(sent.threadId), {
           threadId: sent.threadId,
           live: canRenderLiveTerminal(environment),
         });
-        return;
+        return yield* Effect.void;
       }
 
       const result = yield* application.sendThread(input, { until: "visible" });
       if (resolvedFormat === "json") {
-        yield* output.printJson(result);
-      } else {
-        yield* output.printInfo(`message sent: ${result.threadId}`);
+        return yield* output.printJson(result);
       }
+      return yield* output.printInfo(`message sent: ${result.threadId}`);
     }),
 ).pipe(Command.withDescription("send message to existing thread"));

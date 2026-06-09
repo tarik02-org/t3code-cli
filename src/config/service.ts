@@ -6,12 +6,14 @@ import type { ConfigError, ConfigServiceError } from "./error.ts";
 export type StoredConfig = {
   readonly url?: string;
   readonly token?: string;
+  readonly local?: boolean;
 };
 
 export type ResolvedConfig = {
   readonly url: string;
   readonly token: string;
   readonly source: "env" | "config";
+  readonly local: boolean;
 };
 
 export class T3Config extends Context.Service<

@@ -4,7 +4,7 @@ import * as Path from "effect/Path";
 
 import { Environment } from "../environment/service.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
-import { ThreadSessionError } from "../domain/error.ts";
+import { ProjectLookupError, ThreadSessionError } from "../domain/error.ts";
 import { resolveProjectScope } from "../domain/helpers.ts";
 import { type StartThreadInput } from "./service.ts";
 import type { SendThreadInput } from "./service.ts";
@@ -25,12 +25,17 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
   const crypto = yield* Crypto.Crypto;
   const path = yield* Path.Path;
   const environment = yield* Environment;
-  const listThreads = Effect.fn("T3ApplicationLive.listThreads")(function* (projectRef?: string) {
+  const listThreads = Effect.fn("T3ApplicationLive.listThreads")(function* (projectRef: string) {
     const snapshot = yield* orchestration.getShellSnapshot();
     const scope = yield* resolveProjectScope(snapshot, {
       ref: projectRef,
       cwd: environment.cwd,
     }).pipe(Effect.provideService(Path.Path, path));
+    if (scope === undefined) {
+      return yield* Effect.fail(
+        new ProjectLookupError({ message: `project not found: ${projectRef}`, ref: projectRef }),
+      );
+    }
     return {
       project: scope.project,
       threads: snapshot.threads.filter((thread) => thread.projectId === scope.project.id),
@@ -54,10 +59,24 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     },
   ) {
     const snapshot = yield* orchestration.getShellSnapshot();
+    const projectRef = startInput.projectRef;
+    if (projectRef === undefined) {
+      return yield* Effect.fail(
+        new ProjectLookupError({
+          message: "project is required",
+          ref: environment.cwd,
+        }),
+      );
+    }
     const scope = yield* resolveProjectScope(snapshot, {
-      ref: startInput.projectRef,
+      ref: projectRef,
       cwd: environment.cwd,
     }).pipe(Effect.provideService(Path.Path, path));
+    if (scope === undefined) {
+      return yield* Effect.fail(
+        new ProjectLookupError({ message: `project not found: ${projectRef}`, ref: projectRef }),
+      );
+    }
     const worktreePath = startInput.worktreePath ?? scope.inferredWorktreePath;
     const serverConfig = yield* orchestration.getServerConfig();
     const commands = yield* makeThreadStartCommands({

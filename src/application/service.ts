@@ -55,7 +55,7 @@ export class T3Application extends Context.Service<
       { readonly dispatch: DispatchResult; readonly project: OrchestrationProjectShell },
       ApplicationError
     >;
-    readonly listThreads: (projectRef?: string) => Effect.Effect<
+    readonly listThreads: (projectRef: string) => Effect.Effect<
       {
         readonly project: OrchestrationProjectShell;
         readonly threads: ReadonlyArray<OrchestrationThreadShell>;

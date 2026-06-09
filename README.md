@@ -13,12 +13,12 @@ This installs the `t3cli` command.
 ## authenticate
 
 ```sh
-t3cli auth pair --url <url>
+t3cli auth pair --url <url> [--local]
 t3cli auth local [--base-dir <path>] [--origin <url>] [--role owner|client] [--label <label>] [--subject <subject>]
 t3cli auth status
 ```
 
-Use `auth pair` with a pairing URL from a running t3code server, or `auth local` to authenticate against a local t3code installation.
+Use `auth pair` with a pairing URL from a running t3code server, or `auth local` to authenticate against a local t3code installation. Local auth (`auth local` or `auth pair --local`) enables automatic project resolution from the current directory.
 
 ## project
 
@@ -48,7 +48,7 @@ t3cli thread wait [--thread <id>]
 t3cli thread archive [--thread <id>]
 ```
 
-`--project` accepts a project id or path. When omitted, the CLI resolves the project from the current directory: under a registered `workspaceRoot`, or under a known thread `worktreePath` from the server snapshot (including wt sibling worktrees used before). `thread start` infers the worktree from cwd unless `--worktree` or `T3CODE_WORKTREE_PATH` is set.
+`--project` accepts a project id or path. When omitted, the CLI resolves the project from the current directory only for local auth (`auth local` or `auth pair --local`). Resolution checks a registered `workspaceRoot`, paths under it, and known thread `worktreePath` values from the server snapshot. Remote pairings require an explicit `--project` or `T3CODE_PROJECT_*` env var. `thread start` infers the worktree from cwd unless `--worktree` or `T3CODE_WORKTREE_PATH` is set.
 
 Thread-targeting commands accept `--thread` or fall back to `T3CODE_THREAD_ID`.
 

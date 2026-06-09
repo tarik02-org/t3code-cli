@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import { Command } from "effect/unstable/cli";
 
 import { formatFlag, threadFlag } from "../flags.ts";
+import { MissingThreadError } from "../error.ts";
 import { resolveThreadId } from "../scope.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
@@ -19,13 +20,21 @@ export const archiveThreadCommand = Command.make(
       const application = yield* T3Application;
       const environment = yield* Environment;
       const output = yield* T3Output;
-      const threadId = yield* resolveThreadId(thread, environment.env);
+      const threadId = resolveThreadId(thread, environment.env);
+      if (threadId === undefined) {
+        return yield* Effect.fail(
+          new MissingThreadError({
+            message: "thread id is required: pass --thread or set T3CODE_THREAD_ID",
+          }),
+        );
+      }
       const resolvedFormat = resolveOutputFormat(format, environment, "json");
       const dispatch = yield* application.archiveThread(threadId);
       if (resolvedFormat === "json") {
-        yield* output.printJson(dispatch);
-      } else {
-        yield* output.printInfo(`thread archived: ${threadId}\nsequence: ${dispatch.sequence}`);
+        return yield* output.printJson(dispatch);
       }
+      return yield* output.printInfo(
+        `thread archived: ${threadId}\nsequence: ${dispatch.sequence}`,
+      );
     }),
 ).pipe(Command.withDescription("archive thread"));

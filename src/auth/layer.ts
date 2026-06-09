@@ -46,12 +46,19 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
           Effect.fail(new AuthConfigError({ message: "auth config failed", cause: error })),
       }),
     );
-    yield* config.writeStored({ ...existing, url: input.url, token: input.token }).pipe(
-      Effect.catchTags({
-        ConfigError: (error) =>
-          Effect.fail(new AuthConfigError({ message: "auth config failed", cause: error })),
-      }),
-    );
+    yield* config
+      .writeStored({
+        ...existing,
+        url: input.url,
+        token: input.token,
+        ...(input.local !== undefined ? { local: input.local } : {}),
+      })
+      .pipe(
+        Effect.catchTags({
+          ConfigError: (error) =>
+            Effect.fail(new AuthConfigError({ message: "auth config failed", cause: error })),
+        }),
+      );
   });
 
   return {

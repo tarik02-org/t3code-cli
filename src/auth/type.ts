@@ -10,6 +10,7 @@ export type PairingUrl = {
 export type AuthConfigInput = {
   readonly url: string;
   readonly token: string;
+  readonly local?: boolean;
 };
 
 export type PairResult = {
