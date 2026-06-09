@@ -10,6 +10,16 @@ npm install --global t3code-cli
 
 This installs the `t3cli` command.
 
+## agent skill
+
+This repo includes an agent skill for operating `t3cli`: [`skills/t3code-cli/SKILL.md`](skills/t3code-cli/SKILL.md).
+
+Install it with [skills](https://skills.sh/):
+
+```sh
+npx skills add tarik02/t3cli
+```
+
 ## authenticate
 
 ```sh
