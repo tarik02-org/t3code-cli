@@ -2,32 +2,26 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
+import { modelFlags, threadFlag, threadFormatFlag } from "../flags.ts";
 import { readInitialMessage } from "../message-input.ts";
 import { buildModelOptions } from "../model-options.ts";
+import { resolveThreadId } from "../scope.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
 import { T3Input } from "../input/service.ts";
-import {
-  canRenderLiveTerminal,
-  humanJsonNdjsonFormatChoices,
-  resolveOutputFormat,
-} from "../output-format.ts";
+import { canRenderLiveTerminal, resolveOutputFormat } from "../output-format.ts";
 import { T3Output } from "../output/service.ts";
 import { printWaitEventsHuman, printWaitEventsNdjson } from "../wait-events.ts";
 
 export const sendThreadCommand = Command.make(
   "send",
   {
-    thread: Argument.string("thread"),
+    thread: threadFlag,
     message: Argument.string("message").pipe(Argument.optional),
     stdin: Flag.boolean("stdin"),
-    option: Flag.keyValuePair("option").pipe(Flag.optional),
-    reasoningEffort: Flag.string("reasoning-effort").pipe(Flag.optional),
-    effort: Flag.string("effort").pipe(Flag.optional),
-    fastMode: Flag.boolean("fast-mode").pipe(Flag.optional),
-    thinking: Flag.boolean("thinking").pipe(Flag.optional),
+    ...modelFlags,
     wait: Flag.boolean("wait"),
-    format: Flag.choice("format", humanJsonNdjsonFormatChoices).pipe(Flag.withDefault("auto")),
+    format: threadFormatFlag,
   },
   ({ thread, message, stdin, option, reasoningEffort, effort, fastMode, thinking, wait, format }) =>
     Effect.gen(function* () {
@@ -44,14 +38,15 @@ export const sendThreadCommand = Command.make(
         fastMode,
         thinking,
       });
-      const input = {
-        message: text,
-        threadId: thread,
-        ...(options.length > 0 ? { options } : {}),
-      };
       const application = yield* T3Application;
       const environment = yield* Environment;
       const output = yield* T3Output;
+      const threadId = yield* resolveThreadId(thread, environment.env);
+      const input = {
+        message: text,
+        threadId,
+        ...(options.length > 0 ? { options } : {}),
+      };
       const resolvedFormat = resolveOutputFormat(format, environment, wait ? "ndjson" : "json");
 
       if (resolvedFormat === "ndjson") {

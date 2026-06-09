@@ -5,7 +5,7 @@ import * as Path from "effect/Path";
 import { Environment } from "../environment/service.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import { ThreadSessionError } from "../domain/error.ts";
-import { resolveProject } from "../domain/helpers.ts";
+import { resolveProjectScope } from "../domain/helpers.ts";
 import { type StartThreadInput } from "./service.ts";
 import type { SendThreadInput } from "./service.ts";
 import { mergeModelOptions } from "./model-selection.ts";
@@ -25,12 +25,16 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
   const crypto = yield* Crypto.Crypto;
   const path = yield* Path.Path;
   const environment = yield* Environment;
-  const listThreads = Effect.fn("T3ApplicationLive.listThreads")(function* (projectRef: string) {
+  const listThreads = Effect.fn("T3ApplicationLive.listThreads")(function* (projectRef?: string) {
     const snapshot = yield* orchestration.getShellSnapshot();
-    const project = resolveProject(snapshot, projectRef, path, environment.cwd);
+    const scope = resolveProjectScope(snapshot, {
+      ref: projectRef,
+      path,
+      cwd: environment.cwd,
+    });
     return {
-      project,
-      threads: snapshot.threads.filter((thread) => thread.projectId === project.id),
+      project: scope.project,
+      threads: snapshot.threads.filter((thread) => thread.projectId === scope.project.id),
     };
   });
   const getThreadMessages = Effect.fn("T3ApplicationLive.getThreadMessages")(function* (
@@ -51,11 +55,19 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     },
   ) {
     const snapshot = yield* orchestration.getShellSnapshot();
-    const project = resolveProject(snapshot, startInput.projectRef, path, environment.cwd);
+    const scope = resolveProjectScope(snapshot, {
+      ref: startInput.projectRef,
+      path,
+      cwd: environment.cwd,
+    });
+    const worktreePath = startInput.worktreePath ?? scope.inferredWorktreePath;
     const serverConfig = yield* orchestration.getServerConfig();
     const commands = yield* makeThreadStartCommands({
-      start: startInput,
-      project,
+      start: {
+        ...startInput,
+        ...(worktreePath !== undefined ? { worktreePath } : {}),
+      },
+      project: scope.project,
       serverConfig,
     }).pipe(Effect.provideService(Crypto.Crypto, crypto));
     const createDispatch = yield* orchestration.dispatch(commands.createCommand);
@@ -67,7 +79,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     const threadId = commands.threadId;
     const until = policy?.until ?? "dispatch";
     if (until === "dispatch") {
-      return { dispatch, project, threadId };
+      return { dispatch, project: scope.project, threadId };
     }
     yield* waitForShellSequence({
       orchestration,
@@ -80,14 +92,14 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
           return opened.snapshot;
         }),
       );
-      return { dispatch, project, threadId, thread };
+      return { dispatch, project: scope.project, threadId, thread };
     }
     const thread = yield* waitForThreadUntilComplete({
       orchestration,
       threadId,
     });
     yield* failIfThreadError(thread);
-    return { dispatch, project, threadId, thread };
+    return { dispatch, project: scope.project, threadId, thread };
   });
   const sendThread = Effect.fn("T3ApplicationLive.sendThread")(function* (
     input: SendThreadInput,
