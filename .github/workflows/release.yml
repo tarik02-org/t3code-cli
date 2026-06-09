@@ -47,7 +47,7 @@ jobs:
       - name: create release pr or publish package
         uses: changesets/action@v1.8.0
         with:
-          version: pnpm changeset version
+          version: pnpm changeset version && pnpm format
           publish: pnpm release:publish
           commit: release package
           title: release package
