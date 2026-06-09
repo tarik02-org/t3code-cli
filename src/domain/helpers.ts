@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import type * as Path from "effect/Path";
+import * as Path from "effect/Path";
 import type { OrchestrationProjectShell, OrchestrationShellSnapshot } from "#t3tools/contracts";
 
 import { ProjectLookupError } from "./error.ts";
@@ -9,64 +9,39 @@ export type ResolvedProjectScope = {
   readonly inferredWorktreePath?: string;
 };
 
-export function resolveProjectScope(
+export const resolveProjectScope = Effect.fn("resolveProjectScope")(function* (
   snapshot: OrchestrationShellSnapshot,
   input: {
     readonly ref?: string | undefined;
-    readonly path: Path.Path;
     readonly cwd: string;
   },
-): ResolvedProjectScope {
+) {
+  const path = yield* Path.Path;
   const ref = input.ref ?? input.cwd;
-  const absoluteRef = resolveAbsolutePath(input.path, ref, input.cwd);
+  const absoluteRef = resolveAbsolutePath(path, ref, input.cwd);
 
   const byId = findProjectById(snapshot, ref);
   if (byId !== null) {
     return { project: byId };
   }
 
-  const byExactPath = findProjectByWorkspaceRoot(snapshot, absoluteRef, input.path, input.cwd);
+  const byExactPath = findProjectByWorkspaceRoot(snapshot, absoluteRef, path, input.cwd);
   if (byExactPath !== undefined) {
     return { project: byExactPath };
   }
 
-  const byAncestor = findProjectByAncestorPath(snapshot, absoluteRef, input.path, input.cwd);
+  const byAncestor = findProjectByAncestorPath(snapshot, absoluteRef, path, input.cwd);
   if (byAncestor !== null) {
     return byAncestor;
   }
 
-  const byKnownWorktree = findProjectByKnownWorktreePath(
-    snapshot,
-    absoluteRef,
-    input.path,
-    input.cwd,
-  );
+  const byKnownWorktree = findProjectByKnownWorktreePath(snapshot, absoluteRef, path, input.cwd);
   if (byKnownWorktree !== null) {
     return byKnownWorktree;
   }
 
-  throw new ProjectLookupError({ message: `project not found: ${ref}`, ref });
-}
-
-export function tryResolveProjectScope(
-  snapshot: OrchestrationShellSnapshot,
-  input: {
-    readonly ref?: string | undefined;
-    readonly path: Path.Path;
-    readonly cwd: string;
-  },
-): Effect.Effect<ResolvedProjectScope, ProjectLookupError> {
-  return Effect.try({
-    try: () => resolveProjectScope(snapshot, input),
-    catch: (error) =>
-      error instanceof ProjectLookupError
-        ? error
-        : new ProjectLookupError({
-            message: error instanceof Error ? error.message : String(error),
-            ref: input.ref ?? input.cwd,
-          }),
-  });
-}
+  return yield* Effect.fail(new ProjectLookupError({ message: `project not found: ${ref}`, ref }));
+});
 
 export function findProjectById(
   snapshot: OrchestrationShellSnapshot,
