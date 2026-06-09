@@ -5,7 +5,7 @@ import * as Path from "effect/Path";
 import { Environment } from "../environment/service.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import { ThreadSessionError } from "../domain/error.ts";
-import { tryResolveProjectScope } from "../domain/helpers.ts";
+import { resolveProjectScope } from "../domain/helpers.ts";
 import { type StartThreadInput } from "./service.ts";
 import type { SendThreadInput } from "./service.ts";
 import { mergeModelOptions } from "./model-selection.ts";
@@ -27,11 +27,10 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
   const environment = yield* Environment;
   const listThreads = Effect.fn("T3ApplicationLive.listThreads")(function* (projectRef?: string) {
     const snapshot = yield* orchestration.getShellSnapshot();
-    const scope = yield* tryResolveProjectScope(snapshot, {
+    const scope = yield* resolveProjectScope(snapshot, {
       ref: projectRef,
-      path,
       cwd: environment.cwd,
-    });
+    }).pipe(Effect.provideService(Path.Path, path));
     return {
       project: scope.project,
       threads: snapshot.threads.filter((thread) => thread.projectId === scope.project.id),
@@ -55,11 +54,10 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     },
   ) {
     const snapshot = yield* orchestration.getShellSnapshot();
-    const scope = yield* tryResolveProjectScope(snapshot, {
+    const scope = yield* resolveProjectScope(snapshot, {
       ref: startInput.projectRef,
-      path,
       cwd: environment.cwd,
-    });
+    }).pipe(Effect.provideService(Path.Path, path));
     const worktreePath = startInput.worktreePath ?? scope.inferredWorktreePath;
     const serverConfig = yield* orchestration.getServerConfig();
     const commands = yield* makeThreadStartCommands({
