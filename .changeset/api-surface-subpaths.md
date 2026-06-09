@@ -4,7 +4,8 @@
 
 Restructure the public API for library consumers such as `t3-goals`.
 
-- Add package.json subpath exports: `./layout`, `./orchestration`, `./rpc`, `./auth`, `./config`, `./connection`, `./runtime`, `./application`, and `./contracts`
+- Add package.json subpath exports: `./layout`, `./orchestration`, `./rpc`, `./auth`, `./config`, `./connection`, `./runtime`, `./application`, `./contracts`, and `./t3tools`
+- Export the full bundled `@t3tools/contracts` surface as `t3code-cli/t3tools`
 - Add `resolveT3BaseDir`, `readT3LayoutFromNodeProcess`, and `T3Layout` under `t3code-cli/layout`
 - Export `T3OrchestrationLayer`, `T3Orchestration`, and related types under `t3code-cli/orchestration`
 - Export `RpcError` under `t3code-cli/rpc`

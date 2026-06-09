@@ -17,6 +17,7 @@
     "src/layout/index.ts",
     "src/orchestration/index.ts",
     "src/rpc/index.ts",
-    "src/runtime/index.ts"
+    "src/runtime/index.ts",
+    "src/t3tools/index.ts"
   ]
 }

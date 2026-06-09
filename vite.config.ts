@@ -18,6 +18,7 @@ export default defineConfig({
       orchestration: "src/orchestration/index.ts",
       rpc: "src/rpc/index.ts",
       runtime: "src/runtime/index.ts",
+      t3tools: "src/t3tools/index.ts",
     },
     deps: {
       alwaysBundle: /^.+$/,
