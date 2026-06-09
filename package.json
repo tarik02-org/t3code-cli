@@ -96,6 +96,7 @@
     "lint:fix": "vp lint --fix",
     "prepack": "pnpm build",
     "changeset": "changeset",
+    "release:version": "changeset version && pnpm format",
     "release:check": "pnpm check && pnpm typecheck && pnpm pack --dry-run",
     "release:publish": "changeset publish",
     "typecheck": "tsc --noEmit"
