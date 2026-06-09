@@ -15,13 +15,13 @@ Auth commands: [setup.md](setup.md)
 
 ## Environment variables
 
-| Variable | Maps to | Priority |
-|----------|---------|----------|
-| `T3CODE_PROJECT_ROOT` | `--project` | 1 |
-| `T3CODE_PROJECT_ID` | `--project` | 2 |
-| `T3CODE_WORKTREE_PATH` | `--worktree` | 1 |
-| `T3CODE_THREAD_ID` | `--thread` | 1 |
-| `T3CLI_AGENT` | Non-human default format | — |
+| Variable               | Maps to                  | Priority |
+| ---------------------- | ------------------------ | -------- |
+| `T3CODE_PROJECT_ROOT`  | `--project`              | 1        |
+| `T3CODE_PROJECT_ID`    | `--project`              | 2        |
+| `T3CODE_WORKTREE_PATH` | `--worktree`             | 1        |
+| `T3CODE_THREAD_ID`     | `--thread`               | 1        |
+| `T3CLI_AGENT`          | Non-human default format | —        |
 
 Also treated as agent env (no live TTY): `CI`, `CODEX_CI`, `CODEX_THREAD_ID`.
 
@@ -62,21 +62,21 @@ t3cli thread archive [--thread <id>] [--format json]
 
 ### thread start responses
 
-| Mode | stdout |
-|------|--------|
-| `--format json`, no `--wait` | `{ dispatch, project, threadId, thread? }` |
-| `--format json`, `--wait` | `{ dispatch, threadId, thread }` after pause |
-| `--format ndjson`, `--wait` | Stream of events (see below) |
+| Mode                         | stdout                                       |
+| ---------------------------- | -------------------------------------------- |
+| `--format json`, no `--wait` | `{ dispatch, project, threadId, thread? }`   |
+| `--format json`, `--wait`    | `{ dispatch, threadId, thread }` after pause |
+| `--format ndjson`, `--wait`  | Stream of events (see below)                 |
 
 `thread send` follows the same output rules when `--wait` is set.
 
 ## Output formats
 
-| Commands | `--format` | Agent default |
-|----------|------------|---------------|
-| Most | `auto` \| `human` \| `json` | `json` |
-| `thread start`, `thread send` | + `ndjson` | `json` / `ndjson` with `--wait` |
-| `thread wait` | `auto` \| `human` \| `ndjson` | `ndjson` |
+| Commands                      | `--format`                    | Agent default                   |
+| ----------------------------- | ----------------------------- | ------------------------------- |
+| Most                          | `auto` \| `human` \| `json`   | `json`                          |
+| `thread start`, `thread send` | + `ndjson`                    | `json` / `ndjson` with `--wait` |
+| `thread wait`                 | `auto` \| `human` \| `ndjson` | `ndjson`                        |
 
 `auto` → `human` on interactive TTY, else structured default. Set `--format` explicitly in scripts.
 
@@ -94,12 +94,12 @@ One JSON object per line:
 
 ## Errors
 
-| Tag | Cause |
-|-----|-------|
-| `ProjectLookupError` | Unresolved `--project` / env / cwd |
+| Tag                  | Cause                                   |
+| -------------------- | --------------------------------------- |
+| `ProjectLookupError` | Unresolved `--project` / env / cwd      |
 | `MissingThreadError` | Missing `--thread` / `T3CODE_THREAD_ID` |
-| `MessageInputError` | No message arg and empty stdin |
-| `InvalidLimitError` | Invalid `--limit` |
+| `MessageInputError`  | No message arg and empty stdin          |
+| `InvalidLimitError`  | Invalid `--limit`                       |
 
 Non-zero exit; message on stderr.
 

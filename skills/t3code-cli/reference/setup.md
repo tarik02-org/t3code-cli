@@ -17,10 +17,10 @@ Pair with a remote t3code server using a pairing URL from the server UI.
 t3cli auth pair --url <url> [--local] [--format json]
 ```
 
-| Flag | Required | Description |
-|------|----------|-------------|
-| `--url` | yes | Pairing URL |
-| `--local` | no | Mark config as local; enables cwd project resolution |
+| Flag      | Required | Description                                          |
+| --------- | -------- | ---------------------------------------------------- |
+| `--url`   | yes      | Pairing URL                                          |
+| `--local` | no       | Mark config as local; enables cwd project resolution |
 
 ## auth local
 
@@ -31,13 +31,13 @@ t3cli auth local [--format json]
 t3cli auth local --base-dir <path> --origin <url> --role owner
 ```
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--base-dir` | auto | t3code data directory |
-| `--origin` | auto | Server origin URL |
-| `--role` | `owner` | `owner` or `client` |
-| `--label` | `t3cli` | Client label |
-| `--subject` | `t3cli-local` | Token subject |
+| Flag         | Default       | Description           |
+| ------------ | ------------- | --------------------- |
+| `--base-dir` | auto          | t3code data directory |
+| `--origin`   | auto          | Server origin URL     |
+| `--role`     | `owner`       | `owner` or `client`   |
+| `--label`    | `t3cli`       | Client label          |
+| `--subject`  | `t3cli-local` | Token subject         |
 
 ## auth status
 
@@ -49,9 +49,9 @@ Returns current URL, role, and whether config is local.
 
 ## Local vs remote auth
 
-| Config | `--project` omitted |
-|--------|---------------------|
-| Local (`auth local` or `auth pair --local`) | Resolves from cwd when it maps to a known project |
-| Remote pairing | Requires `--project` or `T3CODE_PROJECT_ROOT` / `T3CODE_PROJECT_ID` |
+| Config                                      | `--project` omitted                                                 |
+| ------------------------------------------- | ------------------------------------------------------------------- |
+| Local (`auth local` or `auth pair --local`) | Resolves from cwd when it maps to a known project                   |
+| Remote pairing                              | Requires `--project` or `T3CODE_PROJECT_ROOT` / `T3CODE_PROJECT_ID` |
 
 Re-run `auth status --format json` after pairing to confirm `local` is set when cwd resolution is needed.
