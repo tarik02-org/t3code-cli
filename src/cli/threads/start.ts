@@ -6,7 +6,8 @@ import { Argument, Command, Flag } from "effect/unstable/cli";
 import { modelFlags, projectFlag, threadFormatFlag, worktreeFlag } from "../flags.ts";
 import { readInitialMessage } from "../message-input.ts";
 import { buildModelOptions } from "../model-options.ts";
-import { requireCommandProjectRef, resolveWorktreePath } from "../scope.ts";
+import { requireCommandProjectRef } from "../require.ts";
+import { resolveWorktreePath } from "../../scope/index.ts";
 import { formatThreadStartedHuman } from "../thread-format.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
@@ -70,7 +71,10 @@ export const startThreadCommand = Command.make(
         env: environment.env,
         cwd: environment.cwd,
       });
-      const worktreePath = resolveWorktreePath(worktree, environment.env);
+      const worktreePath = resolveWorktreePath({
+        value: Option.getOrUndefined(worktree),
+        env: environment.env,
+      });
       const input = {
         message: text,
         projectRef,

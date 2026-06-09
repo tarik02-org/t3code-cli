@@ -46,6 +46,10 @@
       "types": "./dist/src/auth/index.d.ts",
       "default": "./dist/auth.js"
     },
+    "./cli": {
+      "types": "./dist/src/cli/index.d.ts",
+      "default": "./dist/cli.js"
+    },
     "./config": {
       "types": "./dist/src/config/index.d.ts",
       "default": "./dist/config.js"
@@ -77,6 +81,10 @@
     "./runtime": {
       "types": "./dist/src/runtime/index.d.ts",
       "default": "./dist/runtime.js"
+    },
+    "./scope": {
+      "types": "./dist/src/scope/index.d.ts",
+      "default": "./dist/scope.js"
     }
   },
   "scripts": {

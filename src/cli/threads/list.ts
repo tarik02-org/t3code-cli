@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import { Command } from "effect/unstable/cli";
 
 import { formatFlag, projectFlag } from "../flags.ts";
-import { requireCommandProjectRef } from "../scope.ts";
+import { requireCommandProjectRef } from "../require.ts";
 import { formatThreadsHuman } from "../thread-format.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
