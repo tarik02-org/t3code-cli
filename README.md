@@ -12,7 +12,7 @@ This installs the `t3cli` command.
 
 ## agent skill
 
-This repo includes an agent skill for operating `t3cli`: [`skills/t3code-cli/SKILL.md`](skills/t3code-cli/SKILL.md). It covers auth, scope resolution, thread workflows, and machine-readable output for Cursor and other skills-compatible agents.
+This repo includes an agent skill for operating `t3cli`: [`skills/t3code-cli/SKILL.md`](skills/t3code-cli/SKILL.md).
 
 Install it with [skills](https://skills.sh/):
 
