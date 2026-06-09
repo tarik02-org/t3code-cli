@@ -25,6 +25,7 @@ export function formatAuthStatusHuman(input: {
 }) {
   return [
     `url: ${input.config.url}`,
+    `local: ${input.config.local ? "yes" : "no"}`,
     `authenticated: ${input.result.authenticated ? "yes" : "no"}`,
     ...(input.result.role !== undefined ? [`role: ${input.result.role}`] : []),
     ...(input.result.expiresAt !== undefined ? [`expires: ${input.result.expiresAt}`] : []),
@@ -39,5 +40,6 @@ export function formatAuthStatusJson(input: {
     ...input.result,
     url: input.config.url,
     source: input.config.source,
+    local: input.config.local,
   };
 }

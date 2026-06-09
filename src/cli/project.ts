@@ -1,15 +1,16 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Command, Flag } from "effect/unstable/cli";
 
+import { formatFlag, projectPathFlag } from "./flags.ts";
 import { formatProjectAddedHuman, formatProjectsHuman } from "./project-format.ts";
 import { T3Application } from "../application/service.ts";
 import { Environment } from "../environment/service.ts";
-import { humanJsonFormatChoices, resolveOutputFormat } from "./output-format.ts";
+import { resolveOutputFormat } from "./output-format.ts";
 import { T3Output } from "./output/service.ts";
 
-export function createProjectsCommand() {
-  return Command.make("projects").pipe(
+export function createProjectCommand() {
+  return Command.make("project").pipe(
     Command.withDescription("project commands"),
     Command.withSubcommands([listCommand, addCommand]),
   );
@@ -18,7 +19,7 @@ export function createProjectsCommand() {
 const listCommand = Command.make(
   "list",
   {
-    format: Flag.choice("format", humanJsonFormatChoices).pipe(Flag.withDefault("auto")),
+    format: formatFlag,
   },
   ({ format }) =>
     Effect.gen(function* () {
@@ -38,9 +39,9 @@ const listCommand = Command.make(
 const addCommand = Command.make(
   "add",
   {
-    path: Argument.string("path"),
+    path: projectPathFlag,
     title: Flag.string("title").pipe(Flag.optional),
-    format: Flag.choice("format", humanJsonFormatChoices).pipe(Flag.withDefault("auto")),
+    format: formatFlag,
   },
   ({ path, title, format }) =>
     Effect.gen(function* () {

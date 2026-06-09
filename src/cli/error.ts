@@ -14,3 +14,10 @@ export class InvalidLimitError extends Schema.TaggedErrorClass<InvalidLimitError
     value: Schema.String,
   },
 ) {}
+
+export class MissingThreadError extends Schema.TaggedErrorClass<MissingThreadError>()(
+  "MissingThreadError",
+  {
+    message: Schema.String,
+  },
+) {}

@@ -1,27 +1,38 @@
-import type * as Path from "effect/Path";
+import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
 import type { OrchestrationProjectShell, OrchestrationShellSnapshot } from "#t3tools/contracts";
 
-import { ProjectLookupError } from "./error.ts";
+export type ResolvedProjectScope = {
+  readonly project: OrchestrationProjectShell;
+  readonly inferredWorktreePath?: string;
+};
 
-export function resolveProject(
+export const resolveProjectScope = Effect.fn("resolveProjectScope")(function* (
   snapshot: OrchestrationShellSnapshot,
-  ref: string,
-  path: Path.Path,
-  cwd: string,
+  input: {
+    readonly ref: string;
+    readonly cwd: string;
+  },
 ) {
-  const byId = findProjectById(snapshot, ref);
+  const absoluteRef = yield* resolveAbsolutePath(input.ref, input.cwd);
+
+  const byId = findProjectById(snapshot, input.ref);
   if (byId !== null) {
-    return byId;
+    return { project: byId };
   }
-  const absolute = path.resolve(cwd, ref);
-  const byPath = snapshot.projects.find(
-    (project) => path.resolve(cwd, project.workspaceRoot) === absolute,
-  );
-  if (byPath !== undefined) {
-    return byPath;
+
+  const byExactPath = yield* findProjectByWorkspaceRoot(snapshot, absoluteRef, input.cwd);
+  if (byExactPath !== undefined) {
+    return { project: byExactPath };
   }
-  throw new ProjectLookupError({ message: `project not found: ${ref}`, ref });
-}
+
+  const byAncestor = yield* findProjectByAncestorPath(snapshot, absoluteRef, input.cwd);
+  if (byAncestor !== undefined) {
+    return byAncestor;
+  }
+
+  return yield* findProjectByKnownWorktreePath(snapshot, absoluteRef, input.cwd);
+});
 
 export function findProjectById(
   snapshot: OrchestrationShellSnapshot,
@@ -29,3 +40,112 @@ export function findProjectById(
 ): OrchestrationProjectShell | null {
   return snapshot.projects.find((project) => project.id === projectId) ?? null;
 }
+
+const resolveAbsolutePath = Effect.fn("resolveAbsolutePath")(function* (ref: string, cwd: string) {
+  const path = yield* Path.Path;
+  return path.isAbsolute(ref) ? path.normalize(ref) : path.normalize(path.resolve(cwd, ref));
+});
+
+const isDescendantPath = Effect.fn("isDescendantPath")(function* (parent: string, child: string) {
+  const path = yield* Path.Path;
+  if (child === parent) {
+    return true;
+  }
+  const relative = path.relative(parent, child);
+  return relative.length > 0 && !relative.startsWith("..") && !path.isAbsolute(relative);
+});
+
+const findProjectByWorkspaceRoot = Effect.fn("findProjectByWorkspaceRoot")(function* (
+  snapshot: OrchestrationShellSnapshot,
+  absolutePath: string,
+  cwd: string,
+) {
+  for (const project of snapshot.projects) {
+    const workspaceRoot = yield* resolveAbsolutePath(project.workspaceRoot, cwd);
+    if (workspaceRoot === absolutePath) {
+      return project;
+    }
+  }
+  return undefined;
+});
+
+const findProjectByAncestorPath = Effect.fn("findProjectByAncestorPath")(function* (
+  snapshot: OrchestrationShellSnapshot,
+  absolutePath: string,
+  cwd: string,
+) {
+  let bestProject: OrchestrationProjectShell | undefined;
+  let bestWorkspaceRoot = "";
+
+  for (const project of snapshot.projects) {
+    const workspaceRoot = yield* resolveAbsolutePath(project.workspaceRoot, cwd);
+    if (!(yield* isDescendantPath(workspaceRoot, absolutePath))) {
+      continue;
+    }
+    if (workspaceRoot.length > bestWorkspaceRoot.length) {
+      bestProject = project;
+      bestWorkspaceRoot = workspaceRoot;
+    }
+  }
+
+  if (bestProject === undefined) {
+    return undefined;
+  }
+
+  if (absolutePath === bestWorkspaceRoot) {
+    return { project: bestProject };
+  }
+
+  return {
+    project: bestProject,
+    inferredWorktreePath: absolutePath,
+  };
+});
+
+const findProjectByKnownWorktreePath = Effect.fn("findProjectByKnownWorktreePath")(function* (
+  snapshot: OrchestrationShellSnapshot,
+  absolutePath: string,
+  cwd: string,
+) {
+  const projectsById = new Map(snapshot.projects.map((project) => [project.id, project]));
+  let bestProject: OrchestrationProjectShell | undefined;
+  let bestKnownPath = "";
+
+  for (const thread of snapshot.threads) {
+    if (thread.worktreePath === null) {
+      continue;
+    }
+    const project = projectsById.get(thread.projectId);
+    if (project === undefined) {
+      continue;
+    }
+    const knownPath = yield* resolveAbsolutePath(thread.worktreePath, cwd);
+    if (!(yield* isDescendantPath(knownPath, absolutePath))) {
+      continue;
+    }
+    if (knownPath.length > bestKnownPath.length) {
+      bestProject = project;
+      bestKnownPath = knownPath;
+    }
+  }
+
+  if (bestProject === undefined) {
+    return undefined;
+  }
+
+  const workspaceRoot = yield* resolveAbsolutePath(bestProject.workspaceRoot, cwd);
+  if (absolutePath === workspaceRoot) {
+    return { project: bestProject };
+  }
+
+  if (absolutePath === bestKnownPath) {
+    return bestKnownPath === workspaceRoot
+      ? { project: bestProject }
+      : { project: bestProject, inferredWorktreePath: bestKnownPath };
+  }
+
+  return {
+    project: bestProject,
+    inferredWorktreePath: absolutePath,
+  };
+});

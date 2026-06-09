@@ -9,3 +9,4 @@ export {
   T3LocalAuthTokenLayer,
   T3OrchestrationLayer,
 } from "./layer.ts";
+export { NodeEnvironmentLive } from "../environment/layer.ts";

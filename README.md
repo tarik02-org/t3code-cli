@@ -13,42 +13,57 @@ This installs the `t3cli` command.
 ## authenticate
 
 ```sh
-t3cli auth pair <url>
+t3cli auth pair --url <url> [--local]
 t3cli auth local [--base-dir <path>] [--origin <url>] [--role owner|client] [--label <label>] [--subject <subject>]
 t3cli auth status
 ```
 
-Use `auth pair` with a pairing URL from a running t3code server, or `auth local` to authenticate against a local t3code installation.
+Use `auth pair` with a pairing URL from a running t3code server, or `auth local` to authenticate against a local t3code installation. Local auth (`auth local` or `auth pair --local`) enables automatic project resolution from the current directory.
 
-## projects
+## project
 
 ```sh
-t3cli projects list
-t3cli projects add <path> [--title <title>]
+t3cli project list
+t3cli project add [--path <path>] [--title <title>]
 ```
 
-`projects list` shows known projects. `projects add` registers a project path with the server.
+`project list` shows known projects. `project add` registers a project path with the server. `--path` defaults to the current directory.
 
-## models
+## model
 
 ```sh
-t3cli models list [--all] [--provider <provider>]
+t3cli model list [--all] [--provider <provider>]
 ```
 
 Lists available provider models. Use `--all` to include hidden or unavailable entries when the server exposes them.
 
-## threads
+## thread
 
 ```sh
-t3cli threads list <project>
-t3cli threads start <project> [message] [--stdin] [--title <title>] [--worktree <path>] [--provider <provider>] [--model <model>] [--option <key=value>] [--reasoning-effort <value>] [--effort <value>] [--fast-mode] [--thinking] [--wait]
-t3cli threads send <thread> [message] [--stdin] [--option <key=value>] [--reasoning-effort <value>] [--effort <value>] [--fast-mode] [--thinking] [--wait]
-t3cli threads messages <thread> [--limit <count>] [--full]
-t3cli threads wait <thread>
-t3cli threads archive <thread>
+t3cli thread list [--project <ref>]
+t3cli thread start [message] [--project <ref>] [--stdin] [--title <title>] [--worktree <path>] [--provider <provider>] [--model <model>] [--option <key=value>] [--reasoning-effort <value>] [--effort <value>] [--fast-mode] [--thinking] [--wait]
+t3cli thread send [--thread <id>] [message] [--stdin] [--option <key=value>] [--reasoning-effort <value>] [--effort <value>] [--fast-mode] [--thinking] [--wait]
+t3cli thread messages [--thread <id>] [--limit <count>] [--full]
+t3cli thread wait [--thread <id>]
+t3cli thread archive [--thread <id>]
 ```
 
+`--project` accepts a project id or path. When omitted, the CLI resolves the project from the current directory only for local auth (`auth local` or `auth pair --local`). Resolution checks a registered `workspaceRoot`, paths under it, and known thread `worktreePath` values from the server snapshot. Remote pairings require an explicit `--project` or `T3CODE_PROJECT_*` env var. `thread start` infers the worktree from cwd unless `--worktree` or `T3CODE_WORKTREE_PATH` is set.
+
+Thread-targeting commands accept `--thread` or fall back to `T3CODE_THREAD_ID`.
+
 Use `--stdin` when the message should be read from standard input instead of an argument. Use `--wait` to stream until the thread pauses.
+
+## environment fallbacks
+
+When flags are omitted, the CLI reads these variables (first match wins within each group):
+
+| Variable               | Used by                                   |
+| ---------------------- | ----------------------------------------- |
+| `T3CODE_PROJECT_ROOT`  | `--project`                               |
+| `T3CODE_PROJECT_ID`    | `--project` (after `T3CODE_PROJECT_ROOT`) |
+| `T3CODE_WORKTREE_PATH` | `--worktree`                              |
+| `T3CODE_THREAD_ID`     | `--thread`                                |
 
 ## output
 
@@ -58,7 +73,7 @@ Most commands support:
 --format auto|human|json
 ```
 
-Thread start/send commands also support `--format ndjson`; `threads wait` supports `--format human|ndjson`.
+Thread start/send commands also support `--format ndjson`; `thread wait` supports `--format human|ndjson`.
 
 Global flags:
 
