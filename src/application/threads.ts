@@ -5,7 +5,7 @@ import * as Path from "effect/Path";
 import { Environment } from "../environment/service.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import { ThreadSessionError } from "../domain/error.ts";
-import { resolveProjectScope } from "../domain/helpers.ts";
+import { tryResolveProjectScope } from "../domain/helpers.ts";
 import { type StartThreadInput } from "./service.ts";
 import type { SendThreadInput } from "./service.ts";
 import { mergeModelOptions } from "./model-selection.ts";
@@ -27,7 +27,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
   const environment = yield* Environment;
   const listThreads = Effect.fn("T3ApplicationLive.listThreads")(function* (projectRef?: string) {
     const snapshot = yield* orchestration.getShellSnapshot();
-    const scope = resolveProjectScope(snapshot, {
+    const scope = yield* tryResolveProjectScope(snapshot, {
       ref: projectRef,
       path,
       cwd: environment.cwd,
@@ -55,7 +55,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     },
   ) {
     const snapshot = yield* orchestration.getShellSnapshot();
-    const scope = resolveProjectScope(snapshot, {
+    const scope = yield* tryResolveProjectScope(snapshot, {
       ref: startInput.projectRef,
       path,
       cwd: environment.cwd,

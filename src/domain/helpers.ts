@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import type * as Path from "effect/Path";
 import type { OrchestrationProjectShell, OrchestrationShellSnapshot } from "#t3tools/contracts";
 
@@ -35,6 +36,26 @@ export function resolveProjectScope(
   }
 
   throw new ProjectLookupError({ message: `project not found: ${ref}`, ref });
+}
+
+export function tryResolveProjectScope(
+  snapshot: OrchestrationShellSnapshot,
+  input: {
+    readonly ref?: string | undefined;
+    readonly path: Path.Path;
+    readonly cwd: string;
+  },
+): Effect.Effect<ResolvedProjectScope, ProjectLookupError> {
+  return Effect.try({
+    try: () => resolveProjectScope(snapshot, input),
+    catch: (error) =>
+      error instanceof ProjectLookupError
+        ? error
+        : new ProjectLookupError({
+            message: error instanceof Error ? error.message : String(error),
+            ref: input.ref ?? input.cwd,
+          }),
+  });
 }
 
 export function findProjectById(
