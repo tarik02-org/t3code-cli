@@ -15,7 +15,7 @@ import type {
 import type { ApplicationError } from "./error.ts";
 
 export type StartThreadInput = {
-  readonly projectRef: string;
+  readonly projectRef?: string;
   readonly message: string;
   readonly title?: string;
   readonly provider?: string;
@@ -55,7 +55,7 @@ export class T3Application extends Context.Service<
       { readonly dispatch: DispatchResult; readonly project: OrchestrationProjectShell },
       ApplicationError
     >;
-    readonly listThreads: (projectRef: string) => Effect.Effect<
+    readonly listThreads: (projectRef?: string) => Effect.Effect<
       {
         readonly project: OrchestrationProjectShell;
         readonly threads: ReadonlyArray<OrchestrationThreadShell>;
