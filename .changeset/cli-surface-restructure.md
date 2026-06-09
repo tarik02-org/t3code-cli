@@ -10,5 +10,6 @@ Restructure the CLI command surface for agent and human ergonomics.
 - Infer worktree path from cwd when starting a thread inside a project subdirectory
 - Add `project add --path` (defaults to `.`) and `auth pair --url`
 - Add env fallbacks: `T3CODE_PROJECT_ROOT`, `T3CODE_PROJECT_ID`, `T3CODE_WORKTREE_PATH`, `T3CODE_THREAD_ID`
+- Export CLI flags and scope resolvers as library surfaces: `t3code-cli/cli` (flags) and `t3code-cli/scope`
 
 **BREAKING:** All previous CLI command names and positional arguments are removed. Update scripts and integrations to the new surface.

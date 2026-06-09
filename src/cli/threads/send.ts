@@ -6,7 +6,7 @@ import { modelFlags, threadFlag, threadFormatFlag } from "../flags.ts";
 import { readInitialMessage } from "../message-input.ts";
 import { buildModelOptions } from "../model-options.ts";
 import { MissingThreadError } from "../error.ts";
-import { resolveThreadId } from "../scope.ts";
+import { resolveThreadId } from "../../scope/index.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
 import { T3Input } from "../input/service.ts";
@@ -42,7 +42,10 @@ export const sendThreadCommand = Command.make(
       const application = yield* T3Application;
       const environment = yield* Environment;
       const output = yield* T3Output;
-      const threadId = resolveThreadId(thread, environment.env);
+      const threadId = resolveThreadId({
+        value: Option.getOrUndefined(thread),
+        env: environment.env,
+      });
       if (threadId === undefined) {
         return yield* Effect.fail(
           new MissingThreadError({

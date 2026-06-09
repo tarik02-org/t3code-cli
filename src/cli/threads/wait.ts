@@ -1,9 +1,10 @@
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import { Command } from "effect/unstable/cli";
 
 import { threadFlag, waitFormatFlag } from "../flags.ts";
 import { MissingThreadError } from "../error.ts";
-import { resolveThreadId } from "../scope.ts";
+import { resolveThreadId } from "../../scope/index.ts";
 import { Environment } from "../../environment/service.ts";
 import { T3Application } from "../../application/service.ts";
 import { canRenderLiveTerminal, resolveOutputFormat } from "../output-format.ts";
@@ -21,7 +22,10 @@ export const waitForThreadCommand = Command.make(
       const application = yield* T3Application;
       const environment = yield* Environment;
       const output = yield* T3Output;
-      const threadId = resolveThreadId(thread, environment.env);
+      const threadId = resolveThreadId({
+        value: Option.getOrUndefined(thread),
+        env: environment.env,
+      });
       if (threadId === undefined) {
         return yield* Effect.fail(
           new MissingThreadError({

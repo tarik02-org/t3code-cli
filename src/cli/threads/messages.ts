@@ -1,10 +1,11 @@
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
 
 import { formatFlag, threadFlag } from "../flags.ts";
 import { InvalidLimitError } from "../error.ts";
 import { MissingThreadError } from "../error.ts";
-import { resolveThreadId } from "../scope.ts";
+import { resolveThreadId } from "../../scope/index.ts";
 import { formatThreadMessagesHuman, formatThreadMessagesJson } from "../thread-format.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
@@ -29,7 +30,10 @@ export const getThreadMessagesCommand = Command.make(
       const application = yield* T3Application;
       const environment = yield* Environment;
       const output = yield* T3Output;
-      const threadId = resolveThreadId(thread, environment.env);
+      const threadId = resolveThreadId({
+        value: Option.getOrUndefined(thread),
+        env: environment.env,
+      });
       if (threadId === undefined) {
         return yield* Effect.fail(
           new MissingThreadError({
