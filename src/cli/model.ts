@@ -2,14 +2,15 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
 
+import { formatFlag } from "./flags.ts";
 import { T3Application } from "../application/service.ts";
 import { Environment } from "../environment/service.ts";
 import { formatModelsHuman } from "./model-format.ts";
-import { humanJsonFormatChoices, resolveOutputFormat } from "./output-format.ts";
+import { resolveOutputFormat } from "./output-format.ts";
 import { T3Output } from "./output/service.ts";
 
-export function createModelsCommand() {
-  return Command.make("models").pipe(
+export function createModelCommand() {
+  return Command.make("model").pipe(
     Command.withDescription("model commands"),
     Command.withSubcommands([listCommand]),
   );
@@ -20,7 +21,7 @@ const listCommand = Command.make(
   {
     all: Flag.boolean("all"),
     provider: Flag.string("provider").pipe(Flag.optional),
-    format: Flag.choice("format", humanJsonFormatChoices).pipe(Flag.withDefault("auto")),
+    format: formatFlag,
   },
   ({ all, provider, format }) =>
     Effect.gen(function* () {

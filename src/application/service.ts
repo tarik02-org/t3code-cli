@@ -15,7 +15,7 @@ import type {
 import type { ApplicationError } from "./error.ts";
 
 export type StartThreadInput = {
-  readonly projectRef: string;
+  readonly projectRef?: string;
   readonly message: string;
   readonly title?: string;
   readonly provider?: string;
