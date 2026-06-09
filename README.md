@@ -20,8 +20,6 @@ Install it with [skills](https://skills.sh/):
 npx skills add tarik02/t3cli
 ```
 
-Use `--global` to install for all projects, or `--skill t3code-cli` when a repo publishes multiple skills.
-
 ## authenticate
 
 ```sh
