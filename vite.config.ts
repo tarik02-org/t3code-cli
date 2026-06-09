@@ -9,6 +9,15 @@ export default defineConfig({
     entry: {
       bin: "src/bin.ts",
       index: "src/index.ts",
+      application: "src/exports/application.ts",
+      auth: "src/exports/auth.ts",
+      config: "src/exports/config.ts",
+      connection: "src/exports/connection.ts",
+      contracts: "src/exports/contracts.ts",
+      layout: "src/exports/layout.ts",
+      orchestration: "src/exports/orchestration.ts",
+      rpc: "src/exports/rpc.ts",
+      runtime: "src/exports/runtime.ts",
     },
     deps: {
       alwaysBundle: /^.+$/,

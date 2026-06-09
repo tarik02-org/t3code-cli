@@ -7,5 +7,16 @@
     "noEmit": false,
     "rootDir": "."
   },
-  "include": ["src/index.ts"]
+  "include": [
+    "src/index.ts",
+    "src/exports/application.ts",
+    "src/exports/auth.ts",
+    "src/exports/config.ts",
+    "src/exports/connection.ts",
+    "src/exports/contracts.ts",
+    "src/exports/layout.ts",
+    "src/exports/orchestration.ts",
+    "src/exports/rpc.ts",
+    "src/exports/runtime.ts"
+  ]
 }
