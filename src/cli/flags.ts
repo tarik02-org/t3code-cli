@@ -8,7 +8,7 @@ import {
 
 export const projectFlag = Flag.string("project").pipe(
   Flag.withDescription(
-    "Project id or path (default: cwd, or T3CODE_PROJECT_ROOT / T3CODE_PROJECT_ID)",
+    "Project id or path (default: cwd with local auth, or T3CODE_PROJECT_ROOT / T3CODE_PROJECT_ID)",
   ),
   Flag.optional,
 );

@@ -3,6 +3,7 @@ import { Command, Flag } from "effect/unstable/cli";
 
 import { formatFlag, threadFlag } from "../flags.ts";
 import { InvalidLimitError } from "../error.ts";
+import { MissingThreadError } from "../error.ts";
 import { resolveThreadId } from "../scope.ts";
 import { formatThreadMessagesHuman, formatThreadMessagesJson } from "../thread-format.ts";
 import { T3Application } from "../../application/service.ts";
@@ -28,7 +29,14 @@ export const getThreadMessagesCommand = Command.make(
       const application = yield* T3Application;
       const environment = yield* Environment;
       const output = yield* T3Output;
-      const threadId = yield* resolveThreadId(thread, environment.env);
+      const threadId = resolveThreadId(thread, environment.env);
+      if (threadId === undefined) {
+        return yield* Effect.fail(
+          new MissingThreadError({
+            message: "thread id is required: pass --thread or set T3CODE_THREAD_ID",
+          }),
+        );
+      }
       const resolvedFormat = resolveOutputFormat(format, environment, "json");
       const detail = yield* application.getThreadMessages(threadId);
       if (resolvedFormat === "json") {

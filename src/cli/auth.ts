@@ -27,16 +27,21 @@ const pairCommand = Command.make(
   "pair",
   {
     url: Flag.string("url"),
+    local: Flag.boolean("local"),
     format: formatFlag,
   },
-  ({ url, format }) =>
+  ({ url, local, format }) =>
     Effect.gen(function* () {
       const auth = yield* T3Auth;
       const environment = yield* Environment;
       const output = yield* T3Output;
       const resolvedFormat = resolveOutputFormat(format, environment, "json");
       const result = yield* auth.pair(url);
-      yield* auth.writeConfig(result);
+      yield* auth.writeConfig({
+        url: result.url,
+        token: result.token,
+        local,
+      });
       if (resolvedFormat === "json") {
         yield* output.printJson(result);
       } else {
@@ -68,7 +73,11 @@ const localCommand = Command.make(
         ...(Option.isSome(baseDir) ? { baseDir: baseDir.value } : {}),
         ...(Option.isSome(origin) ? { origin: origin.value } : {}),
       });
-      yield* auth.writeConfig(result);
+      yield* auth.writeConfig({
+        url: result.url,
+        token: result.token,
+        local: true,
+      });
       if (resolvedFormat === "json") {
         yield* output.printJson(formatAuthLocalJson(result));
       } else {

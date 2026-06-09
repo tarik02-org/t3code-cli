@@ -69,6 +69,7 @@ export const makeT3Config = Effect.fn("makeT3Config")(function* () {
       url: normalizedUrl,
       token,
       source,
+      local: stored.local ?? false,
     };
   });
 
@@ -84,6 +85,7 @@ export const T3ConfigLive = Layer.effect(T3Config, makeT3Config());
 const StoredConfigSchema = Schema.Struct({
   url: Schema.optionalKey(Schema.String),
   token: Schema.optionalKey(Schema.String),
+  local: Schema.optionalKey(Schema.Boolean),
 });
 
 function parseStoredConfig(raw: string) {

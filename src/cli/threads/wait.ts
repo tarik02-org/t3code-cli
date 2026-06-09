@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import { Command } from "effect/unstable/cli";
 
 import { threadFlag, waitFormatFlag } from "../flags.ts";
+import { MissingThreadError } from "../error.ts";
 import { resolveThreadId } from "../scope.ts";
 import { Environment } from "../../environment/service.ts";
 import { T3Application } from "../../application/service.ts";
@@ -20,13 +21,19 @@ export const waitForThreadCommand = Command.make(
       const application = yield* T3Application;
       const environment = yield* Environment;
       const output = yield* T3Output;
-      const threadId = yield* resolveThreadId(thread, environment.env);
+      const threadId = resolveThreadId(thread, environment.env);
+      if (threadId === undefined) {
+        return yield* Effect.fail(
+          new MissingThreadError({
+            message: "thread id is required: pass --thread or set T3CODE_THREAD_ID",
+          }),
+        );
+      }
       const resolvedFormat = resolveOutputFormat(format, environment, "ndjson");
       if (resolvedFormat === "ndjson") {
-        yield* printWaitEventsNdjson(output, application.watchThread(threadId));
-        return;
+        return yield* printWaitEventsNdjson(output, application.watchThread(threadId));
       }
-      yield* printWaitEventsHuman(output, application.watchThread(threadId), {
+      return yield* printWaitEventsHuman(output, application.watchThread(threadId), {
         threadId,
         live: canRenderLiveTerminal(environment),
       });
