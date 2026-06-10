@@ -1,0 +1,54 @@
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -7,8 +7,8 @@
+ import type * as Schema from "effect/Schema";
+ import type * as Scope from "effect/Scope";
+ import type * as FC from "effect/testing/FastCheck";
+-import * as V from "vitest";
++import * as V from "vite-plus/test";
+ /**
+  * @since 4.0.0
+  */
+-export * from "vitest";
++export * from "vite-plus/test";
+diff --git a/dist/index.js b/dist/index.js
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1,6 +1,6 @@
+-import * as V from "vitest";
++import * as V from "vite-plus/test";
+ import * as internal from "./internal/internal.js";
+ /**
+  * @since 4.0.0
+  */
+-export * from "vitest";
++export * from "vite-plus/test";
+diff --git a/dist/internal/internal.js b/dist/internal/internal.js
+--- a/dist/internal/internal.js
++++ b/dist/internal/internal.js
+@@ -1,5 +1,5 @@
+ /**
+  * @since 4.0.0
+  */
+-import { getCurrentSuite } from "@vitest/runner";
++import { getCurrentSuite } from "vite-plus/test/plugins/runner";
+ import * as Cause from "effect/Cause";
+@@ -14,6 +14,6 @@
+ import * as Scope from "effect/Scope";
+ import * as fc from "effect/testing/FastCheck";
+ import * as TestClock from "effect/testing/TestClock";
+ import * as TestConsole from "effect/testing/TestConsole";
+-import * as V from "vitest";
++import * as V from "vite-plus/test";
+ const runPromise = /*#__PURE__*/Effect.fnUntraced(function* (effect, _ctx) {
+diff --git a/dist/utils.js b/dist/utils.js
+--- a/dist/utils.js
++++ b/dist/utils.js
+@@ -3,5 +3,5 @@
+ import * as Option from "effect/Option";
+ import * as Predicate from "effect/Predicate";
+ import * as Result from "effect/Result";
+ import * as assert from "node:assert";
+-import { assert as vassert } from "vitest";
++import { assert as vassert } from "vite-plus/test";

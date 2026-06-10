@@ -108,6 +108,7 @@
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
+    "@effect/vitest": "catalog:",
     "@t3tools/contracts": "workspace:*",
     "@types/node": "^25.9.1",
     "typescript": "^6.0.3",

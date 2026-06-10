@@ -1,103 +1,114 @@
+import "vite-plus/test/config";
+
 import * as Effect from "effect/Effect";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "vite-plus/test";
+import { assert, describe, it } from "@effect/vitest";
 
 import type { OrchestrationShellSnapshot } from "#t3tools/contracts";
 
 import { resolveProjectScope } from "./helpers.ts";
 
-const run = (snapshot: OrchestrationShellSnapshot, ref: string) =>
-  Effect.runPromise(
-    resolveProjectScope(snapshot, { ref }).pipe(Effect.provide(NodeServices.layer)),
-  );
-
 describe("resolveProjectScope", () => {
-  it("resolves by id first (even if ref not absolute)", async () => {
-    const snapshot: OrchestrationShellSnapshot = JSON.parse(
-      JSON.stringify({
-        projects: [{ id: "proj-1", workspaceRoot: "/workspace" }],
-        threads: [],
+  it.layer(NodeServices.layer)("resolveProjectScope", (t) => {
+    t.effect("resolves by id first (even if ref not absolute)", () =>
+      Effect.gen(function* () {
+        const snapshot: OrchestrationShellSnapshot = JSON.parse(
+          JSON.stringify({
+            projects: [{ id: "proj-1", workspaceRoot: "/workspace" }],
+            threads: [],
+          }),
+        );
+
+        const scope = yield* resolveProjectScope(snapshot, { ref: "proj-1" });
+        assert.equal(scope?.project.id, "proj-1");
+        assert.equal(scope?.inferredWorktreePath, undefined);
       }),
     );
 
-    const scope = await run(snapshot, "proj-1");
-    expect(scope?.project.id).toBe("proj-1");
-    expect(scope?.inferredWorktreePath).toBeUndefined();
-  });
+    t.effect("returns undefined for non-absolute path refs", () =>
+      Effect.gen(function* () {
+        const snapshot: OrchestrationShellSnapshot = JSON.parse(
+          JSON.stringify({
+            projects: [{ id: "proj-1", workspaceRoot: "/workspace" }],
+            threads: [],
+          }),
+        );
 
-  it("returns undefined for non-absolute path refs", async () => {
-    const snapshot: OrchestrationShellSnapshot = JSON.parse(
-      JSON.stringify({
-        projects: [{ id: "proj-1", workspaceRoot: "/workspace" }],
-        threads: [],
+        const scope = yield* resolveProjectScope(snapshot, { ref: "workspace/subdir" });
+        assert.equal(scope, undefined);
       }),
     );
 
-    const scope = await run(snapshot, "workspace/subdir");
-    expect(scope).toBeUndefined();
-  });
+    t.effect("prefers longest matching workspaceRoot", () =>
+      Effect.gen(function* () {
+        const snapshot: OrchestrationShellSnapshot = JSON.parse(
+          JSON.stringify({
+            projects: [
+              { id: "proj-a", workspaceRoot: "/workspace" },
+              { id: "proj-b", workspaceRoot: "/workspace/sub" },
+            ],
+            threads: [],
+          }),
+        );
 
-  it("prefers longest matching workspaceRoot", async () => {
-    const snapshot: OrchestrationShellSnapshot = JSON.parse(
-      JSON.stringify({
-        projects: [
-          { id: "proj-a", workspaceRoot: "/workspace" },
-          { id: "proj-b", workspaceRoot: "/workspace/sub" },
-        ],
-        threads: [],
+        const scope = yield* resolveProjectScope(snapshot, { ref: "/workspace/sub/deep" });
+        assert.equal(scope?.project.id, "proj-b");
+        assert.equal(scope?.inferredWorktreePath, "/workspace/sub/deep");
       }),
     );
 
-    const scope = await run(snapshot, "/workspace/sub/deep");
-    expect(scope?.project.id).toBe("proj-b");
-    expect(scope?.inferredWorktreePath).toBe("/workspace/sub/deep");
-  });
+    t.effect("does not infer worktree when ref equals workspaceRoot", () =>
+      Effect.gen(function* () {
+        const snapshot: OrchestrationShellSnapshot = JSON.parse(
+          JSON.stringify({
+            projects: [
+              { id: "proj-a", workspaceRoot: "/workspace" },
+              { id: "proj-b", workspaceRoot: "/workspace/sub" },
+            ],
+            threads: [],
+          }),
+        );
 
-  it("does not infer worktree when ref equals workspaceRoot", async () => {
-    const snapshot: OrchestrationShellSnapshot = JSON.parse(
-      JSON.stringify({
-        projects: [
-          { id: "proj-a", workspaceRoot: "/workspace" },
-          { id: "proj-b", workspaceRoot: "/workspace/sub" },
-        ],
-        threads: [],
+        const scope = yield* resolveProjectScope(snapshot, { ref: "/workspace/sub" });
+        assert.equal(scope?.project.id, "proj-b");
+        assert.equal(scope?.inferredWorktreePath, undefined);
       }),
     );
 
-    const scope = await run(snapshot, "/workspace/sub");
-    expect(scope?.project.id).toBe("proj-b");
-    expect(scope?.inferredWorktreePath).toBeUndefined();
-  });
+    t.effect("prefers worktree candidate over project candidate for same match path", () =>
+      Effect.gen(function* () {
+        const snapshot: OrchestrationShellSnapshot = JSON.parse(
+          JSON.stringify({
+            projects: [
+              { id: "proj-a", workspaceRoot: "/workspace" },
+              { id: "proj-b", workspaceRoot: "/workspace/proj" },
+            ],
+            threads: [{ projectId: "proj-a", worktreePath: "/workspace/proj" }],
+          }),
+        );
 
-  it("prefers worktree candidate over project candidate for same match path", async () => {
-    const snapshot: OrchestrationShellSnapshot = JSON.parse(
-      JSON.stringify({
-        projects: [
-          { id: "proj-a", workspaceRoot: "/workspace" },
-          { id: "proj-b", workspaceRoot: "/workspace/proj" },
-        ],
-        threads: [{ projectId: "proj-a", worktreePath: "/workspace/proj" }],
+        const scope = yield* resolveProjectScope(snapshot, { ref: "/workspace/proj" });
+        assert.equal(scope?.project.id, "proj-a");
+        assert.equal(scope?.inferredWorktreePath, "/workspace/proj");
       }),
     );
 
-    const scope = await run(snapshot, "/workspace/proj");
-    expect(scope?.project.id).toBe("proj-a");
-    expect(scope?.inferredWorktreePath).toBe("/workspace/proj");
-  });
+    t.effect("prefers longest matching worktree path", () =>
+      Effect.gen(function* () {
+        const snapshot: OrchestrationShellSnapshot = JSON.parse(
+          JSON.stringify({
+            projects: [{ id: "proj-a", workspaceRoot: "/workspace" }],
+            threads: [
+              { projectId: "proj-a", worktreePath: "/workspace/proj" },
+              { projectId: "proj-a", worktreePath: "/workspace/proj/deep" },
+            ],
+          }),
+        );
 
-  it("prefers longest matching worktree path", async () => {
-    const snapshot: OrchestrationShellSnapshot = JSON.parse(
-      JSON.stringify({
-        projects: [{ id: "proj-a", workspaceRoot: "/workspace" }],
-        threads: [
-          { projectId: "proj-a", worktreePath: "/workspace/proj" },
-          { projectId: "proj-a", worktreePath: "/workspace/proj/deep" },
-        ],
+        const scope = yield* resolveProjectScope(snapshot, { ref: "/workspace/proj/deep/child" });
+        assert.equal(scope?.project.id, "proj-a");
+        assert.equal(scope?.inferredWorktreePath, "/workspace/proj/deep/child");
       }),
     );
-
-    const scope = await run(snapshot, "/workspace/proj/deep/child");
-    expect(scope?.project.id).toBe("proj-a");
-    expect(scope?.inferredWorktreePath).toBe("/workspace/proj/deep/child");
   });
 });
