@@ -21,17 +21,7 @@ export const resolveProjectScope = Effect.fn("resolveProjectScope")(function* (
     return { project: byId };
   }
 
-  const byExactPath = yield* findProjectByWorkspaceRoot(snapshot, absoluteRef, input.cwd);
-  if (byExactPath !== undefined) {
-    return { project: byExactPath };
-  }
-
-  const byAncestor = yield* findProjectByAncestorPath(snapshot, absoluteRef, input.cwd);
-  if (byAncestor !== undefined) {
-    return byAncestor;
-  }
-
-  return yield* findProjectByKnownWorktreePath(snapshot, absoluteRef, input.cwd);
+  return yield* findProjectByPathPriority(snapshot, absoluteRef, input.cwd);
 });
 
 export function findProjectById(
@@ -55,61 +45,27 @@ const isDescendantPath = Effect.fn("isDescendantPath")(function* (parent: string
   return relative.length > 0 && !relative.startsWith("..") && !path.isAbsolute(relative);
 });
 
-const findProjectByWorkspaceRoot = Effect.fn("findProjectByWorkspaceRoot")(function* (
-  snapshot: OrchestrationShellSnapshot,
-  absolutePath: string,
-  cwd: string,
-) {
-  for (const project of snapshot.projects) {
-    const workspaceRoot = yield* resolveAbsolutePath(project.workspaceRoot, cwd);
-    if (workspaceRoot === absolutePath) {
-      return project;
-    }
-  }
-  return undefined;
-});
-
-const findProjectByAncestorPath = Effect.fn("findProjectByAncestorPath")(function* (
-  snapshot: OrchestrationShellSnapshot,
-  absolutePath: string,
-  cwd: string,
-) {
-  let bestProject: OrchestrationProjectShell | undefined;
-  let bestWorkspaceRoot = "";
-
-  for (const project of snapshot.projects) {
-    const workspaceRoot = yield* resolveAbsolutePath(project.workspaceRoot, cwd);
-    if (!(yield* isDescendantPath(workspaceRoot, absolutePath))) {
-      continue;
-    }
-    if (workspaceRoot.length > bestWorkspaceRoot.length) {
-      bestProject = project;
-      bestWorkspaceRoot = workspaceRoot;
-    }
-  }
-
-  if (bestProject === undefined) {
-    return undefined;
-  }
-
-  if (absolutePath === bestWorkspaceRoot) {
-    return { project: bestProject };
-  }
-
-  return {
-    project: bestProject,
-    inferredWorktreePath: absolutePath,
-  };
-});
-
-const findProjectByKnownWorktreePath = Effect.fn("findProjectByKnownWorktreePath")(function* (
+const findProjectByPathPriority = Effect.fn("findProjectByPathPriority")(function* (
   snapshot: OrchestrationShellSnapshot,
   absolutePath: string,
   cwd: string,
 ) {
   const projectsById = new Map(snapshot.projects.map((project) => [project.id, project]));
-  let bestProject: OrchestrationProjectShell | undefined;
-  let bestKnownPath = "";
+  const workspaceRoots = new Map(
+    yield* Effect.all(
+      snapshot.projects.map((project) =>
+        resolveAbsolutePath(project.workspaceRoot, cwd).pipe(
+          Effect.map((workspaceRoot) => [project.id, workspaceRoot] as const),
+        ),
+      ),
+    ),
+  );
+  const candidates: Array<{
+    readonly project: OrchestrationProjectShell;
+    readonly matchPath: string;
+    readonly workspaceRoot: string;
+    readonly source: "worktree" | "project";
+  }> = [];
 
   for (const thread of snapshot.threads) {
     if (thread.worktreePath === null) {
@@ -119,33 +75,59 @@ const findProjectByKnownWorktreePath = Effect.fn("findProjectByKnownWorktreePath
     if (project === undefined) {
       continue;
     }
-    const knownPath = yield* resolveAbsolutePath(thread.worktreePath, cwd);
-    if (!(yield* isDescendantPath(knownPath, absolutePath))) {
+    const workspaceRoot = workspaceRoots.get(thread.projectId);
+    if (workspaceRoot === undefined) {
       continue;
     }
-    if (knownPath.length > bestKnownPath.length) {
-      bestProject = project;
-      bestKnownPath = knownPath;
+    const matchPath = yield* resolveAbsolutePath(thread.worktreePath, cwd);
+    if (!(yield* isDescendantPath(matchPath, absolutePath))) {
+      continue;
     }
+    candidates.push({
+      project,
+      matchPath,
+      workspaceRoot,
+      source: "worktree",
+    });
   }
 
-  if (bestProject === undefined) {
+  for (const project of snapshot.projects) {
+    const workspaceRoot = workspaceRoots.get(project.id);
+    if (workspaceRoot === undefined) {
+      continue;
+    }
+    if (!(yield* isDescendantPath(workspaceRoot, absolutePath))) {
+      continue;
+    }
+    candidates.push({
+      project,
+      matchPath: workspaceRoot,
+      workspaceRoot,
+      source: "project",
+    });
+  }
+
+  if (candidates.length === 0) {
     return undefined;
   }
 
-  const workspaceRoot = yield* resolveAbsolutePath(bestProject.workspaceRoot, cwd);
-  if (absolutePath === workspaceRoot) {
-    return { project: bestProject };
+  candidates.sort((left, right) => {
+    if (left.matchPath.length !== right.matchPath.length) {
+      return right.matchPath.length - left.matchPath.length;
+    }
+    if (left.source === right.source) {
+      return 0;
+    }
+    return left.source === "worktree" ? -1 : 1;
+  });
+
+  const best = candidates[0];
+  if (absolutePath === best.matchPath) {
+    if (best.source === "worktree" && best.matchPath !== best.workspaceRoot) {
+      return { project: best.project, inferredWorktreePath: best.matchPath };
+    }
+    return { project: best.project };
   }
 
-  if (absolutePath === bestKnownPath) {
-    return bestKnownPath === workspaceRoot
-      ? { project: bestProject }
-      : { project: bestProject, inferredWorktreePath: bestKnownPath };
-  }
-
-  return {
-    project: bestProject,
-    inferredWorktreePath: absolutePath,
-  };
+  return { project: best.project, inferredWorktreePath: absolutePath };
 });
