@@ -17,6 +17,23 @@ export const makeProjectApplication = Effect.fn("makeProjectApplication")(functi
   const loadShell = Effect.fn("T3ApplicationLive.loadShell")(function* () {
     return yield* orchestration.getShellSnapshot();
   });
+  const resolveProject = Effect.fn("T3ApplicationLive.resolveProject")(function* (
+    projectRef: string,
+  ) {
+    const snapshot = yield* orchestration.getShellSnapshot();
+    const scope = yield* resolveProjectScope(snapshot, {
+      ref: projectRef,
+    }).pipe(Effect.provideService(Path.Path, path));
+    if (scope === undefined) {
+      return yield* Effect.fail(
+        new ProjectLookupError({
+          message: `project not found: ${projectRef}`,
+          ref: projectRef,
+        }),
+      );
+    }
+    return scope.project;
+  });
   const addProject = Effect.fn("T3ApplicationLive.addProject")(function* (projectInput: {
     readonly path: string;
     readonly title?: string;
@@ -43,32 +60,21 @@ export const makeProjectApplication = Effect.fn("makeProjectApplication")(functi
     return { dispatch, project };
   });
   const deleteProject = Effect.fn("T3ApplicationLive.deleteProject")(function* (input: {
-    readonly projectRef: string;
+    readonly projectId: string;
     readonly force?: boolean;
   }) {
-    const snapshot = yield* orchestration.getShellSnapshot();
-    const scope = yield* resolveProjectScope(snapshot, {
-      ref: input.projectRef,
-    }).pipe(Effect.provideService(Path.Path, path));
-    if (scope === undefined) {
-      return yield* Effect.fail(
-        new ProjectLookupError({
-          message: `project not found: ${input.projectRef}`,
-          ref: input.projectRef,
-        }),
-      );
-    }
     const command = yield* makeProjectDeleteCommand({
-      projectId: scope.project.id,
+      projectId: input.projectId,
       ...(input.force === true ? { force: true } : {}),
     }).pipe(Effect.provideService(Crypto.Crypto, crypto));
     const dispatch = yield* orchestration.dispatch(command);
-    return { projectId: scope.project.id, dispatch };
+    return { projectId: input.projectId, dispatch };
   });
 
   return {
     loadShell,
     addProject,
+    resolveProject,
     deleteProject,
   };
 });

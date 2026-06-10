@@ -4,6 +4,7 @@ import { Command } from "effect/unstable/cli";
 
 import { requireDestructiveConfirmation } from "../confirm.ts";
 import { formatFlag, threadFlag, yesFlag } from "../flags.ts";
+import { formatThreadDeletedHuman } from "../thread-format.ts";
 import { MissingThreadError } from "../error.ts";
 import { resolveThreadId } from "../../scope/index.ts";
 import { T3Application } from "../../application/service.ts";
@@ -34,6 +35,7 @@ export const deleteThreadCommand = Command.make(
           }),
         );
       }
+      // getThreadMessages is getThreadSnapshot under the hood; used here only for title.
       const threadSnapshot = yield* application.getThreadMessages(threadId).pipe(Effect.option);
       const title = Option.match(threadSnapshot, {
         onNone: () => threadId,
@@ -52,8 +54,6 @@ export const deleteThreadCommand = Command.make(
           dispatch: result.dispatch,
         });
       }
-      return yield* output.printInfo(
-        `thread deleted: ${result.threadId}\nsequence: ${result.dispatch.sequence}`,
-      );
+      return yield* output.printInfo(formatThreadDeletedHuman(result));
     }),
 ).pipe(Command.withDescription("delete thread"));

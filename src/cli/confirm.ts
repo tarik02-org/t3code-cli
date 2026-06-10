@@ -2,18 +2,8 @@ import * as Effect from "effect/Effect";
 import * as Prompt from "effect/unstable/cli/Prompt";
 
 import { DestructiveConfirmationRequiredError } from "./error.ts";
+import { isInteractiveHumanTerminal } from "./output-format.ts";
 import type { EnvironmentShape } from "../environment/service.ts";
-
-function isNonInteractiveEnvironment(environment: EnvironmentShape): boolean {
-  return (
-    environment.env.CI !== undefined ||
-    environment.env.CODEX_CI !== undefined ||
-    environment.env.CODEX_THREAD_ID !== undefined ||
-    environment.env.T3CLI_AGENT !== undefined ||
-    !environment.stdoutIsTTY ||
-    environment.env.TERM === "dumb"
-  );
-}
 
 export const requireDestructiveConfirmation = Effect.fn("requireDestructiveConfirmation")(
   function* (input: {
@@ -22,7 +12,7 @@ export const requireDestructiveConfirmation = Effect.fn("requireDestructiveConfi
     readonly environment: EnvironmentShape;
   }) {
     if (!input.yes) {
-      if (isNonInteractiveEnvironment(input.environment)) {
+      if (!isInteractiveHumanTerminal(input.environment)) {
         return yield* Effect.fail(
           new DestructiveConfirmationRequiredError({
             message: "destructive action requires --yes in non-interactive mode",

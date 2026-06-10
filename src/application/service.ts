@@ -61,8 +61,11 @@ export class T3Application extends Context.Service<
       { readonly dispatch: DispatchResult; readonly project: OrchestrationProjectShell },
       ApplicationError
     >;
+    readonly resolveProject: (
+      projectRef: string,
+    ) => Effect.Effect<OrchestrationProjectShell, ApplicationError>;
     readonly deleteProject: (input: {
-      readonly projectRef: string;
+      readonly projectId: string;
       readonly force?: boolean;
     }) => Effect.Effect<
       { readonly projectId: string; readonly dispatch: DispatchResult },

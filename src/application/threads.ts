@@ -7,6 +7,7 @@ import { Environment } from "../environment/service.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import { ProjectLookupError, ThreadSessionError } from "../domain/error.ts";
 import { resolveProjectScope } from "../domain/helpers.ts";
+import { sessionNeedsStopBeforeDelete } from "../domain/thread-lifecycle.ts";
 import { type StartThreadInput } from "./service.ts";
 import type { SendThreadInput, CallbackThreadInput } from "./service.ts";
 import { mergeModelOptions } from "./model-selection.ts";
@@ -56,8 +57,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
   });
   const deleteThread = Effect.fn("T3ApplicationLive.deleteThread")(function* (threadId: string) {
     const thread = yield* orchestration.getThreadSnapshot(threadId).pipe(Effect.option);
-    const session = Option.isSome(thread) ? thread.value.session : null;
-    if (session !== null && (session.status as string) !== "closed") {
+    if (Option.isSome(thread) && sessionNeedsStopBeforeDelete(thread.value.session)) {
       const stopCommand = yield* makeThreadSessionStopCommand(threadId).pipe(
         Effect.provideService(Crypto.Crypto, crypto),
       );

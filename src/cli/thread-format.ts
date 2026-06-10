@@ -11,6 +11,13 @@ export function formatThreadsHuman(threads: ReadonlyArray<OrchestrationThreadShe
     .join("");
 }
 
+export function formatThreadDeletedHuman(input: {
+  readonly threadId: string;
+  readonly dispatch: { readonly sequence: number };
+}) {
+  return `thread deleted: ${input.threadId}\nsequence: ${input.dispatch.sequence}`;
+}
+
 export function formatThreadStartedHuman(input: {
   readonly thread: OrchestrationThread;
   readonly sequence: number;
