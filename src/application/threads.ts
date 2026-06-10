@@ -29,7 +29,6 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     const snapshot = yield* orchestration.getShellSnapshot();
     const scope = yield* resolveProjectScope(snapshot, {
       ref: projectRef,
-      cwd: environment.cwd,
     }).pipe(Effect.provideService(Path.Path, path));
     if (scope === undefined) {
       return yield* Effect.fail(
@@ -70,7 +69,6 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     }
     const scope = yield* resolveProjectScope(snapshot, {
       ref: projectRef,
-      cwd: environment.cwd,
     }).pipe(Effect.provideService(Path.Path, path));
     if (scope === undefined) {
       return yield* Effect.fail(

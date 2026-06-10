@@ -1,7 +1,13 @@
+import "vite-plus/test/config";
 import { defineConfig } from "vite-plus";
 import packageJson from "./package.json" with { type: "json" };
 
 export default defineConfig({
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.ts"],
+    exclude: ["**/node_modules/**", "**/dist/**", "upstream-t3code/**"],
+  },
   pack: {
     define: {
       T3CLI_VERSION: JSON.stringify(packageJson.version),
