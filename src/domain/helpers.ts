@@ -121,7 +121,7 @@ const findProjectByPathPriority = Effect.fn("findProjectByPathPriority")(functio
     return left.source === "worktree" ? -1 : 1;
   });
 
-  const best = candidates[0];
+  const best = candidates[0]!;
   if (absolutePath === best.matchPath) {
     if (best.source === "worktree" && best.matchPath !== best.workspaceRoot) {
       return { project: best.project, inferredWorktreePath: best.matchPath };
