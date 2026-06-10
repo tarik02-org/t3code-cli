@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { OrchestrationShellSnapshot } from "#t3tools/contracts";
 

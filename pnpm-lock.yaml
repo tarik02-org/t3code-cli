@@ -15,9 +15,6 @@ catalogs:
     vite-plus:
       specifier: 0.1.24
       version: 0.1.24
-    vitest:
-      specifier: 4.1.0
-      version: 4.1.0
 
 importers:
 
@@ -33,9 +30,6 @@ importers:
       '@changesets/cli':
         specifier: ^2.31.0
         version: 2.31.0(@types/node@25.9.1)
-      '@effect/vitest':
-        specifier: 'catalog:'
-        version: 4.0.0-beta.78(effect@4.0.0-beta.78)(vitest@4.1.0(@types/node@25.9.1)(vite@8.0.14(@types/node@25.9.1)(yaml@2.9.0)))
       '@t3tools/contracts':
         specifier: workspace:*
         version: link:upstream-t3code/packages/contracts
@@ -48,9 +42,6 @@ importers:
       vite-plus:
         specifier: ^0.1.24
         version: 0.1.24(@types/node@25.9.1)(typescript@6.0.3)(vite@8.0.14(@types/node@25.9.1)(yaml@2.9.0))(yaml@2.9.0)
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.0(@types/node@25.9.1)(vite@8.0.14(@types/node@25.9.1)(yaml@2.9.0))
 
   upstream-t3code/packages/contracts:
     dependencies:
