@@ -50,7 +50,7 @@ Lists available provider models. Use `--all` to include hidden or unavailable en
 ## thread
 
 ```sh
-t3cli thread list [--project <ref>]
+t3cli thread list [--project <ref>] [--archived | --all]
 t3cli thread start [message] [--project <ref>] [--stdin] [--title <title>] [--worktree <path>] [--provider <provider>] [--model <model>] [--option <key=value>] [--reasoning-effort <value>] [--effort <value>] [--fast-mode] [--thinking] [--wait]
 t3cli thread send [--thread <id>] [message] [--stdin] [--option <key=value>] [--reasoning-effort <value>] [--effort <value>] [--fast-mode] [--thinking] [--wait]
 t3cli thread messages [--thread <id>] [--limit <count>] [--full]

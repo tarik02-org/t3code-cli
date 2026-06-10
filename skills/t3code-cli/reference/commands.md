@@ -43,7 +43,7 @@ t3cli model list [--all] [--provider <name>] [--format json]
 ## thread
 
 ```sh
-t3cli thread list [--project <ref>] [--format json]
+t3cli thread list [--project <ref>] [--archived | --all] [--format json]
 
 t3cli thread start [message]
   [--project <ref>] [--stdin] [--title <title>] [--worktree <path>]
@@ -94,13 +94,14 @@ One JSON object per line:
 
 ## Errors
 
-| Tag                  | Cause                                                          |
-| -------------------- | -------------------------------------------------------------- |
-| `ProjectLookupError` | Unresolved `--project` / env / cwd                             |
-| `MissingThreadError` | Missing `--thread` / `T3CODE_THREAD_ID`                        |
-| `SelfArchiveError`   | Archiving thread matching `T3CODE_THREAD_ID` without `--force` |
-| `MessageInputError`  | No message arg and empty stdin                                 |
-| `InvalidLimitError`  | Invalid `--limit`                                              |
+| Tag                           | Cause                                                          |
+| ----------------------------- | -------------------------------------------------------------- |
+| `ProjectLookupError`          | Unresolved `--project` / env / cwd                             |
+| `MissingThreadError`          | Missing `--thread` / `T3CODE_THREAD_ID`                        |
+| `SelfArchiveError`            | Archiving thread matching `T3CODE_THREAD_ID` without `--force` |
+| `MessageInputError`           | No message arg and empty stdin                                 |
+| `InvalidLimitError`           | Invalid `--limit`                                              |
+| `InvalidFlagCombinationError` | Mutually exclusive flags (e.g. `--archived` and `--all`)       |
 
 Non-zero exit; message on stderr.
 

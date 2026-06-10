@@ -8,6 +8,7 @@ import {
   ServerSettingsError,
   WS_METHODS,
   WsOrchestrationDispatchCommandRpc,
+  WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,
   WsOrchestrationSubscribeThreadRpc,
 } from "#t3tools/contracts";
@@ -30,6 +31,7 @@ export const WsServerGetConfigRpc = Rpc.make(WS_METHODS.serverGetConfig, {
 
 export const CliWsRpcGroup = RpcGroup.make(
   WsOrchestrationDispatchCommandRpc,
+  WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,
   WsOrchestrationSubscribeThreadRpc,
   WsServerGetConfigRpc,

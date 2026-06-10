@@ -1,8 +1,14 @@
 import "vite-plus/test/config";
+import { resolve } from "node:path";
 import { defineConfig } from "vite-plus";
 import packageJson from "./package.json" with { type: "json" };
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "#t3tools/contracts": resolve("upstream-t3code/packages/contracts/src/index.ts"),
+    },
+  },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],

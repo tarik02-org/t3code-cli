@@ -29,3 +29,10 @@ export class SelfArchiveError extends Schema.TaggedErrorClass<SelfArchiveError>(
     threadId: Schema.String,
   },
 ) {}
+
+export class InvalidFlagCombinationError extends Schema.TaggedErrorClass<InvalidFlagCombinationError>()(
+  "InvalidFlagCombinationError",
+  {
+    message: Schema.String,
+  },
+) {}
