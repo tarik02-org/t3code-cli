@@ -1,8 +1,18 @@
 import "vite-plus/test/config";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite-plus";
 import packageJson from "./package.json" with { type: "json" };
 
+const contractsEntry = fileURLToPath(
+  new URL("./upstream-t3code/packages/contracts/src/index.ts", import.meta.url),
+);
+
 export default defineConfig({
+  resolve: {
+    alias: {
+      "#t3tools/contracts": contractsEntry,
+    },
+  },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],

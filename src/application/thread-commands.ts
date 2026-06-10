@@ -5,6 +5,7 @@ import {
   CommandId,
   MessageId,
   ThreadId,
+  TurnId,
   type ClientOrchestrationCommand,
   type ModelSelection,
   type OrchestrationProjectShell,
@@ -96,4 +97,36 @@ export const makeThreadArchiveCommand = Effect.fn("makeThreadArchiveCommand")(fu
     ),
     threadId: ThreadId.make(threadId),
   } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.archive" }>;
+});
+
+export const makeThreadUnarchiveCommand = Effect.fn("makeThreadUnarchiveCommand")(function* (
+  threadId: string,
+) {
+  const crypto = yield* Crypto.Crypto;
+  return {
+    type: "thread.unarchive",
+    commandId: CommandId.make(
+      `t3cli:thread-unarchive:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    ),
+    threadId: ThreadId.make(threadId),
+  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.unarchive" }>;
+});
+
+export const makeThreadInterruptCommand = Effect.fn("makeThreadInterruptCommand")(function* (
+  input: {
+    readonly threadId: string;
+    readonly turnId?: string;
+  },
+) {
+  const crypto = yield* Crypto.Crypto;
+  const createdAt = DateTime.formatIso(yield* DateTime.now);
+  return {
+    type: "thread.turn.interrupt",
+    commandId: CommandId.make(
+      `t3cli:thread-interrupt:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    ),
+    threadId: ThreadId.make(input.threadId),
+    ...(input.turnId !== undefined ? { turnId: TurnId.make(input.turnId) } : {}),
+    createdAt,
+  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.turn.interrupt" }>;
 });

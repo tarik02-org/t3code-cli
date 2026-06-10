@@ -2,7 +2,9 @@ import { Command } from "effect/unstable/cli";
 
 import { archiveThreadCommand } from "./threads/archive.ts";
 import { callbackThreadCommand } from "./threads/callback.ts";
+import { interruptThreadCommand } from "./threads/interrupt.ts";
 import { listThreadsCommand } from "./threads/list.ts";
+import { unarchiveThreadCommand } from "./threads/unarchive.ts";
 import { getThreadMessagesCommand } from "./threads/messages.ts";
 import { sendThreadCommand } from "./threads/send.ts";
 import { startThreadCommand } from "./threads/start.ts";
@@ -16,6 +18,8 @@ export function createThreadCommand() {
       startThreadCommand,
       sendThreadCommand,
       archiveThreadCommand,
+      interruptThreadCommand,
+      unarchiveThreadCommand,
       getThreadMessagesCommand,
       waitForThreadCommand,
       callbackThreadCommand,

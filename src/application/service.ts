@@ -72,6 +72,8 @@ export class T3Application extends Context.Service<
       threadId: string,
     ) => Effect.Effect<OrchestrationThread, ApplicationError>;
     readonly archiveThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
+    readonly interruptThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
+    readonly unarchiveThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
     readonly startThread: (
       input: StartThreadInput,
       policy?: StartThreadPolicy,

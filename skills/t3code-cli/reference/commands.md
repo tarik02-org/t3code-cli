@@ -4,7 +4,7 @@
 t3cli
 ├── project list|add
 ├── model list
-└── thread list|start|send|messages|wait|archive
+└── thread list|start|send|messages|wait|archive|interrupt|unarchive
 ```
 
 Auth commands: [setup.md](setup.md)
@@ -58,6 +58,8 @@ t3cli thread send [--thread <id>] [message] [--stdin]
 t3cli thread messages [--thread <id>] [--limit N] [--full] [--format json]
 t3cli thread wait [--thread <id>] [--format auto|human|ndjson]
 t3cli thread archive [--thread <id>] [--force|-f] [--format json]
+t3cli thread interrupt [--thread <id>] [--format json]
+t3cli thread unarchive [--thread <id>] [--format json]
 ```
 
 ### thread start responses
