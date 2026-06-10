@@ -4,7 +4,7 @@
 t3cli
 ├── project list|add
 ├── model list
-└── thread list|start|send|messages|wait|archive
+└── thread list|start|send|messages|wait|archive|update
 ```
 
 Auth commands: [setup.md](setup.md)
@@ -58,6 +58,14 @@ t3cli thread send [--thread <id>] [message] [--stdin]
 t3cli thread messages [--thread <id>] [--limit N] [--full] [--format json]
 t3cli thread wait [--thread <id>] [--format auto|human|ndjson]
 t3cli thread archive [--thread <id>] [--force|-f] [--format json]
+
+t3cli thread update [--thread <id>]
+  [--title <title>]
+  [--provider <name>] [--model <id>]
+  [--option key=value] [--reasoning-effort <v>] [--effort <v>] [--fast-mode] [--thinking]
+  [--branch <name>] [--clear-branch]
+  [--worktree <path>] [--clear-worktree]
+  [--format json]
 ```
 
 ### thread start responses
@@ -94,13 +102,15 @@ One JSON object per line:
 
 ## Errors
 
-| Tag                  | Cause                                                          |
-| -------------------- | -------------------------------------------------------------- |
-| `ProjectLookupError` | Unresolved `--project` / env / cwd                             |
-| `MissingThreadError` | Missing `--thread` / `T3CODE_THREAD_ID`                        |
-| `SelfArchiveError`   | Archiving thread matching `T3CODE_THREAD_ID` without `--force` |
-| `MessageInputError`  | No message arg and empty stdin                                 |
-| `InvalidLimitError`  | Invalid `--limit`                                              |
+| Tag                        | Cause                                                          |
+| -------------------------- | -------------------------------------------------------------- |
+| `ProjectLookupError`       | Unresolved `--project` / env / cwd                             |
+| `MissingThreadError`       | Missing `--thread` / `T3CODE_THREAD_ID`                        |
+| `SelfArchiveError`         | Archiving thread matching `T3CODE_THREAD_ID` without `--force` |
+| `MissingUpdateFieldsError` | `thread update` with no update fields                          |
+| `ConflictingUpdateFlagsError` | Conflicting update flags (e.g. `--branch` and `--clear-branch`) |
+| `MessageInputError`        | No message arg and empty stdin                                 |
+| `InvalidLimitError`        | Invalid `--limit`                                              |
 
 Non-zero exit; message on stderr.
 

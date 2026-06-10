@@ -6,6 +6,7 @@ import { listThreadsCommand } from "./threads/list.ts";
 import { getThreadMessagesCommand } from "./threads/messages.ts";
 import { sendThreadCommand } from "./threads/send.ts";
 import { startThreadCommand } from "./threads/start.ts";
+import { updateThreadCommand } from "./threads/update.ts";
 import { waitForThreadCommand } from "./threads/wait.ts";
 
 export function createThreadCommand() {
@@ -16,6 +17,7 @@ export function createThreadCommand() {
       startThreadCommand,
       sendThreadCommand,
       archiveThreadCommand,
+      updateThreadCommand,
       getThreadMessagesCommand,
       waitForThreadCommand,
       callbackThreadCommand,

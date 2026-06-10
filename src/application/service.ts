@@ -36,6 +36,18 @@ export type CallbackThreadInput = {
   readonly prompt: string;
 };
 
+export type UpdateThreadInput = {
+  readonly threadId: string;
+  readonly title?: string;
+  readonly provider?: string;
+  readonly model?: string;
+  readonly options?: NonNullable<ModelSelection["options"]>;
+  readonly branch?: string;
+  readonly clearBranch?: boolean;
+  readonly worktreePath?: string;
+  readonly clearWorktree?: boolean;
+};
+
 export type StartThreadPolicy = {
   readonly until: "dispatch" | "visible" | "complete";
 };
@@ -72,6 +84,9 @@ export class T3Application extends Context.Service<
       threadId: string,
     ) => Effect.Effect<OrchestrationThread, ApplicationError>;
     readonly archiveThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
+    readonly updateThread: (
+      input: UpdateThreadInput,
+    ) => Effect.Effect<DispatchResult, ApplicationError>;
     readonly startThread: (
       input: StartThreadInput,
       policy?: StartThreadPolicy,
