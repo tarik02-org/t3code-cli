@@ -29,6 +29,21 @@ function activityPayload(activity: OrchestrationThreadActivity): Record<string, 
   return payload;
 }
 
+// Mirrors upstream apps/web/src/session-logic.ts; `.failed` sorts after `.requested`
+// so stale provider failures clear same-timestamp pending requests before id tie-break.
+function compareActivityLifecycleRank(kind: string): number {
+  if (kind.endsWith(".started") || kind === "tool.started") {
+    return 0;
+  }
+  if (kind.endsWith(".progress") || kind.endsWith(".updated")) {
+    return 1;
+  }
+  if (kind.endsWith(".completed") || kind.endsWith(".resolved") || kind.endsWith(".failed")) {
+    return 2;
+  }
+  return 1;
+}
+
 function compareActivitiesByOrder(
   left: OrchestrationThreadActivity,
   right: OrchestrationThreadActivity,
@@ -42,10 +57,18 @@ function compareActivitiesByOrder(
   } else if (right.sequence !== undefined) {
     return -1;
   }
-  const byCreated = left.createdAt.localeCompare(right.createdAt);
-  if (byCreated !== 0) {
-    return byCreated;
+
+  const createdAtComparison = left.createdAt.localeCompare(right.createdAt);
+  if (createdAtComparison !== 0) {
+    return createdAtComparison;
   }
+
+  const lifecycleRankComparison =
+    compareActivityLifecycleRank(left.kind) - compareActivityLifecycleRank(right.kind);
+  if (lifecycleRankComparison !== 0) {
+    return lifecycleRankComparison;
+  }
+
   return left.id.localeCompare(right.id);
 }
 

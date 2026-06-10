@@ -10,7 +10,7 @@ import { type StartThreadInput } from "./service.ts";
 import type { SendThreadInput, CallbackThreadInput } from "./service.ts";
 import { mergeModelOptions } from "./model-selection.ts";
 import { derivePendingApprovals, derivePendingUserInputs } from "../domain/thread-activities.ts";
-import { threadStatus } from "../domain/thread-lifecycle.ts";
+import { threadStatus, type ThreadLifecycleStatus } from "../domain/thread-lifecycle.ts";
 import type { OrchestrationThread } from "#t3tools/contracts";
 import type { ProviderApprovalDecision, ProviderUserInputAnswers } from "#t3tools/contracts";
 import {
@@ -236,7 +236,7 @@ export type ThreadShow = {
   readonly id: string;
   readonly projectId: string;
   readonly title: string;
-  readonly status: string;
+  readonly status: ThreadLifecycleStatus;
   readonly session: OrchestrationThread["session"];
   readonly latestTurn: OrchestrationThread["latestTurn"];
   readonly modelSelection: OrchestrationThread["modelSelection"];

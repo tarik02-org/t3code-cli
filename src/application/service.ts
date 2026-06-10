@@ -9,6 +9,7 @@ import type {
   OrchestrationShellSnapshot,
   OrchestrationThread,
   OrchestrationThreadShell,
+  ProviderUserInputAnswers,
   ServerProvider,
 } from "#t3tools/contracts";
 
@@ -84,7 +85,7 @@ export class T3Application extends Context.Service<
     readonly respondToThread: (input: {
       readonly threadId: string;
       readonly requestId: string;
-      readonly answers: Record<string, unknown>;
+      readonly answers: ProviderUserInputAnswers;
     }) => Effect.Effect<
       { readonly threadId: string; readonly requestId: string; readonly dispatch: DispatchResult },
       ApplicationError

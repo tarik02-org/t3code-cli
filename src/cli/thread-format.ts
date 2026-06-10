@@ -4,7 +4,28 @@ import type { OrchestrationThread, OrchestrationThreadShell } from "#t3tools/con
 import { latestAssistantMessage, threadStatus } from "../domain/thread-lifecycle.ts";
 
 export function formatThreadShowJson(thread: ThreadShow) {
-  return thread;
+  return {
+    id: thread.id,
+    projectId: thread.projectId,
+    title: thread.title,
+    status: thread.status,
+    session: thread.session,
+    latestTurn: thread.latestTurn,
+    modelSelection: thread.modelSelection,
+    runtimeMode: thread.runtimeMode,
+    interactionMode: thread.interactionMode,
+    branch: thread.branch,
+    worktreePath: thread.worktreePath,
+    archivedAt: thread.archivedAt,
+    createdAt: thread.createdAt,
+    updatedAt: thread.updatedAt,
+    messageCount: thread.messageCount,
+    hasPendingApprovals: thread.hasPendingApprovals,
+    hasPendingUserInput: thread.hasPendingUserInput,
+    hasActionableProposedPlan: thread.hasActionableProposedPlan,
+    pendingApprovals: thread.pendingApprovals,
+    pendingUserInputs: thread.pendingUserInputs,
+  };
 }
 
 export function formatThreadShowHuman(thread: ThreadShow) {

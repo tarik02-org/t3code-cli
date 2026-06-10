@@ -16,6 +16,8 @@ export function isThreadActive(thread: OrchestrationThreadShell | OrchestrationT
   );
 }
 
+export type ThreadLifecycleStatus = ReturnType<typeof threadStatus>;
+
 export function threadStatus(thread: OrchestrationThreadShell | OrchestrationThread) {
   if (isPendingStart(thread)) {
     return "pending";

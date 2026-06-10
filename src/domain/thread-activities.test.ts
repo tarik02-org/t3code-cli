@@ -128,6 +128,35 @@ describe("derivePendingApprovals", () => {
     expect(derivePendingApprovals(activities)).toEqual([]);
   });
 
+  it("clears stale pending approvals when request and stale failure share createdAt", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "z-approval-open-same-ts",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "approval.requested",
+        summary: "Command approval requested",
+        tone: "approval",
+        payload: {
+          requestId: "req-same-ts-1",
+          requestKind: "command",
+        },
+      }),
+      makeActivity({
+        id: "a-approval-failed-same-ts",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "provider.approval.respond.failed",
+        summary: "Provider approval response failed",
+        tone: "error",
+        payload: {
+          requestId: "req-same-ts-1",
+          detail: "Unknown pending permission request: req-same-ts-1",
+        },
+      }),
+    ];
+
+    expect(derivePendingApprovals(activities)).toEqual([]);
+  });
+
   it("clears stale pending approvals when the backend marks them stale after restart", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({
