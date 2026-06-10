@@ -85,6 +85,14 @@ t3cli thread messages --thread <id> --format json
 printf '%s' "$PROMPT" | t3cli thread start --stdin --format json
 ```
 
+**Lifecycle**
+
+```sh
+t3cli thread interrupt --thread <id> --format json   # stop running turn
+t3cli thread archive --thread <id> --format json
+t3cli thread unarchive --thread <id> --format json
+```
+
 ## Output
 
 Use `json` for one-shot results; `ndjson` with `--wait` for streaming (`dispatch`, `thread`, `message`, `status`, `done`). Details: [reference/commands.md](reference/commands.md#ndjson-stream).

@@ -62,6 +62,8 @@ t3cli thread interrupt [--thread <id>] [--format json]
 t3cli thread unarchive [--thread <id>] [--format json]
 ```
 
+`thread interrupt` JSON: `{ "threadId": "…", "dispatch": { "sequence": N } }`. `thread archive` and `thread unarchive` JSON: bare `{ "sequence": N }` dispatch result.
+
 ### thread start responses
 
 | Mode                         | stdout                                       |
