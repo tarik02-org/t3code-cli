@@ -4,10 +4,7 @@ import * as Effect from "effect/Effect";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 
-import {
-  makeThreadInterruptCommand,
-  makeThreadUnarchiveCommand,
-} from "./thread-commands.ts";
+import { makeThreadInterruptCommand, makeThreadUnarchiveCommand } from "./thread-commands.ts";
 
 describe("thread command builders", () => {
   it.layer(NodeServices.layer)("thread command builders", (t) => {
