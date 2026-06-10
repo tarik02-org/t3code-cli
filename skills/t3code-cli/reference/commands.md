@@ -96,13 +96,13 @@ One JSON object per line:
 
 ## Errors
 
-| Tag                                  | Cause                                                            |
-| ------------------------------------ | ---------------------------------------------------------------- |
-| `ProjectLookupError`                 | Unresolved `--project` / env / cwd                               |
-| `MissingThreadError`                 | Missing `--thread` / `T3CODE_THREAD_ID`                          |
-| `SelfArchiveError`                   | Archiving thread matching `T3CODE_THREAD_ID` without `--force`   |
-| `MessageInputError`                  | No message arg and empty stdin                                   |
-| `InvalidLimitError`                  | Invalid `--limit`                                                |
+| Tag                                    | Cause                                                          |
+| -------------------------------------- | -------------------------------------------------------------- |
+| `ProjectLookupError`                   | Unresolved `--project` / env / cwd                             |
+| `MissingThreadError`                   | Missing `--thread` / `T3CODE_THREAD_ID`                        |
+| `SelfArchiveError`                     | Archiving thread matching `T3CODE_THREAD_ID` without `--force` |
+| `MessageInputError`                    | No message arg and empty stdin                                 |
+| `InvalidLimitError`                    | Invalid `--limit`                                              |
 | `DestructiveConfirmationRequiredError` | Missing `--yes` in non-interactive mode, or prompt declined    |
 
 Non-zero exit; message on stderr.

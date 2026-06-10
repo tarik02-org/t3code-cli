@@ -33,9 +33,7 @@ export const requireDestructiveConfirmation = Effect.fn("requireDestructiveConfi
         Prompt.confirm({ message: input.message, initial: false }),
       );
       if (!confirmed) {
-        return yield* Effect.fail(
-          new DestructiveConfirmationRequiredError({ message: "aborted" }),
-        );
+        return yield* Effect.fail(new DestructiveConfirmationRequiredError({ message: "aborted" }));
       }
     }
     return yield* Effect.void;
