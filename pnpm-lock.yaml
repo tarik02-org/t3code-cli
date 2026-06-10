@@ -41,6 +41,9 @@ importers:
       '@t3tools/contracts':
         specifier: workspace:*
         version: link:upstream-t3code/packages/contracts
+      '@total-typescript/shoehorn':
+        specifier: ^0.1.2
+        version: 0.1.2
       '@types/node':
         specifier: ^25.9.1
         version: 25.9.1
@@ -613,6 +616,9 @@ packages:
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
+  '@total-typescript/shoehorn@0.1.2':
+    resolution: {integrity: sha512-p7nNZbOZIofpDNyP0u1BctFbjxD44Qc+oO5jufgQdFdGIXJLc33QRloJpq7k5T59CTgLWfQSUxsuqLcmeurYRw==}
 
   '@tybys/wasm-util@0.10.2':
     resolution: {integrity: sha512-RoBvJ2X0wuKlWFIjrwffGw1IqZHKQqzIchKaadZZfnNpsAYp2mM0h36JtPCjNDAHGgYez/15uMBpfGwchhiMgg==}
@@ -1971,6 +1977,8 @@ snapshots:
   '@rolldown/pluginutils@1.0.1': {}
 
   '@standard-schema/spec@1.1.0': {}
+
+  '@total-typescript/shoehorn@0.1.2': {}
 
   '@tybys/wasm-util@0.10.2':
     dependencies:

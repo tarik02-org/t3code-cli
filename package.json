@@ -110,6 +110,7 @@
     "@changesets/cli": "^2.31.0",
     "@effect/vitest": "catalog:",
     "@t3tools/contracts": "workspace:*",
+    "@total-typescript/shoehorn": "^0.1.2",
     "@types/node": "^25.9.1",
     "typescript": "^6.0.3",
     "vite-plus": "^0.1.24"
