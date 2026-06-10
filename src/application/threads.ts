@@ -1,5 +1,6 @@
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 
 import { Environment } from "../environment/service.ts";
@@ -11,6 +12,8 @@ import type { SendThreadInput, CallbackThreadInput } from "./service.ts";
 import { mergeModelOptions } from "./model-selection.ts";
 import {
   makeThreadArchiveCommand,
+  makeThreadDeleteCommand,
+  makeThreadSessionStopCommand,
   makeThreadStartCommands,
   makeThreadTurnContinueCommand,
 } from "./thread-commands.ts";
@@ -50,6 +53,21 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
       Effect.provideService(Crypto.Crypto, crypto),
     );
     return yield* orchestration.dispatch(command);
+  });
+  const deleteThread = Effect.fn("T3ApplicationLive.deleteThread")(function* (threadId: string) {
+    const thread = yield* orchestration.getThreadSnapshot(threadId).pipe(Effect.option);
+    const session = Option.isSome(thread) ? thread.value.session : null;
+    if (session !== null && (session.status as string) !== "closed") {
+      const stopCommand = yield* makeThreadSessionStopCommand(threadId).pipe(
+        Effect.provideService(Crypto.Crypto, crypto),
+      );
+      yield* orchestration.dispatch(stopCommand).pipe(Effect.ignore);
+    }
+    const command = yield* makeThreadDeleteCommand(threadId).pipe(
+      Effect.provideService(Crypto.Crypto, crypto),
+    );
+    const dispatch = yield* orchestration.dispatch(command);
+    return { threadId, dispatch };
   });
   const startThread = Effect.fn("T3ApplicationLive.startThread")(function* (
     startInput: StartThreadInput,
@@ -187,6 +205,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
 
   return {
     archiveThread,
+    deleteThread,
     listThreads,
     getThreadMessages,
     sendThread,

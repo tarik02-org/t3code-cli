@@ -29,3 +29,8 @@ export class SelfArchiveError extends Schema.TaggedErrorClass<SelfArchiveError>(
     threadId: Schema.String,
   },
 ) {}
+
+export class DestructiveConfirmationRequiredError extends Schema.TaggedErrorClass<DestructiveConfirmationRequiredError>()(
+  "DestructiveConfirmationRequiredError",
+  { message: Schema.String },
+) {}

@@ -28,3 +28,18 @@ export const makeProjectCreateCommand = Effect.fn("makeProjectCreateCommand")(fu
     createdAt,
   } satisfies Extract<ClientOrchestrationCommand, { readonly type: "project.create" }>;
 });
+
+export const makeProjectDeleteCommand = Effect.fn("makeProjectDeleteCommand")(function* (input: {
+  readonly projectId: string;
+  readonly force?: boolean;
+}) {
+  const crypto = yield* Crypto.Crypto;
+  return {
+    type: "project.delete",
+    commandId: CommandId.make(
+      `t3cli:project-delete:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    ),
+    projectId: ProjectId.make(input.projectId),
+    ...(input.force === true ? { force: true } : {}),
+  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "project.delete" }>;
+});

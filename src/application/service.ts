@@ -61,6 +61,13 @@ export class T3Application extends Context.Service<
       { readonly dispatch: DispatchResult; readonly project: OrchestrationProjectShell },
       ApplicationError
     >;
+    readonly deleteProject: (input: {
+      readonly projectRef: string;
+      readonly force?: boolean;
+    }) => Effect.Effect<
+      { readonly projectId: string; readonly dispatch: DispatchResult },
+      ApplicationError
+    >;
     readonly listThreads: (projectRef: string) => Effect.Effect<
       {
         readonly project: OrchestrationProjectShell;
@@ -72,6 +79,10 @@ export class T3Application extends Context.Service<
       threadId: string,
     ) => Effect.Effect<OrchestrationThread, ApplicationError>;
     readonly archiveThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
+    readonly deleteThread: (threadId: string) => Effect.Effect<
+      { readonly threadId: string; readonly dispatch: DispatchResult },
+      ApplicationError
+    >;
     readonly startThread: (
       input: StartThreadInput,
       policy?: StartThreadPolicy,

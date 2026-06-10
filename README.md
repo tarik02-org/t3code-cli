@@ -35,6 +35,7 @@ Use `auth pair` with a pairing URL from a running t3code server, or `auth local`
 ```sh
 t3cli project list
 t3cli project add [--path <path>] [--title <title>]
+t3cli project delete [--project <ref>] [--force] [--yes]
 ```
 
 `project list` shows known projects. `project add` registers a project path with the server. `--path` defaults to the current directory.
@@ -56,6 +57,7 @@ t3cli thread send [--thread <id>] [message] [--stdin] [--option <key=value>] [--
 t3cli thread messages [--thread <id>] [--limit <count>] [--full]
 t3cli thread wait [--thread <id>]
 t3cli thread archive [--thread <id>]
+t3cli thread delete [--thread <id>] [--yes]
 ```
 
 `--project` accepts a project id or path. When omitted, the CLI resolves the project from the current directory only for local auth (`auth local` or `auth pair --local`). Resolution checks a registered `workspaceRoot`, paths under it, and known thread `worktreePath` values from the server snapshot. Remote pairings require an explicit `--project` or `T3CODE_PROJECT_*` env var. `thread start` infers the worktree from cwd unless `--worktree` or `T3CODE_WORKTREE_PATH` is set.

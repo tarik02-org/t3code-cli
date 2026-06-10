@@ -4,9 +4,9 @@ import * as Path from "effect/Path";
 
 import { Environment } from "../environment/service.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
-import { ProjectCreateVisibilityError } from "../domain/error.ts";
-import { findProjectById } from "../domain/helpers.ts";
-import { makeProjectCreateCommand } from "./project-commands.ts";
+import { ProjectCreateVisibilityError, ProjectLookupError } from "../domain/error.ts";
+import { findProjectById, resolveProjectScope } from "../domain/helpers.ts";
+import { makeProjectCreateCommand, makeProjectDeleteCommand } from "./project-commands.ts";
 import { waitForShellSequence } from "./shell-sequence.ts";
 
 export const makeProjectApplication = Effect.fn("makeProjectApplication")(function* () {
@@ -42,9 +42,33 @@ export const makeProjectApplication = Effect.fn("makeProjectApplication")(functi
     }
     return { dispatch, project };
   });
+  const deleteProject = Effect.fn("T3ApplicationLive.deleteProject")(function* (input: {
+    readonly projectRef: string;
+    readonly force?: boolean;
+  }) {
+    const snapshot = yield* orchestration.getShellSnapshot();
+    const scope = yield* resolveProjectScope(snapshot, {
+      ref: input.projectRef,
+    }).pipe(Effect.provideService(Path.Path, path));
+    if (scope === undefined) {
+      return yield* Effect.fail(
+        new ProjectLookupError({
+          message: `project not found: ${input.projectRef}`,
+          ref: input.projectRef,
+        }),
+      );
+    }
+    const command = yield* makeProjectDeleteCommand({
+      projectId: scope.project.id,
+      ...(input.force === true ? { force: true } : {}),
+    }).pipe(Effect.provideService(Crypto.Crypto, crypto));
+    const dispatch = yield* orchestration.dispatch(command);
+    return { projectId: scope.project.id, dispatch };
+  });
 
   return {
     loadShell,
     addProject,
+    deleteProject,
   };
 });

@@ -30,6 +30,16 @@ export const projectPathFlag = Flag.string("path").pipe(
   Flag.withDefault("."),
 );
 
+export const yesFlag = Flag.boolean("yes").pipe(
+  Flag.withDescription("Skip interactive confirmation"),
+  Flag.withDefault(false),
+);
+
+export const forceFlag = Flag.boolean("force").pipe(
+  Flag.withDescription("Delete non-empty project (cascade thread deletes)"),
+  Flag.withDefault(false),
+);
+
 export const formatFlag = Flag.choice("format", humanJsonFormatChoices).pipe(
   Flag.withDefault("auto"),
 );

@@ -2,9 +2,9 @@
 
 ```
 t3cli
-├── project list|add
+├── project list|add|delete
 ├── model list
-└── thread list|start|send|messages|wait|archive
+└── thread list|start|send|messages|wait|archive|delete
 ```
 
 Auth commands: [setup.md](setup.md)
@@ -30,6 +30,7 @@ Also treated as agent env (no live TTY): `CI`, `CODEX_CI`, `CODEX_THREAD_ID`.
 ```sh
 t3cli project list [--format json]
 t3cli project add [--path .] [--title <title>] [--format json]
+t3cli project delete [--project <ref>] [--force] [--yes] [--format json]
 ```
 
 `--path` defaults to current directory.
@@ -58,6 +59,7 @@ t3cli thread send [--thread <id>] [message] [--stdin]
 t3cli thread messages [--thread <id>] [--limit N] [--full] [--format json]
 t3cli thread wait [--thread <id>] [--format auto|human|ndjson]
 t3cli thread archive [--thread <id>] [--force|-f] [--format json]
+t3cli thread delete [--thread <id>] [--yes] [--format json]
 ```
 
 ### thread start responses
@@ -94,13 +96,14 @@ One JSON object per line:
 
 ## Errors
 
-| Tag                  | Cause                                                          |
-| -------------------- | -------------------------------------------------------------- |
-| `ProjectLookupError` | Unresolved `--project` / env / cwd                             |
-| `MissingThreadError` | Missing `--thread` / `T3CODE_THREAD_ID`                        |
-| `SelfArchiveError`   | Archiving thread matching `T3CODE_THREAD_ID` without `--force` |
-| `MessageInputError`  | No message arg and empty stdin                                 |
-| `InvalidLimitError`  | Invalid `--limit`                                              |
+| Tag                                  | Cause                                                            |
+| ------------------------------------ | ---------------------------------------------------------------- |
+| `ProjectLookupError`                 | Unresolved `--project` / env / cwd                               |
+| `MissingThreadError`                 | Missing `--thread` / `T3CODE_THREAD_ID`                          |
+| `SelfArchiveError`                   | Archiving thread matching `T3CODE_THREAD_ID` without `--force`   |
+| `MessageInputError`                  | No message arg and empty stdin                                   |
+| `InvalidLimitError`                  | Invalid `--limit`                                                |
+| `DestructiveConfirmationRequiredError` | Missing `--yes` in non-interactive mode, or prompt declined    |
 
 Non-zero exit; message on stderr.
 
