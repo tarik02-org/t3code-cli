@@ -1,21 +1,19 @@
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
-import type { ModelSelection } from "#t3tools/contracts";
-
 import { Environment } from "../environment/service.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
-import { ProjectLookupError, ThreadEventError, ThreadSessionError } from "../domain/error.ts";
+import { ProjectLookupError, ThreadSessionError } from "../domain/error.ts";
 import { resolveProjectScope } from "../domain/helpers.ts";
 import { type StartThreadInput } from "./service.ts";
-import type { CallbackThreadInput, SendThreadInput, UpdateThreadInput } from "./service.ts";
-import { mergeModelOptions, resolveModelSelection } from "./model-selection.ts";
+import type { CallbackThreadInput, SendThreadInput } from "./service.ts";
+import { mergeModelOptions } from "./model-selection.ts";
 import {
   makeThreadArchiveCommand,
-  makeThreadMetaUpdateCommand,
   makeThreadStartCommands,
   makeThreadTurnContinueCommand,
 } from "./thread-commands.ts";
+import { makeUpdateThread } from "./thread-update.ts";
 import {
   waitForThread as waitForThreadUntilComplete,
   watchThread as watchThreadEvents,
@@ -53,60 +51,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     );
     return yield* orchestration.dispatch(command);
   });
-  const updateThread = Effect.fn("T3ApplicationLive.updateThread")(function* (
-    input: UpdateThreadInput,
-  ) {
-    const hasProvider = input.provider !== undefined && input.provider.length > 0;
-    const hasModel = input.model !== undefined && input.model.length > 0;
-    const hasOptions = input.options !== undefined && input.options.length > 0;
-    let modelSelection: ModelSelection | undefined;
-    if (hasProvider || hasModel || hasOptions) {
-      if (hasProvider || hasModel) {
-        const snapshot = yield* orchestration.getShellSnapshot();
-        const threadShell = snapshot.threads.find((thread) => thread.id === input.threadId);
-        const project =
-          threadShell === undefined
-            ? undefined
-            : snapshot.projects.find((entry) => entry.id === threadShell.projectId);
-        if (threadShell === undefined || project === undefined) {
-          return yield* Effect.fail(
-            new ThreadEventError({
-              message: `thread not found in shell snapshot: ${input.threadId}`,
-            }),
-          );
-        }
-        const serverConfig = yield* orchestration.getServerConfig();
-        modelSelection = yield* resolveModelSelection({
-          start: {
-            message: "",
-            ...(hasProvider ? { provider: input.provider } : {}),
-            ...(hasModel ? { model: input.model } : {}),
-            ...(hasOptions ? { options: input.options } : {}),
-          },
-          project,
-          serverConfig,
-        });
-      } else {
-        const thread = yield* orchestration.getThreadSnapshot(input.threadId);
-        modelSelection = mergeModelOptions(thread.modelSelection, input.options!);
-      }
-    }
-    const command = yield* makeThreadMetaUpdateCommand(input.threadId, {
-      ...(input.title !== undefined ? { title: input.title } : {}),
-      ...(modelSelection !== undefined ? { modelSelection } : {}),
-      ...(input.clearBranch === true
-        ? { branch: null }
-        : input.branch !== undefined
-          ? { branch: input.branch }
-          : {}),
-      ...(input.clearWorktree === true
-        ? { worktreePath: null }
-        : input.worktreePath !== undefined
-          ? { worktreePath: input.worktreePath }
-          : {}),
-    }).pipe(Effect.provideService(Crypto.Crypto, crypto));
-    return yield* orchestration.dispatch(command);
-  });
+  const updateThread = makeUpdateThread({ orchestration, crypto });
   const startThread = Effect.fn("T3ApplicationLive.startThread")(function* (
     startInput: StartThreadInput,
     policy?: {

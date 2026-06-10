@@ -120,10 +120,16 @@ export const updateThreadCommand = Command.make(
         ...(hasProvider ? { provider: providerValue } : {}),
         ...(hasModel ? { model: modelValue } : {}),
         ...(options.length > 0 ? { options } : {}),
-        ...(hasBranch ? { branch: branchValue } : {}),
-        ...(clearBranchValue === true ? { clearBranch: true } : {}),
-        ...(hasWorktree ? { worktreePath: worktreeValue } : {}),
-        ...(clearWorktreeValue === true ? { clearWorktree: true } : {}),
+        ...(clearBranchValue === true
+          ? { branch: null }
+          : hasBranch
+            ? { branch: branchValue }
+            : {}),
+        ...(clearWorktreeValue === true
+          ? { worktreePath: null }
+          : hasWorktree
+            ? { worktreePath: worktreeValue }
+            : {}),
       });
       const resolvedFormat = resolveOutputFormat(format, environment, "json");
       if (resolvedFormat === "json") {

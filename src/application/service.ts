@@ -42,10 +42,8 @@ export type UpdateThreadInput = {
   readonly provider?: string;
   readonly model?: string;
   readonly options?: NonNullable<ModelSelection["options"]>;
-  readonly branch?: string;
-  readonly clearBranch?: boolean;
-  readonly worktreePath?: string;
-  readonly clearWorktree?: boolean;
+  readonly branch?: string | null;
+  readonly worktreePath?: string | null;
 };
 
 export type StartThreadPolicy = {

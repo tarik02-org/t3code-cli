@@ -75,10 +75,64 @@ export function mergeModelOptions(
 }
 
 function withModelOptions(input: StartThreadInput, selection: ModelSelection): ModelSelection {
-  if (input.options === undefined || input.options.length === 0) {
+  return applyModelOptions(selection, input.options);
+}
+
+function applyModelOptions(
+  selection: ModelSelection,
+  options: NonNullable<ModelSelection["options"]> | undefined,
+): ModelSelection {
+  if (options === undefined || options.length === 0) {
     return selection;
   }
-  return mergeModelOptions(selection, input.options);
+  return mergeModelOptions(selection, options);
+}
+
+export function resolveUpdateModelSelection(input: {
+  readonly current: ModelSelection;
+  readonly provider?: string;
+  readonly model?: string;
+  readonly options?: NonNullable<ModelSelection["options"]>;
+  readonly project: OrchestrationProjectShell;
+  readonly serverConfig: ServerConfigForCli;
+}) {
+  return Effect.gen(function* () {
+    const hasProvider = input.provider !== undefined && input.provider.length > 0;
+    const hasModel = input.model !== undefined && input.model.length > 0;
+    if (hasProvider && hasModel) {
+      return applyModelOptions(
+        {
+          instanceId: ProviderInstanceId.make(input.provider),
+          model: input.model,
+        },
+        input.options,
+      );
+    }
+    if (hasProvider) {
+      const provider = yield* findProvider(input.serverConfig, input.provider);
+      const model = firstSelectableModel(provider);
+      if (model === undefined) {
+        return yield* failNoAvailableModel();
+      }
+      return applyModelOptions(
+        {
+          instanceId: ProviderInstanceId.make(input.provider),
+          model: model.slug,
+        },
+        input.options,
+      );
+    }
+    if (hasModel) {
+      return applyModelOptions(
+        {
+          instanceId: input.current.instanceId,
+          model: input.model,
+        },
+        input.options,
+      );
+    }
+    return applyModelOptions(input.current, input.options);
+  });
 }
 
 function firstAvailableModel(serverConfig: ServerConfigForCli) {

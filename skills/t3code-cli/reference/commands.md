@@ -108,7 +108,7 @@ One JSON object per line:
 | `MissingThreadError`          | Missing `--thread` / `T3CODE_THREAD_ID`                         |
 | `SelfArchiveError`            | Archiving thread matching `T3CODE_THREAD_ID` without `--force`  |
 | `MissingUpdateFieldsError`    | `thread update` with no update fields                           |
-| `ConflictingUpdateFlagsError` | Conflicting update flags (e.g. `--branch` and `--clear-branch`) |
+| `ConflictingUpdateFlagsError` | Conflicting `thread update` branch/worktree flags               |
 | `MessageInputError`           | No message arg and empty stdin                                  |
 | `InvalidLimitError`           | Invalid `--limit`                                               |
 
