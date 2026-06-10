@@ -1,5 +1,11 @@
 # t3code-cli
 
+## 0.7.0
+
+### Minor Changes
+
+- e38eeb8: fix project resolution precedence for nested worktrees and paths
+
 ## 0.6.0
 
 ### Minor Changes
