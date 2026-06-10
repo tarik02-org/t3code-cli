@@ -56,7 +56,9 @@ describe("listThreads", () => {
           makeThread("active-1", "proj-1", null),
           makeThread("active-2", "proj-1", null),
         ]);
-        const archived = makeSnapshot([makeThread("archived-1", "proj-1", "2026-01-01T00:00:00.000Z")]);
+        const archived = makeSnapshot([
+          makeThread("archived-1", "proj-1", "2026-01-01T00:00:00.000Z"),
+        ]);
         const app = yield* makeThreadApplication().pipe(
           Effect.provide(testLayer(makeOrchestrationLayer({ active, archived }))),
         );

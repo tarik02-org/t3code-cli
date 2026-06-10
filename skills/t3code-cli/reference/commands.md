@@ -94,14 +94,14 @@ One JSON object per line:
 
 ## Errors
 
-| Tag                           | Cause                                                          |
-| ----------------------------- | -------------------------------------------------------------- |
-| `ProjectLookupError`          | Unresolved `--project` / env / cwd                             |
-| `MissingThreadError`          | Missing `--thread` / `T3CODE_THREAD_ID`                        |
-| `SelfArchiveError`            | Archiving thread matching `T3CODE_THREAD_ID` without `--force` |
-| `MessageInputError`           | No message arg and empty stdin                                 |
-| `InvalidLimitError`           | Invalid `--limit`                                              |
-| `InvalidFlagCombinationError` | Mutually exclusive flags (e.g. `--archived` and `--all`)       |
+| Tag                           | Cause                                                            |
+| ----------------------------- | ---------------------------------------------------------------- |
+| `ProjectLookupError`          | Unresolved `--project` / env / cwd                               |
+| `MissingThreadError`          | Missing `--thread` / `T3CODE_THREAD_ID`                          |
+| `SelfArchiveError`            | Archiving thread matching `T3CODE_THREAD_ID` without `--force`   |
+| `MessageInputError`           | No message arg and empty stdin                                   |
+| `InvalidLimitError`           | Invalid `--limit`                                                |
+| `InvalidFlagCombinationError` | Mutually exclusive flags (e.g. `--archived` and `--all`)         |
 
 Non-zero exit; message on stderr.
 
