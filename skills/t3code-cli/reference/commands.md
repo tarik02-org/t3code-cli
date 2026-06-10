@@ -4,7 +4,7 @@
 t3cli
 ├── project list|add
 ├── model list
-└── thread list|start|send|messages|wait|archive
+└── thread list|start|send|show|approve|respond|messages|wait|archive
 ```
 
 Auth commands: [setup.md](setup.md)
@@ -55,6 +55,9 @@ t3cli thread send [--thread <id>] [message] [--stdin]
   [--option ...] [--reasoning-effort] [--effort] [--fast-mode] [--thinking]
   [--wait] [--format auto|human|json|ndjson]
 
+t3cli thread show [--thread <id>] [--format auto|human|json]
+t3cli thread approve --request <id> --decision accept|decline|cancel [--thread <id>] [--format json]
+t3cli thread respond --request <id> [--answers <json>] [--stdin] [--thread <id>] [--format json]
 t3cli thread messages [--thread <id>] [--limit N] [--full] [--format json]
 t3cli thread wait [--thread <id>] [--format auto|human|ndjson]
 t3cli thread archive [--thread <id>] [--force|-f] [--format json]
@@ -94,13 +97,14 @@ One JSON object per line:
 
 ## Errors
 
-| Tag                  | Cause                                                          |
-| -------------------- | -------------------------------------------------------------- |
-| `ProjectLookupError` | Unresolved `--project` / env / cwd                             |
-| `MissingThreadError` | Missing `--thread` / `T3CODE_THREAD_ID`                        |
-| `SelfArchiveError`   | Archiving thread matching `T3CODE_THREAD_ID` without `--force` |
-| `MessageInputError`  | No message arg and empty stdin                                 |
-| `InvalidLimitError`  | Invalid `--limit`                                              |
+| Tag                   | Cause                                                          |
+| --------------------- | -------------------------------------------------------------- |
+| `ProjectLookupError`  | Unresolved `--project` / env / cwd                             |
+| `MissingThreadError`  | Missing `--thread` / `T3CODE_THREAD_ID`                        |
+| `SelfArchiveError`    | Archiving thread matching `T3CODE_THREAD_ID` without `--force` |
+| `MissingRequestError` | Missing `--request` on approve/respond                         |
+| `MessageInputError`   | No message arg and empty stdin                                 |
+| `InvalidLimitError`   | Invalid `--limit`                                              |
 
 Non-zero exit; message on stderr.
 
