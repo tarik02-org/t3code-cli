@@ -11,17 +11,20 @@ export const resolveProjectScope = Effect.fn("resolveProjectScope")(function* (
   snapshot: OrchestrationShellSnapshot,
   input: {
     readonly ref: string;
-    readonly cwd: string;
   },
 ) {
-  const absoluteRef = yield* resolveAbsolutePath(input.ref, input.cwd);
+  const path = yield* Path.Path;
 
   const byId = findProjectById(snapshot, input.ref);
   if (byId !== null) {
     return { project: byId };
   }
 
-  return yield* findProjectByPathPriority(snapshot, absoluteRef, input.cwd);
+  if (!path.isAbsolute(input.ref)) {
+    return undefined;
+  }
+
+  return yield* findProjectByPathPriority(snapshot, path.normalize(input.ref));
 });
 
 export function findProjectById(
@@ -30,11 +33,6 @@ export function findProjectById(
 ): OrchestrationProjectShell | null {
   return snapshot.projects.find((project) => project.id === projectId) ?? null;
 }
-
-const resolveAbsolutePath = Effect.fn("resolveAbsolutePath")(function* (ref: string, cwd: string) {
-  const path = yield* Path.Path;
-  return path.isAbsolute(ref) ? path.normalize(ref) : path.normalize(path.resolve(cwd, ref));
-});
 
 const isDescendantPath = Effect.fn("isDescendantPath")(function* (parent: string, child: string) {
   const path = yield* Path.Path;
@@ -48,15 +46,13 @@ const isDescendantPath = Effect.fn("isDescendantPath")(function* (parent: string
 const findProjectByPathPriority = Effect.fn("findProjectByPathPriority")(function* (
   snapshot: OrchestrationShellSnapshot,
   absolutePath: string,
-  cwd: string,
 ) {
+  const path = yield* Path.Path;
   const projectsById = new Map(snapshot.projects.map((project) => [project.id, project]));
   const workspaceRoots = new Map(
     yield* Effect.all(
       snapshot.projects.map((project) =>
-        resolveAbsolutePath(project.workspaceRoot, cwd).pipe(
-          Effect.map((workspaceRoot) => [project.id, workspaceRoot] as const),
-        ),
+        Effect.succeed([project.id, path.normalize(project.workspaceRoot)] as const),
       ),
     ),
   );
@@ -79,7 +75,7 @@ const findProjectByPathPriority = Effect.fn("findProjectByPathPriority")(functio
     if (workspaceRoot === undefined) {
       continue;
     }
-    const matchPath = yield* resolveAbsolutePath(thread.worktreePath, cwd);
+    const matchPath = path.normalize(thread.worktreePath);
     if (!(yield* isDescendantPath(matchPath, absolutePath))) {
       continue;
     }
