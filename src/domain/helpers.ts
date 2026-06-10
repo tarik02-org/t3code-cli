@@ -50,10 +50,8 @@ const findProjectByPathPriority = Effect.fn("findProjectByPathPriority")(functio
   const path = yield* Path.Path;
   const projectsById = new Map(snapshot.projects.map((project) => [project.id, project]));
   const workspaceRoots = new Map(
-    yield* Effect.all(
-      snapshot.projects.map((project) =>
-        Effect.succeed([project.id, path.normalize(project.workspaceRoot)] as const),
-      ),
+    snapshot.projects.map(
+      (project) => [project.id, path.normalize(project.workspaceRoot)] as const,
     ),
   );
   const candidates: Array<{
