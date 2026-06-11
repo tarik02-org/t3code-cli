@@ -19,6 +19,8 @@ import {
   watchThread as watchThreadEvents,
 } from "./thread-wait.ts";
 import { waitForShellSequence } from "./shell-sequence.ts";
+import { waitForThreadAndPrepareSend } from "./thread-callback.ts";
+import type { CallbackThreadInput } from "./service.ts";
 
 export const makeThreadApplication = Effect.fn("makeThreadApplication")(function* () {
   const orchestration = yield* T3Orchestration;
@@ -173,6 +175,21 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     yield* failIfThreadError(thread);
     return thread;
   });
+  const callbackThread = Effect.fn("T3ApplicationLive.callbackThread")(function* (
+    input: CallbackThreadInput,
+  ) {
+    const sendInput = yield* waitForThreadAndPrepareSend({
+      orchestration,
+      fromThreadId: input.fromThreadId,
+      targetThreadId: input.targetThreadId,
+      prompt: input.prompt,
+    });
+    const command = yield* makeThreadTurnContinueCommand(sendInput).pipe(
+      Effect.provideService(Crypto.Crypto, crypto),
+    );
+    const dispatch = yield* orchestration.dispatch(command);
+    return { dispatch, targetThreadId: input.targetThreadId };
+  });
 
   return {
     archiveThread,
@@ -182,6 +199,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     startThread,
     watchThread,
     waitForThread,
+    callbackThread,
   };
 });
 
