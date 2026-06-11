@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as ChildProcess from "effect/unstable/process/ChildProcess";
+import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { Command, Flag } from "effect/unstable/cli";
 
 import { threadFlag } from "../flags.ts";
@@ -8,41 +10,7 @@ import { resolveThreadId } from "../../scope/index.ts";
 import { Environment } from "../../environment/service.ts";
 import { T3Application } from "../../application/service.ts";
 import { T3Output } from "../output/service.ts";
-
-async function spawnBackgroundCallback(
-  fromThreadId: string,
-  targetThreadId: string,
-  prompt: string,
-): Promise<number | undefined> {
-  const cliPath = process.argv[1] ?? "dist/bin.js";
-
-  const args: string[] = [
-    cliPath,
-    "thread",
-    "callback",
-    "--from",
-    fromThreadId,
-    "--thread",
-    targetThreadId,
-    "--prompt",
-    prompt,
-  ];
-
-  const cp = await import("node:child_process");
-  const child = cp.spawn(process.execPath, args, {
-    detached: true,
-    stdio: "ignore",
-    env: process.env,
-  });
-
-  child.on("error", (err: Error) => {
-    process.stderr.write(`callback spawn error: ${err.message}\n`);
-  });
-
-  child.unref();
-
-  return child.pid ?? undefined;
-}
+import { CliPath } from "../../cli-path/service.ts";
 
 export const callbackThreadCommand = Command.make(
   "callback",
@@ -60,6 +28,8 @@ export const callbackThreadCommand = Command.make(
       const application = yield* T3Application;
       const environment = yield* Environment;
       const output = yield* T3Output;
+      const cliPath = yield* CliPath;
+      const spawner = yield* ChildProcessSpawner;
 
       const fromThreadId = from;
 
@@ -77,11 +47,35 @@ export const callbackThreadCommand = Command.make(
 
       const isBackground = Option.getOrElse(background, () => false);
       if (isBackground) {
-        const pid = yield* Effect.promise(() =>
-          spawnBackgroundCallback(fromThreadId, targetThreadId, prompt),
-        );
+        const args = [
+          cliPath.path,
+          "thread",
+          "callback",
+          "--from",
+          fromThreadId,
+          "--thread",
+          targetThreadId,
+          "--prompt",
+          prompt,
+        ];
+
+        // Build the command and spawn with proper Effect handling
+        const proc = ChildProcess.make(process.execPath, args, {
+          detached: true,
+          stdin: "ignore",
+          stdout: "ignore",
+          stderr: "ignore",
+        });
+
+        // Spawn, unref, and discard the process
+        const handle = yield* spawner.spawn(proc);
+        const reref = yield* handle.unref;
+
+        // Close the reref since we don't need it (process stays detached)
+        yield* reref.pipe(Effect.ignore);
+
         yield* output.printInfo(
-          `background callback scheduled: ${fromThreadId} -> ${targetThreadId} (pid: ${pid})`,
+          `background callback scheduled: ${fromThreadId} -> ${targetThreadId} (pid: ${handle.pid})`,
         );
         return undefined;
       }
