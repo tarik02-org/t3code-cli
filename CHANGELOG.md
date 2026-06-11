@@ -1,5 +1,23 @@
 # t3code-cli
 
+## 0.8.0
+
+### Minor Changes
+
+- 1c4e911: add t3cli thread callback command
+
+  new subcommand to watch a thread and send a message when it completes:
+  - --from: source thread id to watch
+  - --thread: target thread id (or T3CODE_THREAD_ID env var)
+  - --prompt: message to send
+  - --background: fork detached watcher process
+
+  use cases: async handoffs, parallel work notifications
+
+### Patch Changes
+
+- 73652ca: Update `upstream-t3code` submodule to latest `main`.
+
 ## 0.7.0
 
 ### Minor Changes
