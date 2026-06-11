@@ -17,7 +17,7 @@ import { T3CodeConnectionProvider, makeT3CodeConnectionProvider } from "../conne
 import { T3OrchestrationLive } from "../orchestration/layer.ts";
 import { T3RpcLive } from "../rpc/layer.ts";
 import { NodeSqlClientFactoryLive } from "../sql/node-sqlite-client.ts";
-import { NodeCliPathLive } from "../cli-path/layer.ts";
+import { makeNodeCliPathLive } from "../cli-path/layer.ts";
 
 export const T3AuthTransportLayer = T3AuthTransportLive.pipe(
   Layer.provide(NodeHttpClient.layerUndici),
@@ -77,5 +77,5 @@ export const AppLayer = Layer.mergeAll(
   T3RpcLayer,
   T3OrchestrationLayer,
   T3ApplicationLayer,
-  NodeCliPathLive,
+  makeNodeCliPathLive,
 );

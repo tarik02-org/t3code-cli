@@ -7,7 +7,7 @@ import { T3Orchestration } from "../orchestration/service.ts";
 import { ProjectLookupError, ThreadSessionError } from "../domain/error.ts";
 import { resolveProjectScope } from "../domain/helpers.ts";
 import { type StartThreadInput } from "./service.ts";
-import type { SendThreadInput } from "./service.ts";
+import type { SendThreadInput, CallbackThreadInput } from "./service.ts";
 import { mergeModelOptions } from "./model-selection.ts";
 import {
   makeThreadArchiveCommand,
@@ -19,8 +19,6 @@ import {
   watchThread as watchThreadEvents,
 } from "./thread-wait.ts";
 import { waitForShellSequence } from "./shell-sequence.ts";
-import { waitForThreadAndPrepareSend } from "./thread-callback.ts";
-import type { CallbackThreadInput } from "./service.ts";
 
 export const makeThreadApplication = Effect.fn("makeThreadApplication")(function* () {
   const orchestration = yield* T3Orchestration;
@@ -178,17 +176,15 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
   const callbackThread = Effect.fn("T3ApplicationLive.callbackThread")(function* (
     input: CallbackThreadInput,
   ) {
-    const sendInput = yield* waitForThreadAndPrepareSend({
+    yield* waitForThreadUntilComplete({
       orchestration,
-      fromThreadId: input.fromThreadId,
-      targetThreadId: input.targetThreadId,
-      prompt: input.prompt,
+      threadId: input.fromThreadId,
     });
-    const command = yield* makeThreadTurnContinueCommand(sendInput).pipe(
-      Effect.provideService(Crypto.Crypto, crypto),
+    const result = yield* sendThread(
+      { threadId: input.targetThreadId, message: input.prompt },
+      { until: "dispatch" },
     );
-    const dispatch = yield* orchestration.dispatch(command);
-    return { dispatch, targetThreadId: input.targetThreadId };
+    return { dispatch: result.dispatch, targetThreadId: input.targetThreadId };
   });
 
   return {
