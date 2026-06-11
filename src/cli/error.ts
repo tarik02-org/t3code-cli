@@ -21,3 +21,11 @@ export class MissingThreadError extends Schema.TaggedErrorClass<MissingThreadErr
     message: Schema.String,
   },
 ) {}
+
+export class SelfArchiveError extends Schema.TaggedErrorClass<SelfArchiveError>()(
+  "SelfArchiveError",
+  {
+    message: Schema.String,
+    threadId: Schema.String,
+  },
+) {}
