@@ -57,7 +57,7 @@ t3cli thread send [--thread <id>] [message] [--stdin]
 
 t3cli thread messages [--thread <id>] [--limit N] [--full] [--format json]
 t3cli thread wait [--thread <id>] [--format auto|human|ndjson]
-t3cli thread archive [--thread <id>] [--format json]
+t3cli thread archive [--thread <id>] [--force|-f] [--format json]
 ```
 
 ### thread start responses
@@ -94,12 +94,13 @@ One JSON object per line:
 
 ## Errors
 
-| Tag                  | Cause                                   |
-| -------------------- | --------------------------------------- |
-| `ProjectLookupError` | Unresolved `--project` / env / cwd      |
-| `MissingThreadError` | Missing `--thread` / `T3CODE_THREAD_ID` |
-| `MessageInputError`  | No message arg and empty stdin          |
-| `InvalidLimitError`  | Invalid `--limit`                       |
+| Tag                  | Cause                                                          |
+| -------------------- | -------------------------------------------------------------- |
+| `ProjectLookupError` | Unresolved `--project` / env / cwd                             |
+| `MissingThreadError` | Missing `--thread` / `T3CODE_THREAD_ID`                        |
+| `SelfArchiveError`   | Archiving thread matching `T3CODE_THREAD_ID` without `--force` |
+| `MessageInputError`  | No message arg and empty stdin                                 |
+| `InvalidLimitError`  | Invalid `--limit`                                              |
 
 Non-zero exit; message on stderr.
 
