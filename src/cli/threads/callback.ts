@@ -9,6 +9,41 @@ import { Environment } from "../../environment/service.ts";
 import { T3Application } from "../../application/service.ts";
 import { T3Output } from "../output/service.ts";
 
+async function spawnBackgroundCallback(
+  fromThreadId: string,
+  targetThreadId: string,
+  prompt: string,
+): Promise<number | undefined> {
+  const cliPath = process.argv[1] ?? "dist/bin.js";
+
+  const args: string[] = [
+    cliPath,
+    "thread",
+    "callback",
+    "--from",
+    fromThreadId,
+    "--thread",
+    targetThreadId,
+    "--prompt",
+    prompt,
+  ];
+
+  const cp = await import("node:child_process");
+  const child = cp.spawn(process.execPath, args, {
+    detached: true,
+    stdio: "ignore",
+    env: process.env,
+  });
+
+  child.on("error", (err: Error) => {
+    process.stderr.write(`callback spawn error: ${err.message}\n`);
+  });
+
+  child.unref();
+
+  return child.pid ?? undefined;
+}
+
 export const callbackThreadCommand = Command.make(
   "callback",
   {
@@ -42,35 +77,11 @@ export const callbackThreadCommand = Command.make(
 
       const isBackground = Option.getOrElse(background, () => false);
       if (isBackground) {
-        // Fork and detach process
-        const { spawn } = yield* Effect.promise(() => import("node:child_process"));
-        const { fileURLToPath } = yield* Effect.promise(() => import("node:url"));
-        const { dirname, resolve } = yield* Effect.promise(() => import("node:path"));
-
-        const thisFilePath = fileURLToPath(import.meta.url);
-        const thisDirPath = dirname(thisFilePath);
-        const cliPath = resolve(thisDirPath, "../../main.ts");
-
-        const args = [
-          "thread",
-          "callback",
-          "--from",
-          fromThreadId,
-          "--thread",
-          targetThreadId,
-          "--prompt",
-          prompt,
-        ];
-
-        // Use nohup-style detachment
-        const child = spawn(process.execPath, [cliPath, ...args], {
-          detached: true,
-          stdio: "ignore",
-        });
-        child.unref();
-
+        const pid = yield* Effect.promise(() =>
+          spawnBackgroundCallback(fromThreadId, targetThreadId, prompt),
+        );
         yield* output.printInfo(
-          `background callback scheduled: ${fromThreadId} -> ${targetThreadId} (pid: ${child.pid})`,
+          `background callback scheduled: ${fromThreadId} -> ${targetThreadId} (pid: ${pid})`,
         );
         return undefined;
       }
