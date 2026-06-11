@@ -29,3 +29,10 @@ export class SelfArchiveError extends Schema.TaggedErrorClass<SelfArchiveError>(
     threadId: Schema.String,
   },
 ) {}
+
+export class MissingRequestError extends Schema.TaggedErrorClass<MissingRequestError>()(
+  "MissingRequestError",
+  {
+    message: Schema.String,
+  },
+) {}
