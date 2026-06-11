@@ -30,6 +30,12 @@ export type SendThreadInput = {
   readonly options?: NonNullable<ModelSelection["options"]>;
 };
 
+export type CallbackThreadInput = {
+  readonly fromThreadId: string;
+  readonly targetThreadId: string;
+  readonly prompt: string;
+};
+
 export type StartThreadPolicy = {
   readonly until: "dispatch" | "visible" | "complete";
 };
@@ -93,5 +99,12 @@ export class T3Application extends Context.Service<
     readonly waitForThread: (
       threadId: string,
     ) => Effect.Effect<OrchestrationThread, ApplicationError>;
+    readonly callbackThread: (input: CallbackThreadInput) => Effect.Effect<
+      {
+        readonly dispatch: DispatchResult;
+        readonly targetThreadId: string;
+      },
+      ApplicationError
+    >;
   }
 >()("t3cli/T3Application") {}

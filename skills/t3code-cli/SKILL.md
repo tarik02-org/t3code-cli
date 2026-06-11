@@ -51,6 +51,32 @@ t3cli thread start "task" --format ndjson --wait   # stream events
 t3cli thread send "continue" --thread <id> --format json --wait
 ```
 
+**Wait vs Callback — when to use which**
+
+| Command    | Use when                                                                                        | Behavior                                                                                   |
+| ---------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `wait`     | Actively monitor a thread, send corrections, or continue work immediately when thread completes | Blocks until thread completes; real-time monitoring                                        |
+| `callback` | Receive later notification when thread completes (handoff, async workflows)                     | Sends message to another thread when source completes; use `--background` for non-blocking |
+
+**Callback (async handoff)**
+
+```sh
+# Foreground: block until source completes, then send message
+t3cli thread callback \
+  --from <source-thread-id> \
+  --thread <target-thread-id> \
+  --prompt "Review the completed analysis."
+
+# Background: spawn detached watcher, exit immediately
+t3cli thread callback \
+  --from <source-thread-id> \
+  --prompt "Task done" \
+  --background
+# Uses T3CODE_THREAD_ID env var as target if --thread not provided
+```
+
+Use cases: handoff long tasks, parallel work notifications, async workflows.
+
 **Inspect**
 
 ```sh

@@ -7,7 +7,7 @@ import { T3Orchestration } from "../orchestration/service.ts";
 import { ProjectLookupError, ThreadSessionError } from "../domain/error.ts";
 import { resolveProjectScope } from "../domain/helpers.ts";
 import { type StartThreadInput } from "./service.ts";
-import type { SendThreadInput } from "./service.ts";
+import type { SendThreadInput, CallbackThreadInput } from "./service.ts";
 import { mergeModelOptions } from "./model-selection.ts";
 import {
   makeThreadArchiveCommand,
@@ -171,6 +171,19 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     yield* failIfThreadError(thread);
     return thread;
   });
+  const callbackThread = Effect.fn("T3ApplicationLive.callbackThread")(function* (
+    input: CallbackThreadInput,
+  ) {
+    yield* waitForThreadUntilComplete({
+      orchestration,
+      threadId: input.fromThreadId,
+    });
+    const result = yield* sendThread(
+      { threadId: input.targetThreadId, message: input.prompt },
+      { until: "dispatch" },
+    );
+    return { dispatch: result.dispatch, targetThreadId: input.targetThreadId };
+  });
 
   return {
     archiveThread,
@@ -180,6 +193,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     startThread,
     watchThread,
     waitForThread,
+    callbackThread,
   };
 });
 
