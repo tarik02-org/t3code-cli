@@ -48,7 +48,18 @@ export default defineConfig({
     dts: false,
     fixedExtension: false,
     format: "esm",
+    hash: false,
     nodeProtocol: true,
+    outputOptions: {
+      codeSplitting: {
+        groups: [
+          {
+            name: "shared",
+            minShareCount: 2,
+          },
+        ],
+      },
+    },
     sourcemap: false,
   },
   fmt: {
