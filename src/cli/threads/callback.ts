@@ -59,7 +59,6 @@ export const callbackThreadCommand = Command.make(
           prompt,
         ];
 
-        // Build the command and spawn with proper Effect handling
         const proc = ChildProcess.make(process.execPath, args, {
           detached: true,
           stdin: "ignore",
@@ -67,11 +66,8 @@ export const callbackThreadCommand = Command.make(
           stderr: "ignore",
         });
 
-        // Spawn, unref, and discard the process
         const handle = yield* spawner.spawn(proc);
         const reref = yield* handle.unref;
-
-        // Close the reref since we don't need it (process stays detached)
         yield* reref.pipe(Effect.ignore);
 
         yield* output.printInfo(
