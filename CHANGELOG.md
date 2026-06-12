@@ -1,5 +1,11 @@
 # t3code-cli
 
+## 0.9.1
+
+### Patch Changes
+
+- ba0c671: Fix background thread callbacks exiting before delivery.
+
 ## 0.9.0
 
 ### Minor Changes
