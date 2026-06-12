@@ -29,6 +29,16 @@ t3cli project list
 t3cli thread start "Implement a new feature" --wait
 ```
 
+## Agent Skill
+
+This repo includes an agent skill for operating `t3cli`: [`skills/t3code-cli/SKILL.md`](skills/t3code-cli/SKILL.md).
+
+Install it with:
+
+```sh
+npx skills add tarik02/t3cli
+```
+
 ## Authentication
 
 ```sh
@@ -131,16 +141,6 @@ t3cli thread wait --format ndjson
 --version                 # Show version
 --completions <shell>     # Generate shell completions (bash|zsh|fish|sh)
 --log-level <level>        # Set log level
-```
-
-## Agent Skill
-
-This repo includes an agent skill for operating `t3cli`: [`skills/t3code-cli/SKILL.md`](skills/t3code-cli/SKILL.md).
-
-Install it with:
-
-```sh
-npx skills add tarik02/t3cli
 ```
 
 ## Links

@@ -29,8 +29,9 @@ t3cli thread show --format json
 ```
 
 The output includes `modelSelection` with:
-- `instanceId` — the provider (e.g., `openai`, `anthropic`)
-- `model` — the model identifier (e.g., `gpt-4o`, `claude-sonnet-4-20250514`)
+
+- `instanceId` — the provider (e.g., `cursor`, `codex`, `codex_work`)
+- `model` — the model slug (e.g., `composer-2.5`, `gpt-5.5`, `claude-opus-4-8`)
 
 **Preferred behavior**: When spawning additional threads, use the same provider (`instanceId`) and model family unless the user explicitly requests otherwise. This ensures consistent behavior and cost predictability.
 
