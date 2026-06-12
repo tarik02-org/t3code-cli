@@ -30,6 +30,13 @@ export class SelfArchiveError extends Schema.TaggedErrorClass<SelfArchiveError>(
   },
 ) {}
 
+export class MissingRequestError extends Schema.TaggedErrorClass<MissingRequestError>()(
+  "MissingRequestError",
+  {
+    message: Schema.String,
+  },
+) {}
+
 export class MissingUpdateFieldsError extends Schema.TaggedErrorClass<MissingUpdateFieldsError>()(
   "MissingUpdateFieldsError",
   {
@@ -39,7 +46,3 @@ export class MissingUpdateFieldsError extends Schema.TaggedErrorClass<MissingUpd
 
 export class ConflictingUpdateFlagsError extends Schema.TaggedErrorClass<ConflictingUpdateFlagsError>()(
   "ConflictingUpdateFlagsError",
-  {
-    message: Schema.String,
-  },
-) {}

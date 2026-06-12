@@ -9,10 +9,12 @@ import type {
   OrchestrationShellSnapshot,
   OrchestrationThread,
   OrchestrationThreadShell,
+  ProviderUserInputAnswers,
   ServerProvider,
 } from "#t3tools/contracts";
 
 import type { ApplicationError } from "./error.ts";
+import type { ThreadShow } from "./threads.ts";
 
 export type StartThreadInput = {
   readonly projectRef?: string;
@@ -81,6 +83,23 @@ export class T3Application extends Context.Service<
     readonly getThreadMessages: (
       threadId: string,
     ) => Effect.Effect<OrchestrationThread, ApplicationError>;
+    readonly showThread: (threadId: string) => Effect.Effect<ThreadShow, ApplicationError>;
+    readonly approveThread: (input: {
+      readonly threadId: string;
+      readonly requestId: string;
+      readonly decision: "accept" | "decline" | "cancel";
+    }) => Effect.Effect<
+      { readonly threadId: string; readonly requestId: string; readonly dispatch: DispatchResult },
+      ApplicationError
+    >;
+    readonly respondToThread: (input: {
+      readonly threadId: string;
+      readonly requestId: string;
+      readonly answers: ProviderUserInputAnswers;
+    }) => Effect.Effect<
+      { readonly threadId: string; readonly requestId: string; readonly dispatch: DispatchResult },
+      ApplicationError
+    >;
     readonly archiveThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
     readonly updateThread: (
       input: UpdateThreadInput,
