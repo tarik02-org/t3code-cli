@@ -1,72 +1,99 @@
 # t3code-cli
 
-Non-interactive CLI for a t3code server.
+Non-interactive CLI for [t3code](https://t3code.dev) — manage projects, models, and agent threads from the terminal.
 
-## install
+## Installation
 
 ```sh
 npm install --global t3code-cli
 ```
 
-This installs the `t3cli` command.
+This installs the `t3cli` command globally.
 
-## agent skill
-
-This repo includes an agent skill for operating `t3cli`: [`skills/t3code-cli/SKILL.md`](skills/t3code-cli/SKILL.md).
-
-Install it with [skills](https://skills.sh/):
+## Quick Start
 
 ```sh
-npx skills add tarik02/t3cli
-```
+# Authenticate
+t3cli auth pair --url <pairing-url> [--local]
 
-## authenticate
+# Or use local auth
+t3cli auth local
 
-```sh
-t3cli auth pair --url <url> [--local]
-t3cli auth local [--base-dir <path>] [--origin <url>] [--role owner|client] [--label <label>] [--subject <subject>]
+# Check status
 t3cli auth status
+
+# List projects
+t3cli project list
+
+# Start a thread
+t3cli thread start "Implement a new feature" --wait
 ```
 
-Use `auth pair` with a pairing URL from a running t3code server, or `auth local` to authenticate against a local t3code installation. Local auth (`auth local` or `auth pair --local`) enables automatic project resolution from the current directory.
-
-## project
+## Authentication
 
 ```sh
-t3cli project list
+t3cli auth pair --url <url> [--local]     # Pair with a remote server
+t3cli auth local                          # Local t3code installation
+t3cli auth status                         # Check current auth
+```
+
+- Use `auth pair` with a pairing URL from a running t3code server
+- Use `auth local` to authenticate against a local t3code installation
+- Local auth enables automatic project resolution from the current directory
+
+## Project Management
+
+```sh
+t3cli project list                        # List known projects
 t3cli project add [--path <path>] [--title <title>]
 ```
 
-`project list` shows known projects. `project add` registers a project path with the server. `--path` defaults to the current directory.
+The `--path` defaults to the current directory.
 
-## model
+## Models
 
 ```sh
 t3cli model list [--all] [--provider <provider>]
 ```
 
-Lists available provider models. Use `--all` to include hidden or unavailable entries when the server exposes them.
+Lists available provider models. Use `--all` to include hidden or unavailable entries.
 
-## thread
+## Thread Management
+
+### Starting Threads
 
 ```sh
-t3cli thread list [--project <ref>]
-t3cli thread start [message] [--project <ref>] [--stdin] [--title <title>] [--worktree <path>] [--provider <provider>] [--model <model>] [--option <key=value>] [--reasoning-effort <value>] [--effort <value>] [--fast-mode] [--thinking] [--wait]
-t3cli thread send [--thread <id>] [message] [--stdin] [--option <key=value>] [--reasoning-effort <value>] [--effort <value>] [--fast-mode] [--thinking] [--wait]
-t3cli thread messages [--thread <id>] [--limit <count>] [--full]
-t3cli thread wait [--thread <id>]
-t3cli thread archive [--thread <id>]
+t3cli thread start [message]
+  [--project <ref>]
+  [--stdin]
+  [--title <title>]
+  [--worktree <path>]
+  [--provider <provider>]
+  [--model <model>]
+  [--option <key=value>]
+  [--reasoning-effort <value>]
+  [--effort <value>]
+  [--fast-mode]
+  [--thinking]
+  [--wait]
 ```
 
-`--project` accepts a project id or path. When omitted, the CLI resolves the project from the current directory only for local auth (`auth local` or `auth pair --local`). Resolution checks a registered `workspaceRoot`, paths under it, and known thread `worktreePath` values from the server snapshot. Remote pairings require an explicit `--project` or `T3CODE_PROJECT_*` env var. `thread start` infers the worktree from cwd unless `--worktree` or `T3CODE_WORKTREE_PATH` is set.
+### Thread Commands
 
-Thread-targeting commands accept `--thread` or fall back to `T3CODE_THREAD_ID`.
+```sh
+t3cli thread list [--project <ref>]              # List threads
+t3cli thread show [--thread <id>]                # Show thread details
+t3cli thread send [--thread <id>] [message]      # Send message to thread
+t3cli thread messages [--thread <id>] [--limit]  # View messages
+t3cli thread wait [--thread <id>]                # Wait for completion
+t3cli thread archive [--thread <id>]             # Archive thread
+t3cli thread approve --request <id>              # Approve request
+t3cli thread respond --request <id>              # Respond to request
+```
 
-Use `--stdin` when the message should be read from standard input instead of an argument. Use `--wait` to stream until the thread pauses.
+### Environment Variables
 
-## environment fallbacks
-
-When flags are omitted, the CLI reads these variables (first match wins within each group):
+When flags are omitted, the CLI reads these environment variables (first match wins):
 
 | Variable               | Used by                                   |
 | ---------------------- | ----------------------------------------- |
@@ -75,7 +102,14 @@ When flags are omitted, the CLI reads these variables (first match wins within e
 | `T3CODE_WORKTREE_PATH` | `--worktree`                              |
 | `T3CODE_THREAD_ID`     | `--thread`                                |
 
-## output
+### Project Resolution
+
+- `--project` accepts a project id or path
+- When omitted, the CLI resolves the project from the current directory (local auth only)
+- Resolution checks: registered `workspaceRoot` → paths under it → known thread `worktreePath`
+- Remote pairings require explicit `--project` or `T3CODE_PROJECT_*` env var
+
+## Output Formats
 
 Most commands support:
 
@@ -83,13 +117,34 @@ Most commands support:
 --format auto|human|json
 ```
 
-Thread start/send commands also support `--format ndjson`; `thread wait` supports `--format human|ndjson`.
-
-Global flags:
+Thread commands also support `ndjson` for streaming:
 
 ```sh
---help
---version
---completions bash|zsh|fish|sh
---log-level all|trace|debug|info|warn|warning|error|fatal|none
+t3cli thread start "task" --format ndjson --wait
+t3cli thread wait --format ndjson
 ```
+
+## Global Flags
+
+```sh
+--help                    # Show help
+--version                 # Show version
+--completions <shell>     # Generate shell completions (bash|zsh|fish|sh)
+--log-level <level>        # Set log level
+```
+
+## Agent Skill
+
+This repo includes an agent skill for operating `t3cli`: [`skills/t3code-cli/SKILL.md`](skills/t3code-cli/SKILL.md).
+
+Install it with:
+
+```sh
+npx skills add tarik02/t3cli
+```
+
+## Links
+
+- [Agent Skill Documentation](skills/t3code-cli/SKILL.md)
+- [Command Reference](skills/t3code-cli/reference/commands.md)
+- [Setup Guide](skills/t3code-cli/reference/setup.md)

@@ -19,6 +19,33 @@ export T3CODE_PROJECT_ROOT="$PWD"   # when not using local-auth cwd resolution
 
 First-time setup: [reference/setup.md](reference/setup.md)
 
+## Self-identity (check before spawning threads)
+
+Before starting new threads, check your own identity to maintain consistency:
+
+```sh
+# Check current thread identity
+t3cli thread show --format json
+```
+
+The output includes `modelSelection` with:
+- `instanceId` — the provider (e.g., `openai`, `anthropic`)
+- `model` — the model identifier (e.g., `gpt-4o`, `claude-sonnet-4-20250514`)
+
+**Preferred behavior**: When spawning additional threads, use the same provider (`instanceId`) and model family unless the user explicitly requests otherwise. This ensures consistent behavior and cost predictability.
+
+Example workflow:
+
+```sh
+# Check self identity
+SELF=$(t3cli thread show --format json)
+PROVIDER=$(echo "$SELF" | jq -r '.modelSelection.instanceId')
+MODEL=$(echo "$SELF" | jq -r '.modelSelection.model')
+
+# Start a new thread with same provider/model
+t3cli thread start "task description" --provider "$PROVIDER" --model "$MODEL" --wait
+```
+
 ## Scope resolution
 
 | Target   | Flag         | Env (first match wins)                                              |
