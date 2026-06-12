@@ -67,8 +67,7 @@ export const callbackThreadCommand = Command.make(
         });
 
         const handle = yield* spawner.spawn(proc);
-        const reref = yield* handle.unref;
-        yield* reref.pipe(Effect.ignore);
+        yield* handle.unref.pipe(Effect.ignore);
 
         yield* output.printInfo(
           `background callback scheduled: ${fromThreadId} -> ${targetThreadId} (pid: ${handle.pid})`,
