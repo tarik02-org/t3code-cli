@@ -5,6 +5,7 @@ import * as Schema from "effect/Schema";
 
 import { ModelSelectionError } from "../domain/error.ts";
 import {
+  findSelectableModel,
   findSelectableProvider,
   firstSelectableModel,
   firstSelectableProvider,
@@ -75,10 +76,67 @@ export function mergeModelOptions(
 }
 
 function withModelOptions(input: StartThreadInput, selection: ModelSelection): ModelSelection {
-  if (input.options === undefined || input.options.length === 0) {
+  return applyModelOptions(selection, input.options);
+}
+
+function applyModelOptions(
+  selection: ModelSelection,
+  options: NonNullable<ModelSelection["options"]> | undefined,
+): ModelSelection {
+  if (options === undefined || options.length === 0) {
     return selection;
   }
-  return mergeModelOptions(selection, input.options);
+  return mergeModelOptions(selection, options);
+}
+
+export function resolveUpdateModelSelection(input: {
+  readonly current: ModelSelection;
+  readonly provider?: string;
+  readonly model?: string;
+  readonly options?: NonNullable<ModelSelection["options"]>;
+  readonly project: OrchestrationProjectShell;
+  readonly serverConfig: ServerConfigForCli;
+}) {
+  return Effect.gen(function* () {
+    const hasProvider = input.provider !== undefined && input.provider.length > 0;
+    const hasModel = input.model !== undefined && input.model.length > 0;
+    if (hasProvider && hasModel) {
+      return applyModelOptions(
+        {
+          instanceId: ProviderInstanceId.make(input.provider),
+          model: input.model,
+        },
+        input.options,
+      );
+    }
+    if (hasProvider) {
+      const provider = yield* findProvider(input.serverConfig, input.provider);
+      const model = findSelectableModel(provider, input.current.model);
+      if (model === undefined) {
+        return yield* failMissingCurrentModel({
+          provider: input.provider,
+          model: input.current.model,
+        });
+      }
+      return applyModelOptions(
+        {
+          instanceId: ProviderInstanceId.make(input.provider),
+          model: model.slug,
+        },
+        input.options,
+      );
+    }
+    if (hasModel) {
+      return applyModelOptions(
+        {
+          instanceId: input.current.instanceId,
+          model: input.model,
+        },
+        input.options,
+      );
+    }
+    return applyModelOptions(input.current, input.options);
+  });
 }
 
 function firstAvailableModel(serverConfig: ServerConfigForCli) {
@@ -102,6 +160,14 @@ function failNoAvailableModel() {
   return Effect.fail(
     new ModelSelectionError({
       message: "no available provider model found; pass --provider and --model",
+    }),
+  );
+}
+
+function failMissingCurrentModel(input: { readonly provider: string; readonly model: string }) {
+  return Effect.fail(
+    new ModelSelectionError({
+      message: `provider ${input.provider} does not have current model ${input.model}; pass --model`,
     }),
   );
 }

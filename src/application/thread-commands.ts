@@ -2,12 +2,15 @@ import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import {
+  ApprovalRequestId,
   CommandId,
   MessageId,
   ThreadId,
   type ClientOrchestrationCommand,
   type ModelSelection,
   type OrchestrationProjectShell,
+  type ProviderApprovalDecision,
+  type ProviderUserInputAnswers,
 } from "#t3tools/contracts";
 import type { ServerConfigForCli } from "../orchestration/service.ts";
 import { resolveModelSelection } from "./model-selection.ts";
@@ -96,4 +99,69 @@ export const makeThreadArchiveCommand = Effect.fn("makeThreadArchiveCommand")(fu
     ),
     threadId: ThreadId.make(threadId),
   } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.archive" }>;
+});
+
+export const makeThreadApprovalRespondCommand = Effect.fn("makeThreadApprovalRespondCommand")(
+  function* (input: {
+    readonly threadId: string;
+    readonly requestId: string;
+    readonly decision: ProviderApprovalDecision;
+  }) {
+    const crypto = yield* Crypto.Crypto;
+    const createdAt = DateTime.formatIso(yield* DateTime.now);
+    return {
+      type: "thread.approval.respond",
+      commandId: CommandId.make(
+        `t3cli:thread-approve:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+      ),
+      threadId: ThreadId.make(input.threadId),
+      requestId: ApprovalRequestId.make(input.requestId),
+      decision: input.decision,
+      createdAt,
+    } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.approval.respond" }>;
+  },
+);
+
+export const makeThreadUserInputRespondCommand = Effect.fn("makeThreadUserInputRespondCommand")(
+  function* (input: {
+    readonly threadId: string;
+    readonly requestId: string;
+    readonly answers: ProviderUserInputAnswers;
+  }) {
+    const crypto = yield* Crypto.Crypto;
+    const createdAt = DateTime.formatIso(yield* DateTime.now);
+    return {
+      type: "thread.user-input.respond",
+      commandId: CommandId.make(
+        `t3cli:thread-respond:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+      ),
+      threadId: ThreadId.make(input.threadId),
+      requestId: ApprovalRequestId.make(input.requestId),
+      answers: input.answers,
+      createdAt,
+    } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.user-input.respond" }>;
+  },
+);
+
+export const makeThreadMetaUpdateCommand = Effect.fn("makeThreadMetaUpdateCommand")(function* (
+  threadId: string,
+  input: {
+    readonly title?: string;
+    readonly modelSelection?: ModelSelection;
+    readonly branch?: string | null;
+    readonly worktreePath?: string | null;
+  },
+) {
+  const crypto = yield* Crypto.Crypto;
+  return {
+    type: "thread.meta.update",
+    commandId: CommandId.make(
+      `t3cli:thread-meta-update:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    ),
+    threadId: ThreadId.make(threadId),
+    ...(input.title !== undefined ? { title: input.title } : {}),
+    ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
+    ...(input.branch !== undefined ? { branch: input.branch } : {}),
+    ...(input.worktreePath !== undefined ? { worktreePath: input.worktreePath } : {}),
+  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.meta.update" }>;
 });
