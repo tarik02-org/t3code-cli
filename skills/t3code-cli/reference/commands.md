@@ -109,21 +109,6 @@ One JSON object per line:
 { "type": "done", "thread": {}, "latestAssistantMessage": {} }
 ```
 
-## Errors
-
-| Tag                           | Cause                                                          |
-| ----------------------------- | -------------------------------------------------------------- |
-| `ProjectLookupError`          | Unresolved `--project` / env / cwd                             |
-| `MissingThreadError`          | Missing `--thread` / `T3CODE_THREAD_ID`                        |
-| `SelfArchiveError`            | Archiving thread matching `T3CODE_THREAD_ID` without `--force` |
-| `MissingRequestError`         | Missing `--request` on approve/respond                         |
-| `MissingUpdateFieldsError`    | `thread update` with no update fields                          |
-| `ConflictingUpdateFlagsError` | Conflicting `thread update` branch/worktree flags              |
-| `MessageInputError`           | No message arg and empty stdin                                 |
-| `InvalidLimitError`           | Invalid `--limit`                                              |
-
-Non-zero exit; message on stderr.
-
 ## Examples
 
 ```sh
