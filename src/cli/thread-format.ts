@@ -53,7 +53,7 @@ export function formatThreadsHuman(threads: ReadonlyArray<OrchestrationThreadShe
   return threads
     .map(
       (thread) =>
-        `- ${thread.title}\n  id: ${thread.id}\n  status: ${threadStatus(thread)}\n  updated: ${thread.updatedAt}\n`,
+        `- ${thread.title}${thread.archivedAt !== null ? " (archived)" : ""}\n  id: ${thread.id}\n  status: ${threadStatus(thread)}\n  updated: ${thread.updatedAt}\n`,
     )
     .join("");
 }

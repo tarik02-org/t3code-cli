@@ -38,6 +38,8 @@ export type CallbackThreadInput = {
   readonly prompt: string;
 };
 
+export type ListThreadsInclude = "active" | "archived" | "all";
+
 export type UpdateThreadInput = {
   readonly threadId: string;
   readonly title?: string;
@@ -73,7 +75,12 @@ export class T3Application extends Context.Service<
       { readonly dispatch: DispatchResult; readonly project: OrchestrationProjectShell },
       ApplicationError
     >;
-    readonly listThreads: (projectRef: string) => Effect.Effect<
+    readonly listThreads: (
+      projectRef: string,
+      options?: {
+        readonly include?: ListThreadsInclude;
+      },
+    ) => Effect.Effect<
       {
         readonly project: OrchestrationProjectShell;
         readonly threads: ReadonlyArray<OrchestrationThreadShell>;

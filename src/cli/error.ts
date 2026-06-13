@@ -30,6 +30,13 @@ export class SelfArchiveError extends Schema.TaggedErrorClass<SelfArchiveError>(
   },
 ) {}
 
+export class InvalidFlagCombinationError extends Schema.TaggedErrorClass<InvalidFlagCombinationError>()(
+  "InvalidFlagCombinationError",
+  {
+    message: Schema.String,
+  },
+) {}
+
 export class MissingRequestError extends Schema.TaggedErrorClass<MissingRequestError>()(
   "MissingRequestError",
   {

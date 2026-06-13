@@ -31,6 +31,10 @@ export type Orchestration = {
   ) => Effect.Effect<DispatchResult, OrchestrationError>;
   readonly getServerConfig: () => Effect.Effect<ServerConfigForCli, OrchestrationError>;
   readonly getShellSnapshot: () => Effect.Effect<OrchestrationShellSnapshot, OrchestrationError>;
+  readonly getArchivedShellSnapshot: () => Effect.Effect<
+    OrchestrationShellSnapshot,
+    OrchestrationError
+  >;
   readonly getThreadSnapshot: (
     threadId: string,
   ) => Effect.Effect<OrchestrationThread, OrchestrationError>;

@@ -44,7 +44,7 @@ t3cli model list [--all] [--provider <name>] [--format json]
 ## thread workflow
 
 ```sh
-t3cli list [--project <ref>] [--format json]
+t3cli list [--project <ref>] [--archived | --all] [--format json]
 
 t3cli start [message]
   [--project <ref>] [--stdin] [--title <title>] [--worktree <path>]

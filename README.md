@@ -91,7 +91,7 @@ t3cli start [message]
 ### Common Thread Commands
 
 ```sh
-t3cli list [--project <ref>]                 # List threads
+t3cli list [--project <ref>] [--archived | --all]
 t3cli show [--thread <id>]                   # Show thread details
 t3cli send [--thread <id>] [message]         # Send message to thread
 t3cli transcript [--thread <id>] [--limit]   # View messages

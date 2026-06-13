@@ -5,8 +5,9 @@ import { Environment } from "../environment/service.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import { ProjectLookupError, ThreadSessionError } from "../domain/error.ts";
 import { resolveProjectScope } from "../domain/helpers.ts";
-import { type StartThreadInput } from "./service.ts";
+import { type ListThreadsInclude, type StartThreadInput } from "./service.ts";
 import type { CallbackThreadInput, SendThreadInput } from "./service.ts";
+import type { OrchestrationThreadShell } from "#t3tools/contracts";
 import { mergeModelOptions } from "./model-selection.ts";
 import { derivePendingApprovals, derivePendingUserInputs } from "../domain/thread-activities.ts";
 import { threadStatus, type ThreadLifecycleStatus } from "../domain/thread-lifecycle.ts";
@@ -31,8 +32,16 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
   const crypto = yield* Crypto.Crypto;
   const path = yield* Path.Path;
   const environment = yield* Environment;
-  const listThreads = Effect.fn("T3ApplicationLive.listThreads")(function* (projectRef: string) {
-    const snapshot = yield* orchestration.getShellSnapshot();
+  const listThreads = Effect.fn("T3ApplicationLive.listThreads")(function* (
+    projectRef: string,
+    options?: {
+      readonly include?: ListThreadsInclude;
+    },
+  ) {
+    const include = options?.include ?? "active";
+    const snapshot = yield* loadThreadsSnapshot(include).pipe(
+      Effect.provideService(T3Orchestration, orchestration),
+    );
     const scope = yield* resolveProjectScope(snapshot, {
       ref: projectRef,
     }).pipe(Effect.provideService(Path.Path, path));
@@ -233,6 +242,34 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     callbackThread,
   };
 });
+
+const loadThreadsSnapshot = Effect.fn("loadThreadsSnapshot")(function* (
+  include: ListThreadsInclude,
+) {
+  const orchestration = yield* T3Orchestration;
+  if (include === "active") {
+    return yield* orchestration.getShellSnapshot();
+  }
+  if (include === "archived") {
+    return yield* orchestration.getArchivedShellSnapshot();
+  }
+  const [activeSnapshot, archivedSnapshot] = yield* Effect.all([
+    orchestration.getShellSnapshot(),
+    orchestration.getArchivedShellSnapshot(),
+  ]);
+  return {
+    ...activeSnapshot,
+    threads: dedupeThreadsById([...activeSnapshot.threads, ...archivedSnapshot.threads]),
+  };
+});
+
+function dedupeThreadsById(threads: ReadonlyArray<OrchestrationThreadShell>) {
+  const byId = new Map<string, OrchestrationThreadShell>();
+  for (const thread of threads) {
+    byId.set(thread.id, thread);
+  }
+  return [...byId.values()];
+}
 
 export type ThreadShow = {
   readonly id: string;
