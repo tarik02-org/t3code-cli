@@ -1,6 +1,5 @@
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { Environment } from "../environment/service.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
@@ -78,12 +77,12 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     return yield* orchestration.dispatch(command);
   });
   const deleteThread = Effect.fn("T3ApplicationLive.deleteThread")(function* (threadId: string) {
-    const thread = yield* orchestration.getThreadSnapshot(threadId).pipe(Effect.option);
-    if (Option.isSome(thread) && sessionNeedsStopBeforeDelete(thread.value.session)) {
+    const thread = yield* orchestration.getThreadSnapshot(threadId);
+    if (sessionNeedsStopBeforeDelete(thread.session)) {
       const stopCommand = yield* makeThreadSessionStopCommand(threadId).pipe(
         Effect.provideService(Crypto.Crypto, crypto),
       );
-      yield* orchestration.dispatch(stopCommand).pipe(Effect.ignore);
+      yield* orchestration.dispatch(stopCommand);
     }
     const command = yield* makeThreadDeleteCommand(threadId).pipe(
       Effect.provideService(Crypto.Crypto, crypto),
