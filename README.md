@@ -26,7 +26,7 @@ t3cli auth status
 t3cli project list
 
 # Start a thread
-t3cli thread start "Implement a new feature" --wait
+t3cli start "Implement a new feature" --wait
 ```
 
 ## Agent Skill
@@ -68,12 +68,12 @@ t3cli model list [--all] [--provider <provider>]
 
 Lists available provider models. Use `--all` to include hidden or unavailable entries.
 
-## Thread Management
+## Thread Workflow
 
 ### Starting Threads
 
 ```sh
-t3cli thread start [message]
+t3cli start [message]
   [--project <ref>]
   [--stdin]
   [--title <title>]
@@ -88,17 +88,23 @@ t3cli thread start [message]
   [--wait]
 ```
 
-### Thread Commands
+### Common Thread Commands
 
 ```sh
-t3cli thread list [--project <ref>]              # List threads
-t3cli thread show [--thread <id>]                # Show thread details
-t3cli thread send [--thread <id>] [message]      # Send message to thread
-t3cli thread messages [--thread <id>] [--limit]  # View messages
-t3cli thread wait [--thread <id>]                # Wait for completion
-t3cli thread archive [--thread <id>]             # Archive thread
-t3cli thread approve --request <id>              # Approve request
-t3cli thread respond --request <id>              # Respond to request
+t3cli list [--project <ref>]                 # List threads
+t3cli show [--thread <id>]                   # Show thread details
+t3cli send [--thread <id>] [message]         # Send message to thread
+t3cli transcript [--thread <id>] [--limit]   # View messages
+t3cli wait [--thread <id>]                   # Wait for completion
+```
+
+### Advanced Thread Commands
+
+```sh
+t3cli thread archive [--thread <id>]        # Archive thread
+t3cli thread approve --request <id>         # Approve request
+t3cli thread respond --request <id>         # Respond to request
+t3cli thread callback --from <id>           # Notify another thread on completion
 ```
 
 ### Environment Variables
@@ -130,8 +136,8 @@ Most commands support:
 Thread commands also support `ndjson` for streaming:
 
 ```sh
-t3cli thread start "task" --format ndjson --wait
-t3cli thread wait --format ndjson
+t3cli start "task" --format ndjson --wait
+t3cli wait --format ndjson
 ```
 
 ## Global Flags

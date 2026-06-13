@@ -25,7 +25,7 @@ Before starting new threads, check your own identity to maintain consistency:
 
 ```sh
 # Check current thread identity
-t3cli thread show --format json
+t3cli show --format json
 ```
 
 The output includes `modelSelection` with:
@@ -39,12 +39,12 @@ Example workflow:
 
 ```sh
 # Check self identity
-SELF=$(t3cli thread show --format json)
+SELF=$(t3cli show --format json)
 PROVIDER=$(echo "$SELF" | jq -r '.modelSelection.instanceId')
 MODEL=$(echo "$SELF" | jq -r '.modelSelection.model')
 
 # Start a new thread with same provider/model
-t3cli thread start "task description" --provider "$PROVIDER" --model "$MODEL" --wait
+t3cli start "task description" --provider "$PROVIDER" --model "$MODEL" --wait
 ```
 
 ## Scope resolution
@@ -69,14 +69,14 @@ t3cli model list
 **Start and wait**
 
 ```sh
-t3cli thread start "task" --format json --wait
-t3cli thread start "task" --format ndjson --wait   # stream events
+t3cli start "task" --format json --wait
+t3cli start "task" --format ndjson --wait   # stream events
 ```
 
 **Follow-up**
 
 ```sh
-t3cli thread send "continue" --thread <id> --format json --wait
+t3cli send "continue" --thread <id> --format json --wait
 ```
 
 **Wait vs Callback — when to use which**
@@ -108,9 +108,9 @@ Use cases: handoff long tasks, parallel work notifications, async workflows.
 **Inspect**
 
 ```sh
-t3cli thread list --format json
-t3cli thread messages --thread <id> --format json
-printf '%s' "$PROMPT" | t3cli thread start --stdin --format json
+t3cli list --format json
+t3cli transcript --thread <id> --format json
+printf '%s' "$PROMPT" | t3cli start --stdin --format json
 ```
 
 ## Output
