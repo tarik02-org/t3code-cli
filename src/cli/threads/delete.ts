@@ -35,14 +35,8 @@ export const deleteThreadCommand = Command.make(
           }),
         );
       }
-      // getThreadMessages is getThreadSnapshot under the hood; used here only for title.
-      const threadSnapshot = yield* application.getThreadMessages(threadId).pipe(Effect.option);
-      const title = Option.match(threadSnapshot, {
-        onNone: () => threadId,
-        onSome: (snapshot) => snapshot.title,
-      });
       yield* requireDestructiveConfirmation({
-        message: `Delete thread ${title} (${threadId})?`,
+        message: `Delete thread ${threadId}?`,
         yes,
         environment,
       });
