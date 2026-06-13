@@ -12,8 +12,8 @@ import { Environment } from "../../environment/service.ts";
 import { resolveOutputFormat } from "../output-format.ts";
 import { T3Output } from "../output/service.ts";
 
-export const getThreadMessagesCommand = Command.make(
-  "messages",
+export const getThreadTranscriptCommand = Command.make(
+  "transcript",
   {
     thread: threadFlag,
     limit: Flag.integer("limit").pipe(Flag.withDefault(20)),
@@ -48,4 +48,4 @@ export const getThreadMessagesCommand = Command.make(
       }
       return yield* output.writeStdout(formatThreadMessagesHuman(detail, limit));
     }),
-).pipe(Command.withDescription("get latest thread messages"));
+).pipe(Command.withDescription("get latest thread transcript"));
