@@ -1,32 +1,24 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { Command, Flag } from "effect/unstable/cli";
+import { Command } from "effect/unstable/cli";
 
 import { formatFlag, threadFlag } from "../flags.ts";
-import { InvalidLimitError } from "../error.ts";
 import { MissingThreadError } from "../error.ts";
 import { resolveThreadId } from "../../scope/index.ts";
-import { formatThreadMessagesHuman, formatThreadMessagesJson } from "../thread-format.ts";
+import { formatThreadShowHuman, formatThreadShowJson } from "../thread-format.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
 import { resolveOutputFormat } from "../output-format.ts";
 import { T3Output } from "../output/service.ts";
 
-export const getThreadTranscriptCommand = Command.make(
-  "transcript",
+export const showThreadCommand = Command.make(
+  "show",
   {
     thread: threadFlag,
-    limit: Flag.integer("limit").pipe(Flag.withDefault(20)),
-    full: Flag.boolean("full"),
     format: formatFlag,
   },
-  ({ thread, limit, full, format }) =>
+  ({ thread, format }) =>
     Effect.gen(function* () {
-      if (limit < 0) {
-        return yield* Effect.fail(
-          new InvalidLimitError({ message: `invalid limit: ${limit}`, value: String(limit) }),
-        );
-      }
       const application = yield* T3Application;
       const environment = yield* Environment;
       const output = yield* T3Output;
@@ -42,10 +34,10 @@ export const getThreadTranscriptCommand = Command.make(
         );
       }
       const resolvedFormat = resolveOutputFormat(format, environment, "json");
-      const detail = yield* application.getThreadMessages(threadId);
+      const detail = yield* application.showThread(threadId);
       if (resolvedFormat === "json") {
-        return yield* output.printJson(formatThreadMessagesJson(detail, full));
+        return yield* output.printJson(formatThreadShowJson(detail));
       }
-      return yield* output.writeStdout(formatThreadMessagesHuman(detail, limit));
+      return yield* output.writeStdout(formatThreadShowHuman(detail));
     }),
-).pipe(Command.withDescription("get latest thread transcript"));
+).pipe(Command.withDescription("show thread status and pending requests"));
