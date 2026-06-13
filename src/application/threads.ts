@@ -2,7 +2,7 @@ import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import { Environment } from "../environment/service.ts";
-import { T3Orchestration, type Orchestration } from "../orchestration/service.ts";
+import { T3Orchestration } from "../orchestration/service.ts";
 import { ProjectLookupError, ThreadSessionError } from "../domain/error.ts";
 import { resolveProjectScope } from "../domain/helpers.ts";
 import { type ListThreadsInclude, type StartThreadInput } from "./service.ts";
@@ -39,7 +39,9 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     },
   ) {
     const include = options?.include ?? "active";
-    const snapshot = yield* loadThreadsSnapshot(orchestration, include);
+    const snapshot = yield* loadThreadsSnapshot(include).pipe(
+      Effect.provideService(T3Orchestration, orchestration),
+    );
     const scope = yield* resolveProjectScope(snapshot, {
       ref: projectRef,
     }).pipe(Effect.provideService(Path.Path, path));
@@ -241,24 +243,25 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
   };
 });
 
-function loadThreadsSnapshot(orchestration: Orchestration, include: ListThreadsInclude) {
+const loadThreadsSnapshot = Effect.fn("loadThreadsSnapshot")(function* (
+  include: ListThreadsInclude,
+) {
+  const orchestration = yield* T3Orchestration;
   if (include === "active") {
-    return orchestration.getShellSnapshot();
+    return yield* orchestration.getShellSnapshot();
   }
   if (include === "archived") {
-    return orchestration.getArchivedShellSnapshot();
+    return yield* orchestration.getArchivedShellSnapshot();
   }
-  return Effect.gen(function* () {
-    const [activeSnapshot, archivedSnapshot] = yield* Effect.all([
-      orchestration.getShellSnapshot(),
-      orchestration.getArchivedShellSnapshot(),
-    ]);
-    return {
-      ...activeSnapshot,
-      threads: dedupeThreadsById([...activeSnapshot.threads, ...archivedSnapshot.threads]),
-    };
-  });
-}
+  const [activeSnapshot, archivedSnapshot] = yield* Effect.all([
+    orchestration.getShellSnapshot(),
+    orchestration.getArchivedShellSnapshot(),
+  ]);
+  return {
+    ...activeSnapshot,
+    threads: dedupeThreadsById([...activeSnapshot.threads, ...archivedSnapshot.threads]),
+  };
+});
 
 function dedupeThreadsById(threads: ReadonlyArray<OrchestrationThreadShell>) {
   const byId = new Map<string, OrchestrationThreadShell>();
