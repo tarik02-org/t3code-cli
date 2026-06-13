@@ -12,6 +12,10 @@ export function firstSelectableModel(provider: ServerProvider) {
   return provider.models[0];
 }
 
+export function findSelectableModel(provider: ServerProvider, slug: string) {
+  return provider.models.find((model) => model.slug === slug);
+}
+
 export function findSelectableProvider(
   providers: ReadonlyArray<ServerProvider>,
   instanceId: string,

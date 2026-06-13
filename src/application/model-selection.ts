@@ -5,6 +5,7 @@ import * as Schema from "effect/Schema";
 
 import { ModelSelectionError } from "../domain/error.ts";
 import {
+  findSelectableModel,
   findSelectableProvider,
   firstSelectableModel,
   firstSelectableProvider,
@@ -110,9 +111,12 @@ export function resolveUpdateModelSelection(input: {
     }
     if (hasProvider) {
       const provider = yield* findProvider(input.serverConfig, input.provider);
-      const model = firstSelectableModel(provider);
+      const model = findSelectableModel(provider, input.current.model);
       if (model === undefined) {
-        return yield* failNoAvailableModel();
+        return yield* failMissingCurrentModel({
+          provider: input.provider,
+          model: input.current.model,
+        });
       }
       return applyModelOptions(
         {
@@ -156,6 +160,14 @@ function failNoAvailableModel() {
   return Effect.fail(
     new ModelSelectionError({
       message: "no available provider model found; pass --provider and --model",
+    }),
+  );
+}
+
+function failMissingCurrentModel(input: { readonly provider: string; readonly model: string }) {
+  return Effect.fail(
+    new ModelSelectionError({
+      message: `provider ${input.provider} does not have current model ${input.model}; pass --model`,
     }),
   );
 }
