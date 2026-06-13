@@ -1,5 +1,15 @@
 # t3code-cli
 
+## 0.10.0
+
+### Minor Changes
+
+- 33c587c: Move common thread workflow commands to the root CLI surface and rename `messages` to `transcript`.
+
+### Patch Changes
+
+- 7d67d83: Treat ready sessions with stale running turn snapshots as complete when an assistant response is present, fixing thread callbacks that were registered before source thread completion.
+
 ## 0.9.1
 
 ### Patch Changes
