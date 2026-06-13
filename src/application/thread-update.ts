@@ -2,7 +2,7 @@ import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import type { ModelSelection } from "#t3tools/contracts";
 
-import { ThreadEventError } from "../domain/error.ts";
+import { ModelSelectionError, ThreadEventError } from "../domain/error.ts";
 import type { Orchestration } from "../orchestration/service.ts";
 import { mergeModelOptions, resolveUpdateModelSelection } from "./model-selection.ts";
 import type { UpdateThreadInput } from "./service.ts";
@@ -30,6 +30,27 @@ export function makeUpdateThread(deps: {
         );
       }
       const serverConfig = yield* deps.orchestration.getServerConfig();
+      if (hasProvider && thread.session !== null && thread.session.status !== "stopped") {
+        const sessionProviderId =
+          thread.session.providerInstanceId ?? thread.modelSelection.instanceId;
+        const sessionProvider = serverConfig.providers.find(
+          (provider) => provider.instanceId === sessionProviderId,
+        );
+        const targetProvider = serverConfig.providers.find(
+          (provider) => provider.instanceId === input.provider,
+        );
+        if (
+          sessionProvider !== undefined &&
+          targetProvider !== undefined &&
+          targetProvider.driver !== sessionProvider.driver
+        ) {
+          return yield* Effect.fail(
+            new ModelSelectionError({
+              message: `thread ${input.threadId} is bound to ${sessionProvider.driver} provider ${sessionProviderId}; cannot update provider to ${targetProvider.driver} provider ${input.provider}`,
+            }),
+          );
+        }
+      }
       modelSelection = yield* resolveUpdateModelSelection({
         current: thread.modelSelection,
         ...(hasProvider ? { provider: input.provider } : {}),
