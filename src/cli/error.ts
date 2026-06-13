@@ -46,3 +46,7 @@ export class MissingUpdateFieldsError extends Schema.TaggedErrorClass<MissingUpd
 
 export class ConflictingUpdateFlagsError extends Schema.TaggedErrorClass<ConflictingUpdateFlagsError>()(
   "ConflictingUpdateFlagsError",
+  {
+    message: Schema.String,
+  },
+) {}

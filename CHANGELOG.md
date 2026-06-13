@@ -1,5 +1,27 @@
 # t3code-cli
 
+## 0.9.1
+
+### Patch Changes
+
+- ba0c671: Fix background thread callbacks exiting before delivery.
+
+## 0.9.0
+
+### Minor Changes
+
+- 3652760: Add `thread show`, `thread approve`, and `thread respond` commands.
+
+### Patch Changes
+
+- 7942f5b: Restructure `vp pack` output into a single `shared.js` chunk plus thin named entry files (no hashed chunk filenames).
+- 59225bc: Restructure README with improved navigation and add self-identity guidance to skill.
+  - README now has clearer sections: Quick Start, Authentication, Project Management, Models, Thread Management
+  - Skill updated with guidance to use `t3cli thread show` to check identity before spawning threads
+  - Agents should prefer same provider and model family when starting new threads
+
+- bbdbdf0: Add self-archive protection to `thread archive` with `--force` override.
+
 ## 0.8.0
 
 ### Minor Changes
