@@ -36,3 +36,17 @@ export class MissingRequestError extends Schema.TaggedErrorClass<MissingRequestE
     message: Schema.String,
   },
 ) {}
+
+export class MissingUpdateFieldsError extends Schema.TaggedErrorClass<MissingUpdateFieldsError>()(
+  "MissingUpdateFieldsError",
+  {
+    message: Schema.String,
+  },
+) {}
+
+export class ConflictingUpdateFlagsError extends Schema.TaggedErrorClass<ConflictingUpdateFlagsError>()(
+  "ConflictingUpdateFlagsError",
+  {
+    message: Schema.String,
+  },
+) {}

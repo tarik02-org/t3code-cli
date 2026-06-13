@@ -4,6 +4,7 @@ import { approveThreadCommand } from "./threads/approve.ts";
 import { archiveThreadCommand } from "./threads/archive.ts";
 import { callbackThreadCommand } from "./threads/callback.ts";
 import { respondThreadCommand } from "./threads/respond.ts";
+import { updateThreadCommand } from "./threads/update.ts";
 
 export function createThreadCommand() {
   return Command.make("thread").pipe(
@@ -12,6 +13,7 @@ export function createThreadCommand() {
       approveThreadCommand,
       respondThreadCommand,
       archiveThreadCommand,
+      updateThreadCommand,
       callbackThreadCommand,
     ]),
   );

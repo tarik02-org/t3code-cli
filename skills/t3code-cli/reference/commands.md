@@ -5,7 +5,7 @@ t3cli
 ├── list|start|send|show|transcript|wait
 ├── project list|add
 ├── model list
-└── thread approve|respond|archive|callback
+└── thread approve|respond|archive|update|callback
 ```
 
 Auth commands: [setup.md](setup.md)
@@ -67,6 +67,13 @@ t3cli wait [--thread <id>] [--format auto|human|ndjson]
 t3cli thread approve --request <id> --decision accept|decline|cancel [--thread <id>] [--format json]
 t3cli thread respond --request <id> [--answers <json>] [--stdin] [--thread <id>] [--format json]
 t3cli thread archive [--thread <id>] [--force|-f] [--format json]
+t3cli thread update [--thread <id>]
+  [--title <title>]
+  [--provider <name>] [--model <id>]
+  [--option key=value] [--reasoning-effort <v>] [--effort <v>] [--fast-mode] [--thinking]
+  [--branch <name>] [--clear-branch]
+  [--worktree <path>] [--clear-worktree]
+  [--format json]
 t3cli thread callback --from <thread-id> --prompt <message> [--thread <id>] [--background]
 ```
 
@@ -101,19 +108,6 @@ One JSON object per line:
 { "type": "status", "status": "running", "threadId": "..." }
 { "type": "done", "thread": {}, "latestAssistantMessage": {} }
 ```
-
-## Errors
-
-| Tag                   | Cause                                                          |
-| --------------------- | -------------------------------------------------------------- |
-| `ProjectLookupError`  | Unresolved `--project` / env / cwd                             |
-| `MissingThreadError`  | Missing `--thread` / `T3CODE_THREAD_ID`                        |
-| `SelfArchiveError`    | Archiving thread matching `T3CODE_THREAD_ID` without `--force` |
-| `MissingRequestError` | Missing `--request` on approve/respond                         |
-| `MessageInputError`   | No message arg and empty stdin                                 |
-| `InvalidLimitError`   | Invalid `--limit`                                              |
-
-Non-zero exit; message on stderr.
 
 ## Examples
 

@@ -1,13 +1,12 @@
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
-
 import { Environment } from "../environment/service.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import { ProjectLookupError, ThreadSessionError } from "../domain/error.ts";
 import { resolveProjectScope } from "../domain/helpers.ts";
 import { type StartThreadInput } from "./service.ts";
-import type { SendThreadInput, CallbackThreadInput } from "./service.ts";
+import type { CallbackThreadInput, SendThreadInput } from "./service.ts";
 import { mergeModelOptions } from "./model-selection.ts";
 import { derivePendingApprovals, derivePendingUserInputs } from "../domain/thread-activities.ts";
 import { threadStatus, type ThreadLifecycleStatus } from "../domain/thread-lifecycle.ts";
@@ -20,6 +19,7 @@ import {
   makeThreadTurnContinueCommand,
   makeThreadUserInputRespondCommand,
 } from "./thread-commands.ts";
+import { makeUpdateThread } from "./thread-update.ts";
 import {
   waitForThread as waitForThreadUntilComplete,
   watchThread as watchThreadEvents,
@@ -61,6 +61,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     );
     return yield* orchestration.dispatch(command);
   });
+  const updateThread = makeUpdateThread({ orchestration, crypto });
   const startThread = Effect.fn("T3ApplicationLive.startThread")(function* (
     startInput: StartThreadInput,
     policy?: {
@@ -220,6 +221,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
   return {
     approveThread,
     archiveThread,
+    updateThread,
     listThreads,
     getThreadMessages,
     respondToThread,

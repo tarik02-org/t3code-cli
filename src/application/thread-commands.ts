@@ -142,3 +142,26 @@ export const makeThreadUserInputRespondCommand = Effect.fn("makeThreadUserInputR
     } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.user-input.respond" }>;
   },
 );
+
+export const makeThreadMetaUpdateCommand = Effect.fn("makeThreadMetaUpdateCommand")(function* (
+  threadId: string,
+  input: {
+    readonly title?: string;
+    readonly modelSelection?: ModelSelection;
+    readonly branch?: string | null;
+    readonly worktreePath?: string | null;
+  },
+) {
+  const crypto = yield* Crypto.Crypto;
+  return {
+    type: "thread.meta.update",
+    commandId: CommandId.make(
+      `t3cli:thread-meta-update:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    ),
+    threadId: ThreadId.make(threadId),
+    ...(input.title !== undefined ? { title: input.title } : {}),
+    ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
+    ...(input.branch !== undefined ? { branch: input.branch } : {}),
+    ...(input.worktreePath !== undefined ? { worktreePath: input.worktreePath } : {}),
+  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.meta.update" }>;
+});
