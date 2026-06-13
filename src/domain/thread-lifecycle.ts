@@ -8,12 +8,13 @@ import {
 import * as Schema from "effect/Schema";
 
 export function isThreadActive(thread: OrchestrationThreadShell | OrchestrationThread) {
-  return (
-    thread.session?.status === "starting" ||
-    thread.session?.status === "running" ||
-    thread.latestTurn?.state === "running" ||
-    isPendingStart(thread)
-  );
+  if (thread.session?.status === "starting" || thread.session?.status === "running") {
+    return true;
+  }
+  if (thread.latestTurn?.state === "running") {
+    return !("messages" in thread && hasTerminalSession(thread) && isThreadCompleteEnough(thread));
+  }
+  return isPendingStart(thread);
 }
 
 export type ThreadLifecycleStatus = ReturnType<typeof threadStatus>;
@@ -90,4 +91,12 @@ function isPendingStart(thread: OrchestrationThreadShell | OrchestrationThread) 
     return false;
   }
   return thread.messages.at(-1)?.role === "user";
+}
+
+function hasTerminalSession(thread: OrchestrationThreadShell | OrchestrationThread) {
+  return (
+    thread.session !== null &&
+    thread.session?.status !== "starting" &&
+    thread.session?.status !== "running"
+  );
 }
