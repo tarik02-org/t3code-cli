@@ -5,7 +5,7 @@ t3cli
 ├── project list|add|delete
 ├── model list
 ├── list|start|send|show|transcript|wait
-└── thread approve|respond|archive|update|delete|callback
+└── thread approve|respond|archive|interrupt|unarchive|update|delete|callback
 ```
 
 Auth commands: [setup.md](setup.md)
@@ -68,6 +68,8 @@ t3cli wait [--thread <id>] [--format auto|human|ndjson]
 t3cli thread approve --request <id> --decision accept|decline|cancel [--thread <id>] [--format json]
 t3cli thread respond --request <id> [--answers <json>] [--stdin] [--thread <id>] [--format json]
 t3cli thread archive [--thread <id>] [--force|-f] [--format json]
+t3cli thread interrupt [--thread <id>] [--format json]
+t3cli thread unarchive [--thread <id>] [--format json]
 t3cli thread update [--thread <id>]
   [--title <title>]
   [--provider <name>] [--model <id>]

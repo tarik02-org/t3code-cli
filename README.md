@@ -104,8 +104,10 @@ t3cli wait [--thread <id>]                   # Wait for completion
 ```sh
 t3cli thread archive [--thread <id>]        # Archive thread
 t3cli thread approve --request <id>         # Approve request
+t3cli thread interrupt [--thread <id>]      # Interrupt running turn
 t3cli thread respond --request <id>         # Respond to request
 t3cli thread update [--thread <id>]         # Update thread metadata
+t3cli thread unarchive [--thread <id>]      # Unarchive thread
 t3cli thread delete [--thread <id>] [--yes] # Delete thread
 t3cli thread callback --from <id>           # Notify another thread on completion
 ```

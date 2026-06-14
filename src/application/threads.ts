@@ -21,9 +21,11 @@ import {
   makeThreadApprovalRespondCommand,
   makeThreadArchiveCommand,
   makeThreadDeleteCommand,
+  makeThreadInterruptCommand,
   makeThreadSessionStopCommand,
   makeThreadStartCommands,
   makeThreadTurnContinueCommand,
+  makeThreadUnarchiveCommand,
   makeThreadUserInputRespondCommand,
 } from "./thread-commands.ts";
 import { makeUpdateThread } from "./thread-update.ts";
@@ -74,6 +76,25 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     const command = yield* makeThreadArchiveCommand(threadId).pipe(
       Effect.provideService(Crypto.Crypto, crypto),
     );
+    return yield* orchestration.dispatch(command);
+  });
+  const unarchiveThread = Effect.fn("T3ApplicationLive.unarchiveThread")(function* (
+    threadId: string,
+  ) {
+    const command = yield* makeThreadUnarchiveCommand(threadId).pipe(
+      Effect.provideService(Crypto.Crypto, crypto),
+    );
+    return yield* orchestration.dispatch(command);
+  });
+  const interruptThread = Effect.fn("T3ApplicationLive.interruptThread")(function* (
+    threadId: string,
+  ) {
+    const snapshot = yield* orchestration.getThreadSnapshot(threadId);
+    const activeTurnId = snapshot.session?.activeTurnId ?? undefined;
+    const command = yield* makeThreadInterruptCommand({
+      threadId,
+      ...(activeTurnId !== undefined ? { turnId: activeTurnId } : {}),
+    }).pipe(Effect.provideService(Crypto.Crypto, crypto));
     return yield* orchestration.dispatch(command);
   });
   const deleteThread = Effect.fn("T3ApplicationLive.deleteThread")(function* (threadId: string) {
@@ -262,7 +283,9 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     approveThread,
     archiveThread,
     deleteThread,
+    interruptThread,
     updateThread,
+    unarchiveThread,
     listThreads,
     getThreadMessages,
     respondToThread,
