@@ -5,7 +5,7 @@ import * as Stream from "effect/Stream";
 import { RpcClientError } from "effect/unstable/rpc";
 
 import { RpcError } from "./error.ts";
-import { T3Rpc, type T3RpcService, type WsClient } from "./service.ts";
+import { T3Rpc, type WsClient } from "./service.ts";
 import type { CliRpcRequestError } from "./ws-group.ts";
 
 export type CliRpcOperationError = CliRpcRequestError | RpcClientError.RpcClientError;
@@ -28,8 +28,10 @@ export type RpcOperations = {
   ) => Stream.Stream<A, RpcError>;
 };
 
-function makeRunRpc(rpc: T3RpcService): RpcOperations["runRpc"] {
-  return <A, R>(
+export const makeRpcOperations = Effect.gen(function* () {
+  const rpc = yield* T3Rpc;
+
+  const runRpc: RpcOperations["runRpc"] = <A, R>(
     method: string,
     operation: (client: WsClient) => Effect.Effect<A, CliRpcOperationError, R>,
   ): Effect.Effect<A, RpcError, R> =>
@@ -43,10 +45,8 @@ function makeRunRpc(rpc: T3RpcService): RpcOperations["runRpc"] {
         Predicate.isTagged(error, "RpcError") ? error : toRpcError(error, method),
       ),
     );
-}
 
-function makeSubscribeRpc(rpc: T3RpcService): RpcOperations["subscribeRpc"] {
-  return <A>(
+  const subscribeRpc: RpcOperations["subscribeRpc"] = <A>(
     method: string,
     operation: (client: WsClient) => Stream.Stream<A, CliRpcOperationError>,
   ): Stream.Stream<A, RpcError> =>
@@ -59,13 +59,10 @@ function makeSubscribeRpc(rpc: T3RpcService): RpcOperations["subscribeRpc"] {
         Predicate.isTagged(error, "RpcError") ? error : toRpcError(error, method),
       ),
     );
-}
 
-export const makeRpcOperations = Effect.gen(function* () {
-  const rpc = yield* T3Rpc;
   return {
-    runRpc: makeRunRpc(rpc),
-    subscribeRpc: makeSubscribeRpc(rpc),
+    runRpc,
+    subscribeRpc,
   } satisfies RpcOperations;
 });
 
