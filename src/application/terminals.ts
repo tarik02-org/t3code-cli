@@ -8,7 +8,7 @@ import { ProjectLookupError, TerminalLookupError, ThreadLookupError } from "../d
 import { findProjectById } from "../domain/helpers.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import { RpcError } from "../rpc/error.ts";
-import { runRpc, subscribeRpc } from "../rpc/operation.ts";
+import { makeRpcOperations } from "../rpc/operation.ts";
 import type { T3Application, TerminalRef } from "./service.ts";
 
 export type CreateTerminalInput = {
@@ -30,35 +30,55 @@ type TerminalApplicationService = Pick<
   | "writeTerminal"
 >;
 
-const attachTerminal: TerminalApplicationService["attachTerminal"] = (input) =>
-  subscribeRpc(WS_METHODS.terminalAttach, (client) =>
-    client[WS_METHODS.terminalAttach]({
-      threadId: input.terminal.threadId,
-      terminalId: input.terminal.terminalId,
-      cwd: input.terminal.cwd,
-      worktreePath: input.terminal.worktreePath,
-      ...(input.cols !== undefined ? { cols: input.cols } : {}),
-      ...(input.rows !== undefined ? { rows: input.rows } : {}),
-    }),
-  );
-
-const watchTerminalEvents: TerminalApplicationService["watchTerminalEvents"] = (terminal) =>
-  subscribeRpc(WS_METHODS.subscribeTerminalEvents, (client) =>
-    client[WS_METHODS.subscribeTerminalEvents]({}),
-  ).pipe(
-    Stream.filter(
-      (event) => event.threadId === terminal.threadId && event.terminalId === terminal.terminalId,
-    ),
-  );
-
-const watchTerminalMetadata: TerminalApplicationService["watchTerminalMetadata"] = () =>
-  subscribeRpc(WS_METHODS.subscribeTerminalMetadata, (client) =>
-    client[WS_METHODS.subscribeTerminalMetadata]({}),
-  );
-
 export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(function* () {
   const crypto = yield* Crypto.Crypto;
   const orchestration = yield* T3Orchestration;
+  const { runRpc, subscribeRpc } = yield* makeRpcOperations;
+
+  const attachTerminal: TerminalApplicationService["attachTerminal"] = (input) =>
+    subscribeRpc(WS_METHODS.terminalAttach, (client) =>
+      client[WS_METHODS.terminalAttach]({
+        threadId: input.terminal.threadId,
+        terminalId: input.terminal.terminalId,
+        cwd: input.terminal.cwd,
+        worktreePath: input.terminal.worktreePath,
+        ...(input.cols !== undefined ? { cols: input.cols } : {}),
+        ...(input.rows !== undefined ? { rows: input.rows } : {}),
+      }),
+    );
+
+  const watchTerminalEvents: TerminalApplicationService["watchTerminalEvents"] = (terminal) =>
+    subscribeRpc(WS_METHODS.subscribeTerminalEvents, (client) =>
+      client[WS_METHODS.subscribeTerminalEvents]({}),
+    ).pipe(
+      Stream.filter(
+        (event) => event.threadId === terminal.threadId && event.terminalId === terminal.terminalId,
+      ),
+    );
+
+  const watchTerminalMetadata: TerminalApplicationService["watchTerminalMetadata"] = () =>
+    subscribeRpc(WS_METHODS.subscribeTerminalMetadata, (client) =>
+      client[WS_METHODS.subscribeTerminalMetadata]({}),
+    );
+
+  const getTerminalMetadataSnapshot = (): Effect.Effect<ReadonlyArray<TerminalSummary>, RpcError> =>
+    Effect.gen(function* () {
+      const item = yield* Stream.runHead(
+        subscribeRpc(WS_METHODS.subscribeTerminalMetadata, (client) =>
+          client[WS_METHODS.subscribeTerminalMetadata]({}),
+        ),
+      );
+      const value = Option.getOrUndefined(item);
+      if (value === undefined || value.type !== "snapshot") {
+        return yield* Effect.fail(
+          new RpcError({
+            message: "server did not return terminal metadata snapshot",
+            method: WS_METHODS.subscribeTerminalMetadata,
+          }),
+        );
+      }
+      return value.terminals;
+    });
 
   const listTerminals = Effect.fn("T3ApplicationLive.listTerminals")(function* (threadId: string) {
     const snapshot = yield* orchestration.getShellSnapshot();
@@ -200,23 +220,3 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
     writeTerminal,
   } satisfies TerminalApplicationService;
 });
-
-function getTerminalMetadataSnapshot(): Effect.Effect<ReadonlyArray<TerminalSummary>, RpcError> {
-  return Effect.gen(function* () {
-    const item = yield* Stream.runHead(
-      subscribeRpc(WS_METHODS.subscribeTerminalMetadata, (client) =>
-        client[WS_METHODS.subscribeTerminalMetadata]({}),
-      ),
-    );
-    const value = Option.getOrUndefined(item);
-    if (value === undefined || value.type !== "snapshot") {
-      return yield* Effect.fail(
-        new RpcError({
-          message: "server did not return terminal metadata snapshot",
-          method: WS_METHODS.subscribeTerminalMetadata,
-        }),
-      );
-    }
-    return value.terminals;
-  });
-}
