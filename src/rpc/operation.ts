@@ -5,7 +5,7 @@ import * as Stream from "effect/Stream";
 import { RpcClientError } from "effect/unstable/rpc";
 
 import { RpcError } from "./error.ts";
-import type { T3Rpc, WsClient } from "./service.ts";
+import { T3Rpc, type WsClient } from "./service.ts";
 import type { CliRpcRequestError } from "./ws-group.ts";
 
 export type CliRpcOperationError = CliRpcRequestError | RpcClientError.RpcClientError;
@@ -18,36 +18,45 @@ export const rpcRetrySchedule = Schedule.exponential("100 millis").pipe(
 );
 
 export function runRpc<A, R>(
-  rpc: T3Rpc["Service"],
   method: string,
   operation: (client: WsClient) => Effect.Effect<A, CliRpcOperationError, R>,
 ): Effect.Effect<A, RpcError, R> {
-  return rpc.getClient.pipe(
-    Effect.flatMap((client) => operation(client)),
-    Effect.tapError((error) =>
-      Predicate.isTagged(error, "RpcClientError") ? rpc.disconnect : Effect.void,
-    ),
-    Effect.retry(rpcRetrySchedule),
-    Effect.mapError((error) =>
-      Predicate.isTagged(error, "RpcError") ? error : toRpcError(error, method),
-    ),
-  );
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- T3Rpc is provided by AppLayer when rpc helpers run
+  return Effect.gen(function* () {
+    const rpc = yield* T3Rpc;
+    return yield* rpc.getClient.pipe(
+      Effect.flatMap((client) => operation(client)),
+      Effect.tapError((error) =>
+        Predicate.isTagged(error, "RpcClientError") ? rpc.disconnect : Effect.void,
+      ),
+      Effect.retry(rpcRetrySchedule),
+      Effect.mapError((error) =>
+        Predicate.isTagged(error, "RpcError") ? error : toRpcError(error, method),
+      ),
+    );
+  }) as Effect.Effect<A, RpcError, R>;
 }
 
 export function subscribeRpc<A>(
-  rpc: T3Rpc["Service"],
   method: string,
   operation: (client: WsClient) => Stream.Stream<A, CliRpcOperationError>,
 ): Stream.Stream<A, RpcError> {
-  return Stream.unwrap(rpc.getClient.pipe(Effect.map((client) => operation(client)))).pipe(
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- T3Rpc is provided by AppLayer when rpc helpers run
+  return Stream.unwrap(
+    T3Rpc.pipe(
+      Effect.flatMap((rpc) => rpc.getClient.pipe(Effect.map((client) => operation(client)))),
+    ),
+  ).pipe(
     Stream.tapError((error) =>
-      Predicate.isTagged(error, "RpcClientError") ? rpc.disconnect : Effect.void,
+      Predicate.isTagged(error, "RpcClientError")
+        ? T3Rpc.pipe(Effect.flatMap((rpc) => rpc.disconnect))
+        : Effect.void,
     ),
     Stream.retry(rpcRetrySchedule),
     Stream.mapError((error) =>
       Predicate.isTagged(error, "RpcError") ? error : toRpcError(error, method),
     ),
-  );
+  ) as Stream.Stream<A, RpcError>;
 }
 
 function toRpcError(error: CliRpcOperationError, method: string): RpcError {

@@ -8,11 +8,8 @@ import type {
   TerminalSummary,
 } from "#t3tools/contracts";
 
-import type {
-  T3Application,
-  TerminalAttachTarget,
-  TerminalRef,
-} from "../../application/service.ts";
+import type { TerminalAttachTarget, TerminalRef } from "../../application/service.ts";
+import { T3Application } from "../../application/service.ts";
 import type { ApplicationError } from "../../application/error.ts";
 import { TerminalCliError, type TerminalIoError } from "./error.ts";
 import { TerminalIo } from "./io-service.ts";
@@ -31,12 +28,10 @@ type AttachSessionResult =
       readonly message?: string;
     };
 
-export function runAttachedTerminalSession(input: {
-  readonly application: T3Application["Service"];
-  readonly terminal: TerminalAttachTarget;
-}) {
+export function runAttachedTerminalSession(input: { readonly terminal: TerminalAttachTarget }) {
   return Effect.scoped(
     Effect.gen(function* () {
+      const application = yield* T3Application;
       const io = yield* TerminalIo;
       const { cols, rows } = yield* io.getWindowSize.pipe(
         Effect.mapError((error) => mapTerminalIoError(error, input.terminal)),
@@ -45,7 +40,7 @@ export function runAttachedTerminalSession(input: {
         Effect.mapError((error) => mapTerminalIoError(error, input.terminal)),
       );
       const completion = yield* Deferred.make<AttachSessionResult>();
-      const stream = input.application.attachTerminal({
+      const stream = application.attachTerminal({
         terminal: input.terminal,
         cols,
         rows,
@@ -60,7 +55,7 @@ export function runAttachedTerminalSession(input: {
       );
 
       yield* Stream.runForEach(session.resize, ({ cols: nextCols, rows: nextRows }) =>
-        input.application.resizeTerminal({
+        application.resizeTerminal({
           terminal: input.terminal,
           cols: nextCols,
           rows: nextRows,
@@ -75,7 +70,6 @@ export function runAttachedTerminalSession(input: {
 
       yield* Stream.runForEach(session.input, (chunk) =>
         handleSessionInput({
-          application: input.application,
           completion,
           terminal: input.terminal,
           chunk,
@@ -108,7 +102,6 @@ function completeAttachSession(
 }
 
 function handleSessionInput(input: {
-  readonly application: T3Application["Service"];
   readonly completion: Deferred.Deferred<AttachSessionResult>;
   readonly terminal: TerminalRef;
   readonly chunk: Uint8Array;
@@ -121,8 +114,9 @@ function handleSessionInput(input: {
   }
 
   return Effect.gen(function* () {
+    const application = yield* T3Application;
     if (payload.length > 0) {
-      yield* input.application.writeTerminal({
+      yield* application.writeTerminal({
         terminal: input.terminal,
         data: Buffer.from(payload).toString("utf8"),
       });

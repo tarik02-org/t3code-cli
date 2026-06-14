@@ -18,7 +18,6 @@ export const attachTerminalCommand = Command.make(
         terminalId,
       });
       yield* runAttachedTerminalSession({
-        application,
         terminal: toTerminalAttachTarget(terminal),
       });
     }),

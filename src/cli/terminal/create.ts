@@ -33,7 +33,6 @@ export const createTerminalCommand = Command.make(
 
       if (attach) {
         yield* runAttachedTerminalSession({
-          application,
           terminal: snapshotToTerminalAttachTarget(snapshot),
         });
         return;
