@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import type { TerminalMetadataStreamEvent, TerminalSummary } from "#t3tools/contracts";
 import { Argument, Command, Flag } from "effect/unstable/cli";
@@ -59,13 +60,12 @@ export const waitTerminalCommand = Command.make(
       yield* application.listTerminals(thread);
 
       const resolution = yield* application.watchTerminalMetadata().pipe(
-        Stream.runFold(
-          () => null as WaitResolution | null,
-          (state, event) => state ?? resolveMetadataWait(event, target, thread, terminalId),
-        ),
+        Stream.map((event) => resolveMetadataWait(event, target, thread, terminalId)),
+        Stream.filter((value): value is WaitResolution => value !== null),
+        Stream.runHead,
       );
 
-      if (resolution === null) {
+      if (Option.isNone(resolution)) {
         yield* Effect.fail(
           new TerminalCliError({
             message: "terminal wait stream ended unexpectedly",
@@ -73,10 +73,10 @@ export const waitTerminalCommand = Command.make(
             terminalId,
           }),
         );
-      } else if (resolution.kind === "fail") {
-        yield* Effect.fail(resolution.error);
+      } else if (resolution.value.kind === "fail") {
+        yield* Effect.fail(resolution.value.error);
       } else {
-        const result = resolution.value;
+        const result = resolution.value.value;
         if (resolvedFormat === "json") {
           yield* output.printJson(result);
         } else {
