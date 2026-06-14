@@ -62,11 +62,6 @@ export const waitTerminalCommand = Command.make(
       });
       const resolvedFormat = resolveOutputFormat(format, environment, "json");
 
-      yield* application.getTerminal({
-        threadId,
-        terminalId,
-      });
-
       const resolution = yield* application.watchTerminalMetadata().pipe(
         Stream.map((event) => resolveMetadataWait(event, target, threadId, terminalId)),
         Stream.filter((value): value is WaitResolution => value !== null),
@@ -102,7 +97,7 @@ function terminalClosedBeforeExitError(threadId: string, terminalId: string) {
   });
 }
 
-function resolveMetadataWait(
+export function resolveMetadataWait(
   event: TerminalMetadataStreamEvent,
   target: TerminalWaitTarget,
   threadId: string,
