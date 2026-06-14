@@ -3,9 +3,10 @@ import * as Option from "effect/Option";
 import { Command } from "effect/unstable/cli";
 
 import { requireDestructiveConfirmation } from "../confirm.ts";
-import { formatFlag, threadFlag, yesFlag } from "../flags.ts";
+import { formatFlag, selfActionForceFlag, threadFlag, yesFlag } from "../flags.ts";
 import { formatThreadDeletedHuman } from "../thread-format.ts";
 import { MissingThreadError } from "../error.ts";
+import { requireSelfActionConfirmation } from "../self-action.ts";
 import { resolveThreadId } from "../../scope/index.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
@@ -16,10 +17,11 @@ export const deleteThreadCommand = Command.make(
   "delete",
   {
     thread: threadFlag,
+    force: selfActionForceFlag,
     yes: yesFlag,
     format: formatFlag,
   },
-  ({ thread, yes, format }) =>
+  ({ thread, force, yes, format }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
       const environment = yield* Environment;
@@ -35,6 +37,12 @@ export const deleteThreadCommand = Command.make(
           }),
         );
       }
+      yield* requireSelfActionConfirmation({
+        threadId,
+        force,
+        environment,
+        action: "delete",
+      });
       yield* requireDestructiveConfirmation({
         message: `Delete thread ${threadId}?`,
         yes,
