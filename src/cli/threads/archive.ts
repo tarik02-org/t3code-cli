@@ -1,9 +1,10 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { Command, Flag } from "effect/unstable/cli";
+import { Command } from "effect/unstable/cli";
 
-import { formatFlag, threadFlag } from "../flags.ts";
-import { MissingThreadError, SelfArchiveError } from "../error.ts";
+import { formatFlag, selfActionForceFlag, threadFlag } from "../flags.ts";
+import { MissingThreadError } from "../error.ts";
+import { requireSelfActionConfirmation } from "../self-action.ts";
 import { resolveThreadId } from "../../scope/index.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
@@ -14,7 +15,7 @@ export const archiveThreadCommand = Command.make(
   "archive",
   {
     thread: threadFlag,
-    force: Flag.boolean("force").pipe(Flag.withAlias("f")),
+    force: selfActionForceFlag,
     format: formatFlag,
   },
   ({ thread, force, format }) =>
@@ -33,20 +34,12 @@ export const archiveThreadCommand = Command.make(
           }),
         );
       }
-      const envThreadId = environment.env.T3CODE_THREAD_ID;
-      if (
-        envThreadId !== undefined &&
-        envThreadId.length > 0 &&
-        threadId === envThreadId &&
-        !force
-      ) {
-        return yield* Effect.fail(
-          new SelfArchiveError({
-            threadId,
-            message: `cannot archive thread ${threadId}: matches T3CODE_THREAD_ID (are you trying to archive yourself?). Use --force to override.`,
-          }),
-        );
-      }
+      yield* requireSelfActionConfirmation({
+        targetThreadId: threadId,
+        force,
+        environment,
+        action: "archive",
+      });
       const resolvedFormat = resolveOutputFormat(format, environment, "json");
       const dispatch = yield* application.archiveThread(threadId);
       if (resolvedFormat === "json") {

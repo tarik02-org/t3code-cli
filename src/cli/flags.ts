@@ -40,6 +40,12 @@ export const forceFlag = Flag.boolean("force").pipe(
   Flag.withDefault(false),
 );
 
+export const selfActionForceFlag = Flag.boolean("force").pipe(
+  Flag.withDescription("Confirm action targeting the calling thread (required in agent context)"),
+  Flag.withAlias("f"),
+  Flag.withDefault(false),
+);
+
 export const formatFlag = Flag.choice("format", humanJsonFormatChoices).pipe(
   Flag.withDefault("auto"),
 );

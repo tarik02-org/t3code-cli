@@ -2,10 +2,11 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
-import { modelFlags, threadFlag, threadFormatFlag } from "../flags.ts";
+import { modelFlags, selfActionForceFlag, threadFlag, threadFormatFlag } from "../flags.ts";
 import { readInitialMessage } from "../message-input.ts";
 import { buildModelOptions } from "../model-options.ts";
 import { MissingThreadError } from "../error.ts";
+import { requireSelfActionConfirmation } from "../self-action.ts";
 import { resolveThreadId } from "../../scope/index.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
@@ -18,13 +19,26 @@ export const sendThreadCommand = Command.make(
   "send",
   {
     thread: threadFlag,
+    force: selfActionForceFlag,
     message: Argument.string("message").pipe(Argument.optional),
     stdin: Flag.boolean("stdin"),
     ...modelFlags,
     wait: Flag.boolean("wait"),
     format: threadFormatFlag,
   },
-  ({ thread, message, stdin, option, reasoningEffort, effort, fastMode, thinking, wait, format }) =>
+  ({
+    thread,
+    force,
+    message,
+    stdin,
+    option,
+    reasoningEffort,
+    effort,
+    fastMode,
+    thinking,
+    wait,
+    format,
+  }) =>
     Effect.gen(function* () {
       const inputService = yield* T3Input;
       const text = yield* readInitialMessage({
@@ -53,6 +67,12 @@ export const sendThreadCommand = Command.make(
           }),
         );
       }
+      yield* requireSelfActionConfirmation({
+        targetThreadId: threadId,
+        force,
+        environment,
+        action: "send message to",
+      });
       const input = {
         message: text,
         threadId,

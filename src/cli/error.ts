@@ -22,13 +22,10 @@ export class MissingThreadError extends Schema.TaggedErrorClass<MissingThreadErr
   },
 ) {}
 
-export class SelfArchiveError extends Schema.TaggedErrorClass<SelfArchiveError>()(
-  "SelfArchiveError",
-  {
-    message: Schema.String,
-    threadId: Schema.String,
-  },
-) {}
+export class SelfActionError extends Schema.TaggedErrorClass<SelfActionError>()("SelfActionError", {
+  message: Schema.String,
+  threadId: Schema.String,
+}) {}
 
 export class DestructiveConfirmationRequiredError extends Schema.TaggedErrorClass<DestructiveConfirmationRequiredError>()(
   "DestructiveConfirmationRequiredError",

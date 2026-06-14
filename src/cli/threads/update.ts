@@ -2,7 +2,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
 
-import { formatFlag, modelFlags, threadFlag } from "../flags.ts";
+import { formatFlag, modelFlags, selfActionForceFlag, threadFlag } from "../flags.ts";
+import { requireSelfActionConfirmation } from "../self-action.ts";
 import {
   ConflictingUpdateFlagsError,
   MissingThreadError,
@@ -19,6 +20,7 @@ export const updateThreadCommand = Command.make(
   "update",
   {
     thread: threadFlag,
+    force: selfActionForceFlag,
     title: Flag.string("title").pipe(Flag.optional),
     provider: Flag.string("provider").pipe(Flag.optional),
     model: Flag.string("model").pipe(Flag.optional),
@@ -31,6 +33,7 @@ export const updateThreadCommand = Command.make(
   },
   ({
     thread,
+    force,
     title,
     provider,
     model,
@@ -113,6 +116,12 @@ export const updateThreadCommand = Command.make(
           }),
         );
       }
+      yield* requireSelfActionConfirmation({
+        targetThreadId: threadId,
+        force,
+        environment,
+        action: "update",
+      });
 
       const dispatch = yield* application.updateThread({
         threadId,
