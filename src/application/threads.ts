@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import { Environment } from "../environment/service.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
-import { ProjectLookupError, ThreadSessionError } from "../domain/error.ts";
+import { ProjectLookupError, ThreadLookupError, ThreadSessionError } from "../domain/error.ts";
 import { resolveProjectScope } from "../domain/helpers.ts";
 import { type ListThreadsInclude, type StartThreadInput } from "./service.ts";
 import type { CallbackThreadInput, SendThreadInput } from "./service.ts";
@@ -77,7 +77,18 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     return yield* orchestration.dispatch(command);
   });
   const deleteThread = Effect.fn("T3ApplicationLive.deleteThread")(function* (threadId: string) {
-    const thread = yield* orchestration.getThreadSnapshot(threadId);
+    const snapshot = yield* loadThreadsSnapshot("all").pipe(
+      Effect.provideService(T3Orchestration, orchestration),
+    );
+    const thread = snapshot.threads.find((item) => item.id === threadId);
+    if (thread === undefined) {
+      return yield* Effect.fail(
+        new ThreadLookupError({
+          message: `thread not found: ${threadId}`,
+          threadId,
+        }),
+      );
+    }
     if (sessionNeedsStopBeforeDelete(thread.session)) {
       const stopCommand = yield* makeThreadSessionStopCommand(threadId).pipe(
         Effect.provideService(Crypto.Crypto, crypto),
