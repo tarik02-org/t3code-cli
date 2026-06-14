@@ -2,8 +2,9 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Command } from "effect/unstable/cli";
 
-import { formatFlag, threadFlag } from "../flags.ts";
+import { formatFlag, selfActionForceFlag, threadFlag } from "../flags.ts";
 import { MissingThreadError } from "../error.ts";
+import { requireSelfActionConfirmation } from "../self-action.ts";
 import { resolveThreadId } from "../../scope/index.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
@@ -14,9 +15,10 @@ export const interruptThreadCommand = Command.make(
   "interrupt",
   {
     thread: threadFlag,
+    force: selfActionForceFlag,
     format: formatFlag,
   },
-  ({ thread, format }) =>
+  ({ thread, force, format }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
       const environment = yield* Environment;
@@ -32,6 +34,12 @@ export const interruptThreadCommand = Command.make(
           }),
         );
       }
+      yield* requireSelfActionConfirmation({
+        threadId,
+        force,
+        environment,
+        action: "interrupt",
+      });
       const resolvedFormat = resolveOutputFormat(format, environment, "json");
       const dispatch = yield* application.interruptThread(threadId);
       if (resolvedFormat === "json") {

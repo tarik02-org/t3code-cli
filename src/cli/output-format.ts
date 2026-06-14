@@ -35,7 +35,7 @@ function isHumanTerminal(environment: EnvironmentShape) {
   return isInteractiveHumanTerminal(environment);
 }
 
-function isAgentEnvironment(environment: EnvironmentShape) {
+export function isAgentEnvironment(environment: EnvironmentShape) {
   return (
     environment.env.CI !== undefined ||
     environment.env.CODEX_CI !== undefined ||
