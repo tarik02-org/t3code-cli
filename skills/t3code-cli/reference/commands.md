@@ -2,10 +2,10 @@
 
 ```
 t3cli
-├── list|start|send|show|transcript|wait
-├── project list|add
+├── project list|add|delete
 ├── model list
-└── thread approve|respond|archive|update|callback
+├── list|start|send|show|transcript|wait
+└── thread approve|respond|archive|update|delete|callback
 ```
 
 Auth commands: [setup.md](setup.md)
@@ -31,6 +31,7 @@ Also treated as agent env (no live TTY): `CI`, `CODEX_CI`, `CODEX_THREAD_ID`.
 ```sh
 t3cli project list [--format json]
 t3cli project add [--path .] [--title <title>] [--format json]
+t3cli project delete [--project <ref>] [--force] [--yes] [--format json]
 ```
 
 `--path` defaults to current directory.
@@ -74,6 +75,7 @@ t3cli thread update [--thread <id>]
   [--branch <name>] [--clear-branch]
   [--worktree <path>] [--clear-worktree]
   [--format json]
+t3cli thread delete [--thread <id>] [--yes] [--format json]
 t3cli thread callback --from <thread-id> --prompt <message> [--thread <id>] [--background]
 ```
 

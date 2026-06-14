@@ -3,6 +3,7 @@ import { Command } from "effect/unstable/cli";
 import { approveThreadCommand } from "./threads/approve.ts";
 import { archiveThreadCommand } from "./threads/archive.ts";
 import { callbackThreadCommand } from "./threads/callback.ts";
+import { deleteThreadCommand } from "./threads/delete.ts";
 import { respondThreadCommand } from "./threads/respond.ts";
 import { updateThreadCommand } from "./threads/update.ts";
 
@@ -14,6 +15,7 @@ export function createThreadCommand() {
       respondThreadCommand,
       archiveThreadCommand,
       updateThreadCommand,
+      deleteThreadCommand,
       callbackThreadCommand,
     ]),
   );

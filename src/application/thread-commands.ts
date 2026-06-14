@@ -101,6 +101,34 @@ export const makeThreadArchiveCommand = Effect.fn("makeThreadArchiveCommand")(fu
   } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.archive" }>;
 });
 
+export const makeThreadSessionStopCommand = Effect.fn("makeThreadSessionStopCommand")(function* (
+  threadId: string,
+) {
+  const crypto = yield* Crypto.Crypto;
+  const createdAt = DateTime.formatIso(yield* DateTime.now);
+  return {
+    type: "thread.session.stop",
+    commandId: CommandId.make(
+      `t3cli:thread-session-stop:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    ),
+    threadId: ThreadId.make(threadId),
+    createdAt,
+  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.session.stop" }>;
+});
+
+export const makeThreadDeleteCommand = Effect.fn("makeThreadDeleteCommand")(function* (
+  threadId: string,
+) {
+  const crypto = yield* Crypto.Crypto;
+  return {
+    type: "thread.delete",
+    commandId: CommandId.make(
+      `t3cli:thread-delete:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    ),
+    threadId: ThreadId.make(threadId),
+  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.delete" }>;
+});
+
 export const makeThreadApprovalRespondCommand = Effect.fn("makeThreadApprovalRespondCommand")(
   function* (input: {
     readonly threadId: string;

@@ -4,6 +4,7 @@ import { Command, Flag } from "effect/unstable/cli";
 
 import { formatFlag, projectPathFlag } from "./flags.ts";
 import { formatProjectAddedHuman, formatProjectsHuman } from "./project-format.ts";
+import { deleteProjectCommand } from "./projects/delete.ts";
 import { T3Application } from "../application/service.ts";
 import { Environment } from "../environment/service.ts";
 import { resolveOutputFormat } from "./output-format.ts";
@@ -12,7 +13,7 @@ import { T3Output } from "./output/service.ts";
 export function createProjectCommand() {
   return Command.make("project").pipe(
     Command.withDescription("project commands"),
-    Command.withSubcommands([listCommand, addCommand]),
+    Command.withSubcommands([listCommand, addCommand, deleteProjectCommand]),
   );
 }
 

@@ -3,19 +3,25 @@ import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import { Environment } from "../environment/service.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
-import { ProjectLookupError, ThreadSessionError } from "../domain/error.ts";
+import { ProjectLookupError, ThreadLookupError, ThreadSessionError } from "../domain/error.ts";
 import { resolveProjectScope } from "../domain/helpers.ts";
 import { type ListThreadsInclude, type StartThreadInput } from "./service.ts";
 import type { CallbackThreadInput, SendThreadInput } from "./service.ts";
 import type { OrchestrationThreadShell } from "#t3tools/contracts";
 import { mergeModelOptions } from "./model-selection.ts";
 import { derivePendingApprovals, derivePendingUserInputs } from "../domain/thread-activities.ts";
-import { threadStatus, type ThreadLifecycleStatus } from "../domain/thread-lifecycle.ts";
+import {
+  sessionNeedsStopBeforeDelete,
+  threadStatus,
+  type ThreadLifecycleStatus,
+} from "../domain/thread-lifecycle.ts";
 import type { OrchestrationThread } from "#t3tools/contracts";
 import type { ProviderApprovalDecision, ProviderUserInputAnswers } from "#t3tools/contracts";
 import {
   makeThreadApprovalRespondCommand,
   makeThreadArchiveCommand,
+  makeThreadDeleteCommand,
+  makeThreadSessionStopCommand,
   makeThreadStartCommands,
   makeThreadTurnContinueCommand,
   makeThreadUserInputRespondCommand,
@@ -69,6 +75,31 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
       Effect.provideService(Crypto.Crypto, crypto),
     );
     return yield* orchestration.dispatch(command);
+  });
+  const deleteThread = Effect.fn("T3ApplicationLive.deleteThread")(function* (threadId: string) {
+    const snapshot = yield* loadThreadsSnapshot("all").pipe(
+      Effect.provideService(T3Orchestration, orchestration),
+    );
+    const thread = snapshot.threads.find((item) => item.id === threadId);
+    if (thread === undefined) {
+      return yield* Effect.fail(
+        new ThreadLookupError({
+          message: `thread not found: ${threadId}`,
+          threadId,
+        }),
+      );
+    }
+    if (sessionNeedsStopBeforeDelete(thread.session)) {
+      const stopCommand = yield* makeThreadSessionStopCommand(threadId).pipe(
+        Effect.provideService(Crypto.Crypto, crypto),
+      );
+      yield* orchestration.dispatch(stopCommand);
+    }
+    const command = yield* makeThreadDeleteCommand(threadId).pipe(
+      Effect.provideService(Crypto.Crypto, crypto),
+    );
+    const dispatch = yield* orchestration.dispatch(command);
+    return { threadId, dispatch };
   });
   const updateThread = makeUpdateThread({ orchestration, crypto });
   const startThread = Effect.fn("T3ApplicationLive.startThread")(function* (
@@ -230,6 +261,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
   return {
     approveThread,
     archiveThread,
+    deleteThread,
     updateThread,
     listThreads,
     getThreadMessages,

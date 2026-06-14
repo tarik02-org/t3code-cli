@@ -56,6 +56,7 @@ t3cli auth status                         # Check current auth
 ```sh
 t3cli project list                        # List known projects
 t3cli project add [--path <path>] [--title <title>]
+t3cli project delete [--project <ref>] [--force] [--yes]
 ```
 
 The `--path` defaults to the current directory.
@@ -105,6 +106,7 @@ t3cli thread archive [--thread <id>]        # Archive thread
 t3cli thread approve --request <id>         # Approve request
 t3cli thread respond --request <id>         # Respond to request
 t3cli thread update [--thread <id>]         # Update thread metadata
+t3cli thread delete [--thread <id>] [--yes] # Delete thread
 t3cli thread callback --from <id>           # Notify another thread on completion
 ```
 

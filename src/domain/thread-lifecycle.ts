@@ -2,10 +2,24 @@ import {
   OrchestrationMessage,
   type OrchestrationEvent,
   type OrchestrationMessage as OrchestrationMessageType,
+  type OrchestrationSession,
   type OrchestrationThread,
   type OrchestrationThreadShell,
 } from "#t3tools/contracts";
 import * as Schema from "effect/Schema";
+
+type SessionStatusForDelete = OrchestrationSession["status"] | "closed";
+
+function isClosedSessionStatus(status: SessionStatusForDelete): status is "closed" {
+  return status === "closed";
+}
+
+export function sessionNeedsStopBeforeDelete(session: OrchestrationSession | null) {
+  if (session === null) {
+    return false;
+  }
+  return !isClosedSessionStatus(session.status);
+}
 
 export function isThreadActive(thread: OrchestrationThreadShell | OrchestrationThread) {
   if (thread.session?.status === "starting" || thread.session?.status === "running") {

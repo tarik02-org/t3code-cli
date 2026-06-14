@@ -30,6 +30,11 @@ export class SelfArchiveError extends Schema.TaggedErrorClass<SelfArchiveError>(
   },
 ) {}
 
+export class DestructiveConfirmationRequiredError extends Schema.TaggedErrorClass<DestructiveConfirmationRequiredError>()(
+  "DestructiveConfirmationRequiredError",
+  { message: Schema.String },
+) {}
+
 export class InvalidFlagCombinationError extends Schema.TaggedErrorClass<InvalidFlagCombinationError>()(
   "InvalidFlagCombinationError",
   {
