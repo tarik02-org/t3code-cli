@@ -6,4 +6,8 @@ catalog:
   "@effect/vitest": 4.0.0-beta.78
   effect: 4.0.0-beta.78
   vite-plus: 0.1.24
-  vitest: 4.1.0
+  vite: npm:@voidzero-dev/vite-plus-core@0.1.24
+  vitest: npm:@voidzero-dev/vite-plus-test@0.1.24
+
+patchedDependencies:
+  "@effect/vitest@4.0.0-beta.78": patches/@effect__vitest@4.0.0-beta.78.patch

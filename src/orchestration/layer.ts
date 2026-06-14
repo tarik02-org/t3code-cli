@@ -53,6 +53,14 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
     }
     return value.snapshot;
   });
+  const getArchivedShellSnapshot = Effect.fn("T3OrchestrationLive.getArchivedShellSnapshot")(
+    function* () {
+      const client = yield* rpc.getClient;
+      return yield* client[ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot]({}).pipe(
+        runRpc(rpc, ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot),
+      );
+    },
+  );
   const getThreadSnapshot = Effect.fn("T3OrchestrationLive.getThreadSnapshot")(function* (
     threadId: string,
   ) {
@@ -130,6 +138,7 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
     dispatch,
     getServerConfig,
     getShellSnapshot,
+    getArchivedShellSnapshot,
     getThreadSnapshot,
     watchShellSequence,
     watchThreadItems,

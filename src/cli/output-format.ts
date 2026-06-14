@@ -25,13 +25,17 @@ export function canRenderLiveTerminal(environment: EnvironmentShape) {
   );
 }
 
-function isHumanTerminal(environment: EnvironmentShape) {
+export function isInteractiveHumanTerminal(environment: EnvironmentShape) {
   return (
     environment.stdoutIsTTY && !isAgentEnvironment(environment) && environment.env.TERM !== "dumb"
   );
 }
 
-function isAgentEnvironment(environment: EnvironmentShape) {
+function isHumanTerminal(environment: EnvironmentShape) {
+  return isInteractiveHumanTerminal(environment);
+}
+
+export function isAgentEnvironment(environment: EnvironmentShape) {
   return (
     environment.env.CI !== undefined ||
     environment.env.CODEX_CI !== undefined ||

@@ -1,20 +1,24 @@
 import * as Effect from "effect/Effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import * as Option from "effect/Option";
+import { Command, Flag } from "effect/unstable/cli";
 
+import { formatFlag, threadFlag } from "../flags.ts";
 import { InvalidLimitError } from "../error.ts";
+import { MissingThreadError } from "../error.ts";
+import { resolveThreadId } from "../../scope/index.ts";
 import { formatThreadMessagesHuman, formatThreadMessagesJson } from "../thread-format.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
-import { humanJsonFormatChoices, resolveOutputFormat } from "../output-format.ts";
+import { resolveOutputFormat } from "../output-format.ts";
 import { T3Output } from "../output/service.ts";
 
-export const getThreadMessagesCommand = Command.make(
-  "messages",
+export const getThreadTranscriptCommand = Command.make(
+  "transcript",
   {
-    thread: Argument.string("thread"),
+    thread: threadFlag,
     limit: Flag.integer("limit").pipe(Flag.withDefault(20)),
     full: Flag.boolean("full"),
-    format: Flag.choice("format", humanJsonFormatChoices).pipe(Flag.withDefault("auto")),
+    format: formatFlag,
   },
   ({ thread, limit, full, format }) =>
     Effect.gen(function* () {
@@ -26,11 +30,22 @@ export const getThreadMessagesCommand = Command.make(
       const application = yield* T3Application;
       const environment = yield* Environment;
       const output = yield* T3Output;
+      const threadId = resolveThreadId({
+        value: Option.getOrUndefined(thread),
+        env: environment.env,
+      });
+      if (threadId === undefined) {
+        return yield* Effect.fail(
+          new MissingThreadError({
+            message: "thread id is required: pass --thread or set T3CODE_THREAD_ID",
+          }),
+        );
+      }
       const resolvedFormat = resolveOutputFormat(format, environment, "json");
-      const detail = yield* application.getThreadMessages(thread);
+      const detail = yield* application.getThreadMessages(threadId);
       if (resolvedFormat === "json") {
         return yield* output.printJson(formatThreadMessagesJson(detail, full));
       }
       return yield* output.writeStdout(formatThreadMessagesHuman(detail, limit));
     }),
-).pipe(Command.withDescription("get latest thread messages"));
+).pipe(Command.withDescription("get latest thread transcript"));

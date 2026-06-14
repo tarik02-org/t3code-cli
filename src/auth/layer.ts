@@ -7,6 +7,7 @@ import { T3LocalAuth } from "./local.ts";
 import { T3AuthPairing } from "./pairing.ts";
 import { T3Auth } from "./service.ts";
 import { T3AuthTransport } from "./transport.ts";
+import type { AuthConfigInput } from "./type.ts";
 
 export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
   const config = yield* T3Config;
@@ -38,9 +39,32 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
     return yield* transport.issueWebSocketTicket(resolved);
   });
 
+  const writeConfig = Effect.fn("T3AuthLive.writeConfig")(function* (input: AuthConfigInput) {
+    const existing = yield* config.readStored().pipe(
+      Effect.catchTags({
+        ConfigError: (error) =>
+          Effect.fail(new AuthConfigError({ message: "auth config failed", cause: error })),
+      }),
+    );
+    yield* config
+      .writeStored({
+        ...existing,
+        url: input.url,
+        token: input.token,
+        ...(input.local !== undefined ? { local: input.local } : {}),
+      })
+      .pipe(
+        Effect.catchTags({
+          ConfigError: (error) =>
+            Effect.fail(new AuthConfigError({ message: "auth config failed", cause: error })),
+        }),
+      );
+  });
+
   return {
     pair: pairing.pair,
     local: localAuth.local,
+    writeConfig,
     status,
     issueWebSocketTicket,
   };

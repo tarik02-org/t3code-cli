@@ -1,6 +1,6 @@
 {
   "name": "t3code-cli",
-  "version": "0.4.0",
+  "version": "0.10.0",
   "description": "CLI for t3code",
   "keywords": [
     "claude",
@@ -37,6 +37,54 @@
     ".": {
       "types": "./dist/src/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./application": {
+      "types": "./dist/src/application/index.d.ts",
+      "default": "./dist/application.js"
+    },
+    "./auth": {
+      "types": "./dist/src/auth/index.d.ts",
+      "default": "./dist/auth.js"
+    },
+    "./cli": {
+      "types": "./dist/src/cli/index.d.ts",
+      "default": "./dist/cli.js"
+    },
+    "./config": {
+      "types": "./dist/src/config/index.d.ts",
+      "default": "./dist/config.js"
+    },
+    "./connection": {
+      "types": "./dist/src/connection/index.d.ts",
+      "default": "./dist/connection.js"
+    },
+    "./contracts": {
+      "types": "./dist/src/contracts/index.d.ts",
+      "default": "./dist/contracts.js"
+    },
+    "./t3tools": {
+      "types": "./dist/upstream-t3code/packages/contracts/src/index.d.ts",
+      "default": "./dist/t3tools.js"
+    },
+    "./layout": {
+      "types": "./dist/src/layout/index.d.ts",
+      "default": "./dist/layout.js"
+    },
+    "./orchestration": {
+      "types": "./dist/src/orchestration/index.d.ts",
+      "default": "./dist/orchestration.js"
+    },
+    "./rpc": {
+      "types": "./dist/src/rpc/index.d.ts",
+      "default": "./dist/rpc.js"
+    },
+    "./runtime": {
+      "types": "./dist/src/runtime/index.d.ts",
+      "default": "./dist/runtime.js"
+    },
+    "./scope": {
+      "types": "./dist/src/scope/index.d.ts",
+      "default": "./dist/scope.js"
     }
   },
   "scripts": {
@@ -47,7 +95,9 @@
     "lint": "vp lint",
     "lint:fix": "vp lint --fix",
     "prepack": "pnpm build",
+    "test": "vp test run",
     "changeset": "changeset",
+    "release:version": "changeset version && pnpm format",
     "release:check": "pnpm check && pnpm typecheck && pnpm pack --dry-run",
     "release:publish": "changeset publish",
     "typecheck": "tsc --noEmit"
@@ -58,13 +108,15 @@
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
+    "@effect/vitest": "catalog:",
     "@t3tools/contracts": "workspace:*",
+    "@total-typescript/shoehorn": "^0.1.2",
     "@types/node": "^25.9.1",
     "typescript": "^6.0.3",
     "vite-plus": "^0.1.24"
   },
   "engines": {
-    "node": "^24.0.0"
+    "node": ">=24.0.0"
   },
   "packageManager": "pnpm@10.33.2"
 }

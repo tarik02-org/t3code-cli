@@ -1,28 +1,52 @@
 import * as Effect from "effect/Effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import * as Option from "effect/Option";
+import { Command } from "effect/unstable/cli";
 
+import { formatFlag, selfActionForceFlag, threadFlag } from "../flags.ts";
+import { MissingThreadError } from "../error.ts";
+import { requireSelfActionConfirmation } from "../self-action.ts";
+import { resolveThreadId } from "../../scope/index.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
-import { humanJsonFormatChoices, resolveOutputFormat } from "../output-format.ts";
+import { resolveOutputFormat } from "../output-format.ts";
 import { T3Output } from "../output/service.ts";
 
 export const archiveThreadCommand = Command.make(
   "archive",
   {
-    thread: Argument.string("thread"),
-    format: Flag.choice("format", humanJsonFormatChoices).pipe(Flag.withDefault("auto")),
+    thread: threadFlag,
+    force: selfActionForceFlag,
+    format: formatFlag,
   },
-  ({ thread, format }) =>
+  ({ thread, force, format }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
       const environment = yield* Environment;
       const output = yield* T3Output;
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
-      const dispatch = yield* application.archiveThread(thread);
-      if (resolvedFormat === "json") {
-        yield* output.printJson(dispatch);
-      } else {
-        yield* output.printInfo(`thread archived: ${thread}\nsequence: ${dispatch.sequence}`);
+      const threadId = resolveThreadId({
+        value: Option.getOrUndefined(thread),
+        env: environment.env,
+      });
+      if (threadId === undefined) {
+        return yield* Effect.fail(
+          new MissingThreadError({
+            message: "thread id is required: pass --thread or set T3CODE_THREAD_ID",
+          }),
+        );
       }
+      yield* requireSelfActionConfirmation({
+        threadId,
+        force,
+        environment,
+        action: "archive",
+      });
+      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const dispatch = yield* application.archiveThread(threadId);
+      if (resolvedFormat === "json") {
+        return yield* output.printJson(dispatch);
+      }
+      return yield* output.printInfo(
+        `thread archived: ${threadId}\nsequence: ${dispatch.sequence}`,
+      );
     }),
 ).pipe(Command.withDescription("archive thread"));

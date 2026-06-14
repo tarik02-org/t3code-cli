@@ -7,8 +7,15 @@ export type PairingUrl = {
   readonly credential: string;
 };
 
+export type AuthConfigInput = {
+  readonly url: string;
+  readonly token: string;
+  readonly local?: boolean;
+};
+
 export type PairResult = {
   readonly url: string;
+  readonly token: string;
   readonly role: AuthBearerBootstrapResult["role"];
   readonly expiresAt: string;
 };
@@ -21,8 +28,24 @@ export type LocalAuthInput = {
   readonly subject: string;
 };
 
+export type LocalAuthTokenInput = Omit<LocalAuthInput, "origin">;
+
+export type LocalAuthOriginInput = {
+  readonly baseDir?: string;
+  readonly origin?: string;
+};
+
+export type LocalAuthTokenResult = {
+  readonly token: string;
+  readonly role: AuthSessionRole;
+  readonly expiresAt: string;
+  readonly source: "local";
+  readonly baseDir: string;
+};
+
 export type LocalAuthResult = {
   readonly url: string;
+  readonly token: string;
   readonly role: AuthSessionRole;
   readonly expiresAt: string;
   readonly source: "local";

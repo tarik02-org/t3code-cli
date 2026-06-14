@@ -11,7 +11,7 @@ import { T3InputLive } from "./cli/input/layer.ts";
 import { T3OutputLive } from "./cli/output/layer.ts";
 import { NodeTerminalIoLive } from "./cli/terminal/io-node-layer.ts";
 import { T3Output } from "./cli/output/service.ts";
-import { AppLayer } from "./runtime.ts";
+import { AppLayer } from "./runtime/layer.ts";
 import { T3VersionBundledLive, T3VersionPackageJsonLive } from "./version/layer.ts";
 import { T3Version } from "./version/service.ts";
 

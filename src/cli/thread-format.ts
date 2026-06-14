@@ -1,14 +1,68 @@
+import type { ThreadShow } from "../application/threads.ts";
 import type { WaitEvent } from "../application/service.ts";
 import type { OrchestrationThread, OrchestrationThreadShell } from "#t3tools/contracts";
 import { latestAssistantMessage, threadStatus } from "../domain/thread-lifecycle.ts";
+
+export function formatThreadShowJson(thread: ThreadShow) {
+  return {
+    id: thread.id,
+    projectId: thread.projectId,
+    title: thread.title,
+    status: thread.status,
+    session: thread.session,
+    latestTurn: thread.latestTurn,
+    modelSelection: thread.modelSelection,
+    runtimeMode: thread.runtimeMode,
+    interactionMode: thread.interactionMode,
+    branch: thread.branch,
+    worktreePath: thread.worktreePath,
+    archivedAt: thread.archivedAt,
+    createdAt: thread.createdAt,
+    updatedAt: thread.updatedAt,
+    messageCount: thread.messageCount,
+    hasPendingApprovals: thread.hasPendingApprovals,
+    hasPendingUserInput: thread.hasPendingUserInput,
+    hasActionableProposedPlan: thread.hasActionableProposedPlan,
+    pendingApprovals: thread.pendingApprovals,
+    pendingUserInputs: thread.pendingUserInputs,
+  };
+}
+
+export function formatThreadShowHuman(thread: ThreadShow) {
+  const lines = [
+    `title: ${thread.title}`,
+    `id: ${thread.id}`,
+    `status: ${thread.status}`,
+    `model: ${thread.modelSelection.instanceId}/${thread.modelSelection.model}`,
+    ...(thread.branch !== null ? [`branch: ${thread.branch}`] : []),
+    ...(thread.worktreePath !== null ? [`worktree: ${thread.worktreePath}`] : []),
+    `messages: ${thread.messageCount}`,
+  ];
+  if (thread.pendingApprovals.length > 0) {
+    const requestIds = thread.pendingApprovals.map((approval) => approval.requestId).join(", ");
+    lines.push(`pending approvals: ${thread.pendingApprovals.length} (${requestIds})`);
+  }
+  if (thread.pendingUserInputs.length > 0) {
+    const requestIds = thread.pendingUserInputs.map((input) => input.requestId).join(", ");
+    lines.push(`pending user inputs: ${thread.pendingUserInputs.length} (${requestIds})`);
+  }
+  return `${lines.join("\n")}\n`;
+}
 
 export function formatThreadsHuman(threads: ReadonlyArray<OrchestrationThreadShell>) {
   return threads
     .map(
       (thread) =>
-        `- ${thread.title}\n  id: ${thread.id}\n  status: ${threadStatus(thread)}\n  updated: ${thread.updatedAt}\n`,
+        `- ${thread.title}${thread.archivedAt !== null ? " (archived)" : ""}\n  id: ${thread.id}\n  status: ${threadStatus(thread)}\n  updated: ${thread.updatedAt}\n`,
     )
     .join("");
+}
+
+export function formatThreadDeletedHuman(input: {
+  readonly threadId: string;
+  readonly dispatch: { readonly sequence: number };
+}) {
+  return `thread deleted: ${input.threadId}\nsequence: ${input.dispatch.sequence}`;
 }
 
 export function formatThreadStartedHuman(input: {

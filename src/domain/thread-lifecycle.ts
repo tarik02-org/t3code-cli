@@ -2,19 +2,36 @@ import {
   OrchestrationMessage,
   type OrchestrationEvent,
   type OrchestrationMessage as OrchestrationMessageType,
+  type OrchestrationSession,
   type OrchestrationThread,
   type OrchestrationThreadShell,
 } from "#t3tools/contracts";
 import * as Schema from "effect/Schema";
 
-export function isThreadActive(thread: OrchestrationThreadShell | OrchestrationThread) {
-  return (
-    thread.session?.status === "starting" ||
-    thread.session?.status === "running" ||
-    thread.latestTurn?.state === "running" ||
-    isPendingStart(thread)
-  );
+type SessionStatusForDelete = OrchestrationSession["status"] | "closed";
+
+function isClosedSessionStatus(status: SessionStatusForDelete): status is "closed" {
+  return status === "closed";
 }
+
+export function sessionNeedsStopBeforeDelete(session: OrchestrationSession | null) {
+  if (session === null) {
+    return false;
+  }
+  return !isClosedSessionStatus(session.status);
+}
+
+export function isThreadActive(thread: OrchestrationThreadShell | OrchestrationThread) {
+  if (thread.session?.status === "starting" || thread.session?.status === "running") {
+    return true;
+  }
+  if (thread.latestTurn?.state === "running") {
+    return !("messages" in thread && hasTerminalSession(thread) && isThreadCompleteEnough(thread));
+  }
+  return isPendingStart(thread);
+}
+
+export type ThreadLifecycleStatus = ReturnType<typeof threadStatus>;
 
 export function threadStatus(thread: OrchestrationThreadShell | OrchestrationThread) {
   if (isPendingStart(thread)) {
@@ -88,4 +105,12 @@ function isPendingStart(thread: OrchestrationThreadShell | OrchestrationThread) 
     return false;
   }
   return thread.messages.at(-1)?.role === "user";
+}
+
+function hasTerminalSession(thread: OrchestrationThreadShell | OrchestrationThread) {
+  return (
+    thread.session !== null &&
+    thread.session?.status !== "starting" &&
+    thread.session?.status !== "running"
+  );
 }

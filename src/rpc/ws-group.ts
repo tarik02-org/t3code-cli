@@ -19,6 +19,7 @@ import {
   WsTerminalResizeRpc,
   WsTerminalWriteRpc,
   WsOrchestrationDispatchCommandRpc,
+  WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,
   WsOrchestrationSubscribeThreadRpc,
 } from "#t3tools/contracts";
@@ -48,6 +49,7 @@ export const CliWsRpcGroup = RpcGroup.make(
   WsSubscribeTerminalEventsRpc,
   WsSubscribeTerminalMetadataRpc,
   WsOrchestrationDispatchCommandRpc,
+  WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,
   WsOrchestrationSubscribeThreadRpc,
   WsServerGetConfigRpc,
