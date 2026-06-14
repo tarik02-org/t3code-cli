@@ -46,7 +46,7 @@ export function runAttachedTerminalSession(input: { readonly terminal: TerminalA
         rows,
       });
 
-      yield* Stream.runForEach(stream, (event) => applyAttachEvent(io, event)).pipe(
+      yield* Stream.runForEach(stream, applyAttachEvent).pipe(
         Effect.match({
           onFailure: (error) => completeAttachSession(completion, { _tag: "Failure", error }),
           onSuccess: () => completeAttachSession(completion, { _tag: "Success" }),
@@ -84,7 +84,7 @@ export function runAttachedTerminalSession(input: { readonly terminal: TerminalA
 
       const result = yield* Deferred.await(completion);
       if (result.message !== undefined) {
-        yield* writeSystemMessage(io, result.message);
+        yield* writeSystemMessage(result.message);
       }
       return yield* Match.value(result).pipe(
         Match.tag("Failure", ({ error }) => Effect.fail(error)),
@@ -142,38 +142,47 @@ function mapTerminalIoError(
   });
 }
 
-function applyAttachEvent(io: TerminalIo["Service"], event: TerminalAttachStreamEvent) {
-  return Match.value(event).pipe(
-    Match.when({ type: "activity" }, () => Effect.void),
-    Match.when({ type: "snapshot" }, ({ snapshot }) => writeSnapshot(io, snapshot.history)),
-    Match.when({ type: "restarted" }, ({ snapshot }) => writeSnapshot(io, snapshot.history)),
-    Match.when({ type: "output" }, ({ data }) => io.writeOutput(data)),
-    Match.when({ type: "cleared" }, () => io.writeOutput(ANSI_CLEAR_SCREEN)),
-    Match.when({ type: "error" }, ({ message }) => writeSystemMessage(io, message)),
-    Match.when({ type: "closed" }, () => writeSystemMessage(io, "Terminal closed")),
-    Match.orElse((next) => {
-      const details = [
-        typeof next.exitCode === "number" ? `code ${next.exitCode}` : null,
-        typeof next.exitSignal === "number" ? `signal ${next.exitSignal}` : null,
-      ]
-        .filter((value): value is string => value !== null)
-        .join(", ");
-      return writeSystemMessage(
-        io,
-        details.length > 0 ? `Process exited (${details})` : "Process exited",
-      );
-    }),
-  );
+function applyAttachEvent(event: TerminalAttachStreamEvent) {
+  return Effect.gen(function* () {
+    const io = yield* TerminalIo;
+    yield* Match.value(event).pipe(
+      Match.when({ type: "activity" }, () => Effect.void),
+      Match.when({ type: "snapshot" }, ({ snapshot }) => writeSnapshot(snapshot.history)),
+      Match.when({ type: "restarted" }, ({ snapshot }) => writeSnapshot(snapshot.history)),
+      Match.when({ type: "output" }, ({ data }) => io.writeOutput(data)),
+      Match.when({ type: "cleared" }, () => io.writeOutput(ANSI_CLEAR_SCREEN)),
+      Match.when({ type: "error" }, ({ message }) => writeSystemMessage(message)),
+      Match.when({ type: "closed" }, () => writeSystemMessage("Terminal closed")),
+      Match.orElse((next) => {
+        const details = [
+          typeof next.exitCode === "number" ? `code ${next.exitCode}` : null,
+          typeof next.exitSignal === "number" ? `signal ${next.exitSignal}` : null,
+        ]
+          .filter((value): value is string => value !== null)
+          .join(", ");
+        return writeSystemMessage(
+          details.length > 0 ? `Process exited (${details})` : "Process exited",
+        );
+      }),
+    );
+  });
 }
 
-function writeSnapshot(io: TerminalIo["Service"], history: string) {
-  return io
-    .writeOutput(ANSI_CLEAR_SCREEN)
-    .pipe(Effect.flatMap(() => (history.length > 0 ? io.writeOutput(history) : Effect.void)));
+function writeSnapshot(history: string) {
+  return Effect.gen(function* () {
+    const io = yield* TerminalIo;
+    yield* io.writeOutput(ANSI_CLEAR_SCREEN);
+    if (history.length > 0) {
+      yield* io.writeOutput(history);
+    }
+  });
 }
 
-function writeSystemMessage(io: TerminalIo["Service"], message: string) {
-  return io.writeOutput(`\r\n[terminal] ${message}\r\n`);
+function writeSystemMessage(message: string) {
+  return Effect.gen(function* () {
+    const io = yield* TerminalIo;
+    yield* io.writeOutput(`\r\n[terminal] ${message}\r\n`);
+  });
 }
 
 export function toTerminalAttachTarget(terminal: TerminalSummary): TerminalAttachTarget {
