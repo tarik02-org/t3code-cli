@@ -1,4 +1,6 @@
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -17,21 +19,25 @@ export const rpcRetrySchedule = Schedule.exponential("100 millis").pipe(
   ),
 );
 
-export type RpcOperations = {
-  readonly runRpc: <A, R>(
+export type T3RpcOperationsService = {
+  readonly run: <A, R>(
     method: string,
     operation: (client: WsClient) => Effect.Effect<A, CliRpcOperationError, R>,
   ) => Effect.Effect<A, RpcError, R>;
-  readonly subscribeRpc: <A>(
+  readonly subscribe: <A>(
     method: string,
     operation: (client: WsClient) => Stream.Stream<A, CliRpcOperationError>,
   ) => Stream.Stream<A, RpcError>;
 };
 
-export const makeRpcOperations = Effect.gen(function* () {
+export class T3RpcOperations extends Context.Service<T3RpcOperations, T3RpcOperationsService>()(
+  "t3cli/T3RpcOperations",
+) {}
+
+export const makeT3RpcOperations = Effect.fn("makeT3RpcOperations")(function* () {
   const rpc = yield* T3Rpc;
 
-  const runRpc: RpcOperations["runRpc"] = <A, R>(
+  const run: T3RpcOperationsService["run"] = <A, R>(
     method: string,
     operation: (client: WsClient) => Effect.Effect<A, CliRpcOperationError, R>,
   ): Effect.Effect<A, RpcError, R> =>
@@ -46,7 +52,7 @@ export const makeRpcOperations = Effect.gen(function* () {
       ),
     );
 
-  const subscribeRpc: RpcOperations["subscribeRpc"] = <A>(
+  const subscribe: T3RpcOperationsService["subscribe"] = <A>(
     method: string,
     operation: (client: WsClient) => Stream.Stream<A, CliRpcOperationError>,
   ): Stream.Stream<A, RpcError> =>
@@ -61,10 +67,12 @@ export const makeRpcOperations = Effect.gen(function* () {
     );
 
   return {
-    runRpc,
-    subscribeRpc,
-  } satisfies RpcOperations;
+    run,
+    subscribe,
+  } satisfies T3RpcOperationsService;
 });
+
+export const T3RpcOperationsLive = Layer.effect(T3RpcOperations, makeT3RpcOperations());
 
 function toRpcError(error: CliRpcOperationError, method: string): RpcError {
   return new RpcError({

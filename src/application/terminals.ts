@@ -8,8 +8,8 @@ import { ProjectLookupError, TerminalLookupError, ThreadLookupError } from "../d
 import { findProjectById } from "../domain/helpers.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import { RpcError } from "../rpc/error.ts";
-import { makeRpcOperations } from "../rpc/operation.ts";
-import type { T3Application, TerminalRef } from "./service.ts";
+import { T3RpcOperations } from "../rpc/operation.ts";
+import type { T3TerminalApplicationService, TerminalRef } from "./service.ts";
 
 export type CreateTerminalInput = {
   readonly threadId: string;
@@ -17,26 +17,13 @@ export type CreateTerminalInput = {
   readonly command?: string;
 };
 
-type TerminalApplicationService = Pick<
-  T3Application["Service"],
-  | "attachTerminal"
-  | "createTerminal"
-  | "destroyTerminal"
-  | "getTerminal"
-  | "listTerminals"
-  | "resizeTerminal"
-  | "watchTerminalEvents"
-  | "watchTerminalMetadata"
-  | "writeTerminal"
->;
-
 export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(function* () {
   const crypto = yield* Crypto.Crypto;
   const orchestration = yield* T3Orchestration;
-  const { runRpc, subscribeRpc } = yield* makeRpcOperations;
+  const rpc = yield* T3RpcOperations;
 
-  const attachTerminal: TerminalApplicationService["attachTerminal"] = (input) =>
-    subscribeRpc(WS_METHODS.terminalAttach, (client) =>
+  const attachTerminal: T3TerminalApplicationService["attachTerminal"] = (input) =>
+    rpc.subscribe(WS_METHODS.terminalAttach, (client) =>
       client[WS_METHODS.terminalAttach]({
         threadId: input.terminal.threadId,
         terminalId: input.terminal.terminalId,
@@ -47,24 +34,27 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
       }),
     );
 
-  const watchTerminalEvents: TerminalApplicationService["watchTerminalEvents"] = (terminal) =>
-    subscribeRpc(WS_METHODS.subscribeTerminalEvents, (client) =>
-      client[WS_METHODS.subscribeTerminalEvents]({}),
-    ).pipe(
-      Stream.filter(
-        (event) => event.threadId === terminal.threadId && event.terminalId === terminal.terminalId,
-      ),
-    );
+  const watchTerminalEvents: T3TerminalApplicationService["watchTerminalEvents"] = (terminal) =>
+    rpc
+      .subscribe(WS_METHODS.subscribeTerminalEvents, (client) =>
+        client[WS_METHODS.subscribeTerminalEvents]({}),
+      )
+      .pipe(
+        Stream.filter(
+          (event) =>
+            event.threadId === terminal.threadId && event.terminalId === terminal.terminalId,
+        ),
+      );
 
-  const watchTerminalMetadata: TerminalApplicationService["watchTerminalMetadata"] = () =>
-    subscribeRpc(WS_METHODS.subscribeTerminalMetadata, (client) =>
+  const watchTerminalMetadata: T3TerminalApplicationService["watchTerminalMetadata"] = () =>
+    rpc.subscribe(WS_METHODS.subscribeTerminalMetadata, (client) =>
       client[WS_METHODS.subscribeTerminalMetadata]({}),
     );
 
   const getTerminalMetadataSnapshot = (): Effect.Effect<ReadonlyArray<TerminalSummary>, RpcError> =>
     Effect.gen(function* () {
       const item = yield* Stream.runHead(
-        subscribeRpc(WS_METHODS.subscribeTerminalMetadata, (client) =>
+        rpc.subscribe(WS_METHODS.subscribeTerminalMetadata, (client) =>
           client[WS_METHODS.subscribeTerminalMetadata]({}),
         ),
       );
@@ -146,7 +136,7 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
 
     const terminalId = input.terminalId ?? `t3cli-${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`;
     const cwd = thread.worktreePath ?? project.workspaceRoot;
-    const opened = yield* runRpc(WS_METHODS.terminalOpen, (client) =>
+    const opened = yield* rpc.run(WS_METHODS.terminalOpen, (client) =>
       client[WS_METHODS.terminalOpen]({
         threadId: thread.id,
         terminalId,
@@ -156,7 +146,7 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
     );
 
     if (input.command !== undefined) {
-      yield* runRpc(WS_METHODS.terminalWrite, (client) =>
+      yield* rpc.run(WS_METHODS.terminalWrite, (client) =>
         client[WS_METHODS.terminalWrite]({
           threadId: thread.id,
           terminalId,
@@ -172,7 +162,7 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
     readonly terminal: TerminalRef;
     readonly data: string;
   }) {
-    yield* runRpc(WS_METHODS.terminalWrite, (client) =>
+    yield* rpc.run(WS_METHODS.terminalWrite, (client) =>
       client[WS_METHODS.terminalWrite]({
         threadId: input.terminal.threadId,
         terminalId: input.terminal.terminalId,
@@ -186,7 +176,7 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
     readonly cols: number;
     readonly rows: number;
   }) {
-    yield* runRpc(WS_METHODS.terminalResize, (client) =>
+    yield* rpc.run(WS_METHODS.terminalResize, (client) =>
       client[WS_METHODS.terminalResize]({
         threadId: input.terminal.threadId,
         terminalId: input.terminal.terminalId,
@@ -199,7 +189,7 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
   const destroyTerminal = Effect.fn("T3ApplicationLive.destroyTerminal")(function* (
     terminal: TerminalRef,
   ) {
-    yield* runRpc(WS_METHODS.terminalClose, (client) =>
+    yield* rpc.run(WS_METHODS.terminalClose, (client) =>
       client[WS_METHODS.terminalClose]({
         threadId: terminal.threadId,
         terminalId: terminal.terminalId,
@@ -218,5 +208,5 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
     watchTerminalEvents,
     watchTerminalMetadata,
     writeTerminal,
-  } satisfies TerminalApplicationService;
+  } satisfies T3TerminalApplicationService;
 });

@@ -3,15 +3,13 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { ORCHESTRATION_WS_METHODS } from "#t3tools/contracts";
 
-import type { Orchestration } from "../orchestration/service.ts";
+import { T3Orchestration } from "../orchestration/service.ts";
 import { RpcError } from "../rpc/error.ts";
 
-export function waitForShellSequence(input: {
-  readonly orchestration: Orchestration;
-  readonly sequence: number;
-}) {
+export function waitForShellSequence(input: { readonly sequence: number }) {
   return Effect.gen(function* () {
-    const sequence = yield* input.orchestration.watchShellSequence().pipe(
+    const orchestration = yield* T3Orchestration;
+    const sequence = yield* orchestration.watchShellSequence().pipe(
       Stream.filter((snapshotSequence) => snapshotSequence >= input.sequence),
       Stream.runHead,
       Effect.scoped,
@@ -24,6 +22,6 @@ export function waitForShellSequence(input: {
         }),
       );
     }
-    return yield* input.orchestration.getShellSnapshot();
+    return yield* orchestration.getShellSnapshot();
   });
 }

@@ -13,41 +13,43 @@ import {
 } from "#t3tools/contracts";
 
 import { RpcError } from "../rpc/error.ts";
-import { makeRpcOperations } from "../rpc/operation.ts";
+import { T3RpcOperations } from "../rpc/operation.ts";
 import { T3Orchestration, type OpenThread, type Orchestration } from "./service.ts";
 
 export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* () {
-  const { runRpc, subscribeRpc } = yield* makeRpcOperations;
+  const rpc = yield* T3RpcOperations;
 
   const watchShellSequence: Orchestration["watchShellSequence"] = () =>
-    subscribeRpc(ORCHESTRATION_WS_METHODS.subscribeShell, (client) =>
-      client[ORCHESTRATION_WS_METHODS.subscribeShell]({}),
-    ).pipe(
-      Stream.map((item: OrchestrationShellStreamItem) =>
-        item.kind === "snapshot" ? item.snapshot.snapshotSequence : item.sequence,
-      ),
-    );
+    rpc
+      .subscribe(ORCHESTRATION_WS_METHODS.subscribeShell, (client) =>
+        client[ORCHESTRATION_WS_METHODS.subscribeShell]({}),
+      )
+      .pipe(
+        Stream.map((item: OrchestrationShellStreamItem) =>
+          item.kind === "snapshot" ? item.snapshot.snapshotSequence : item.sequence,
+        ),
+      );
 
   const watchThreadItems: Orchestration["watchThreadItems"] = (threadId: string) =>
-    subscribeRpc(ORCHESTRATION_WS_METHODS.subscribeThread, (client) =>
+    rpc.subscribe(ORCHESTRATION_WS_METHODS.subscribeThread, (client) =>
       client[ORCHESTRATION_WS_METHODS.subscribeThread]({ threadId: ThreadId.make(threadId) }),
     );
 
   const dispatch = Effect.fn("T3OrchestrationLive.dispatch")(function* (
     command: ClientOrchestrationCommand,
   ) {
-    return yield* runRpc(ORCHESTRATION_WS_METHODS.dispatchCommand, (client) =>
+    return yield* rpc.run(ORCHESTRATION_WS_METHODS.dispatchCommand, (client) =>
       client[ORCHESTRATION_WS_METHODS.dispatchCommand](command),
     );
   });
   const getServerConfig = Effect.fn("T3OrchestrationLive.getServerConfig")(function* () {
-    return yield* runRpc(WS_METHODS.serverGetConfig, (client) =>
+    return yield* rpc.run(WS_METHODS.serverGetConfig, (client) =>
       client[WS_METHODS.serverGetConfig]({}),
     );
   });
   const getShellSnapshot = Effect.fn("T3OrchestrationLive.getShellSnapshot")(function* () {
     const item = yield* Stream.runHead(
-      subscribeRpc(ORCHESTRATION_WS_METHODS.subscribeShell, (client) =>
+      rpc.subscribe(ORCHESTRATION_WS_METHODS.subscribeShell, (client) =>
         client[ORCHESTRATION_WS_METHODS.subscribeShell]({}),
       ),
     );
@@ -64,7 +66,7 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
   });
   const getArchivedShellSnapshot = Effect.fn("T3OrchestrationLive.getArchivedShellSnapshot")(
     function* () {
-      return yield* runRpc(ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot, (client) =>
+      return yield* rpc.run(ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot, (client) =>
         client[ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot]({}),
       );
     },
@@ -73,7 +75,7 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
     threadId: string,
   ) {
     const item = yield* Stream.runHead(
-      subscribeRpc(ORCHESTRATION_WS_METHODS.subscribeThread, (client) =>
+      rpc.subscribe(ORCHESTRATION_WS_METHODS.subscribeThread, (client) =>
         client[ORCHESTRATION_WS_METHODS.subscribeThread]({
           threadId: ThreadId.make(threadId),
         }),

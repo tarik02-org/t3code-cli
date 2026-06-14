@@ -3,24 +3,23 @@ import * as Effect from "effect/Effect";
 import type { ModelSelection } from "#t3tools/contracts";
 
 import { ModelSelectionError, ThreadEventError } from "../domain/error.ts";
-import type { Orchestration } from "../orchestration/service.ts";
+import { T3Orchestration } from "../orchestration/service.ts";
 import { mergeModelOptions, resolveUpdateModelSelection } from "./model-selection.ts";
 import type { UpdateThreadInput } from "./service.ts";
 import { makeThreadMetaUpdateCommand } from "./thread-commands.ts";
 
-export function makeUpdateThread(deps: {
-  readonly orchestration: Orchestration;
-  readonly crypto: Crypto.Crypto;
-}) {
+export function makeUpdateThread() {
   return Effect.fn("T3ApplicationLive.updateThread")(function* (input: UpdateThreadInput) {
+    const orchestration = yield* T3Orchestration;
+    const crypto = yield* Crypto.Crypto;
     const hasProvider = input.provider !== undefined && input.provider.length > 0;
     const hasModel = input.model !== undefined && input.model.length > 0;
     const options = input.options;
     const hasOptions = options !== undefined && options.length > 0;
-    const thread = yield* deps.orchestration.getThreadSnapshot(input.threadId);
+    const thread = yield* orchestration.getThreadSnapshot(input.threadId);
     let modelSelection: ModelSelection | undefined;
     if (hasProvider || hasModel) {
-      const snapshot = yield* deps.orchestration.getShellSnapshot();
+      const snapshot = yield* orchestration.getShellSnapshot();
       const project = snapshot.projects.find((entry) => entry.id === thread.projectId);
       if (project === undefined) {
         return yield* Effect.fail(
@@ -29,7 +28,7 @@ export function makeUpdateThread(deps: {
           }),
         );
       }
-      const serverConfig = yield* deps.orchestration.getServerConfig();
+      const serverConfig = yield* orchestration.getServerConfig();
       if (hasProvider && thread.session !== null && thread.session.status !== "stopped") {
         const sessionProviderId =
           thread.session.providerInstanceId ?? thread.modelSelection.instanceId;
@@ -67,7 +66,7 @@ export function makeUpdateThread(deps: {
       ...(modelSelection !== undefined ? { modelSelection } : {}),
       ...(input.branch !== undefined ? { branch: input.branch } : {}),
       ...(input.worktreePath !== undefined ? { worktreePath: input.worktreePath } : {}),
-    }).pipe(Effect.provideService(Crypto.Crypto, deps.crypto));
-    return yield* deps.orchestration.dispatch(command);
+    }).pipe(Effect.provideService(Crypto.Crypto, crypto));
+    return yield* orchestration.dispatch(command);
   });
 }

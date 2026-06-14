@@ -8,18 +8,21 @@ import { ProjectCreateVisibilityError, ProjectLookupError } from "../domain/erro
 import { findProjectById, resolveProjectScope } from "../domain/helpers.ts";
 import { makeProjectCreateCommand, makeProjectDeleteCommand } from "./project-commands.ts";
 import { waitForShellSequence } from "./shell-sequence.ts";
+import type { T3ProjectApplicationService } from "./service.ts";
 
 export const makeProjectApplication = Effect.fn("makeProjectApplication")(function* () {
   const orchestration = yield* T3Orchestration;
   const crypto = yield* Crypto.Crypto;
   const path = yield* Path.Path;
   const environment = yield* Environment;
-  const loadShell = Effect.fn("T3ApplicationLive.loadShell")(function* () {
+  const loadShell: T3ProjectApplicationService["loadShell"] = Effect.fn(
+    "T3ApplicationLive.loadShell",
+  )(function* () {
     return yield* orchestration.getShellSnapshot();
   });
-  const resolveProject = Effect.fn("T3ApplicationLive.resolveProject")(function* (
-    projectRef: string,
-  ) {
+  const resolveProject: T3ProjectApplicationService["resolveProject"] = Effect.fn(
+    "T3ApplicationLive.resolveProject",
+  )(function* (projectRef: string) {
     const snapshot = yield* orchestration.getShellSnapshot();
     const scope = yield* resolveProjectScope(snapshot, {
       ref: projectRef,
@@ -34,20 +37,18 @@ export const makeProjectApplication = Effect.fn("makeProjectApplication")(functi
     }
     return scope.project;
   });
-  const addProject = Effect.fn("T3ApplicationLive.addProject")(function* (projectInput: {
-    readonly path: string;
-    readonly title?: string;
-  }) {
+  const addProject: T3ProjectApplicationService["addProject"] = Effect.fn(
+    "T3ApplicationLive.addProject",
+  )(function* (projectInput: { readonly path: string; readonly title?: string }) {
     const command = yield* makeProjectCreateCommand(projectInput).pipe(
       Effect.provideService(Path.Path, path),
       Effect.provideService(Crypto.Crypto, crypto),
       Effect.provideService(Environment, environment),
     );
     const dispatch = yield* orchestration.dispatch(command);
-    const snapshot = yield* waitForShellSequence({
-      orchestration,
-      sequence: dispatch.sequence,
-    });
+    const snapshot = yield* waitForShellSequence({ sequence: dispatch.sequence }).pipe(
+      Effect.provideService(T3Orchestration, orchestration),
+    );
     const project = findProjectById(snapshot, command.projectId);
     if (project === null) {
       return yield* Effect.fail(
@@ -59,10 +60,9 @@ export const makeProjectApplication = Effect.fn("makeProjectApplication")(functi
     }
     return { dispatch, project };
   });
-  const deleteProject = Effect.fn("T3ApplicationLive.deleteProject")(function* (input: {
-    readonly projectId: string;
-    readonly force?: boolean;
-  }) {
+  const deleteProject: T3ProjectApplicationService["deleteProject"] = Effect.fn(
+    "T3ApplicationLive.deleteProject",
+  )(function* (input: { readonly projectId: string; readonly force?: boolean }) {
     const command = yield* makeProjectDeleteCommand({
       projectId: input.projectId,
       ...(input.force === true ? { force: true } : {}),
@@ -76,5 +76,5 @@ export const makeProjectApplication = Effect.fn("makeProjectApplication")(functi
     addProject,
     resolveProject,
     deleteProject,
-  };
+  } satisfies T3ProjectApplicationService;
 });
