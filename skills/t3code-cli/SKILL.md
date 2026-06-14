@@ -121,6 +121,23 @@ t3cli thread archive --thread <id> --format json
 t3cli thread unarchive --thread <id> --format json
 ```
 
+**Terminal (agent-friendly PTY control)**
+
+```sh
+export T3CODE_THREAD_ID="$THREAD_ID"
+
+t3cli terminal list --format json
+t3cli terminal create --attach --format json
+t3cli terminal create "npm test" --format json
+t3cli terminal read <terminal-id> --history --follow --format ndjson --from-sequence 0
+t3cli terminal stream <terminal-id> --from-sequence 0
+t3cli terminal write <terminal-id> --hex 0a --format json
+t3cli terminal wait <terminal-id> --for exited --format json
+t3cli terminal destroy <terminal-id> --yes --format json
+```
+
+Use `--thread` or `T3CODE_THREAD_ID` for thread scope. `terminal write` payloads are raw bytes (`--hex`, `--base64`, `--stdin`). `terminal destroy` requires `--yes` in non-interactive mode.
+
 ## Output
 
 Use `json` for one-shot results; `ndjson` with `--wait` for streaming (`dispatch`, `thread`, `message`, `status`, `done`). Details: [reference/commands.md](reference/commands.md#ndjson-stream).

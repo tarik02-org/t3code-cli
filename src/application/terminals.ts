@@ -9,13 +9,7 @@ import { findProjectById } from "../domain/helpers.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import { RpcError } from "../rpc/error.ts";
 import { T3RpcOperations } from "../rpc/operation.ts";
-import type { T3TerminalApplicationService, TerminalRef } from "./service.ts";
-
-export type CreateTerminalInput = {
-  readonly threadId: string;
-  readonly terminalId?: string;
-  readonly command?: string;
-};
+import type { T3TerminalApplicationService, CreateTerminalInput, TerminalRef } from "./service.ts";
 
 export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(function* () {
   const crypto = yield* Crypto.Crypto;
@@ -33,18 +27,6 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
         ...(input.rows !== undefined ? { rows: input.rows } : {}),
       }),
     );
-
-  const watchTerminalEvents: T3TerminalApplicationService["watchTerminalEvents"] = (terminal) =>
-    rpc
-      .subscribe(WS_METHODS.subscribeTerminalEvents, (client) =>
-        client[WS_METHODS.subscribeTerminalEvents]({}),
-      )
-      .pipe(
-        Stream.filter(
-          (event) =>
-            event.threadId === terminal.threadId && event.terminalId === terminal.terminalId,
-        ),
-      );
 
   const watchTerminalMetadata: T3TerminalApplicationService["watchTerminalMetadata"] = () =>
     rpc.subscribe(WS_METHODS.subscribeTerminalMetadata, (client) =>
@@ -153,6 +135,20 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
           data: `${input.command}\r`,
         }),
       );
+      const refreshed = yield* Stream.runHead(
+        attachTerminal({
+          terminal: {
+            threadId: opened.threadId,
+            terminalId: opened.terminalId,
+            cwd: opened.cwd,
+            worktreePath: opened.worktreePath,
+          },
+        }),
+      );
+      const event = Option.getOrUndefined(refreshed);
+      if (event !== undefined && (event.type === "snapshot" || event.type === "restarted")) {
+        return event.snapshot;
+      }
     }
 
     return opened;
@@ -205,7 +201,6 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
     getTerminal,
     listTerminals,
     resizeTerminal,
-    watchTerminalEvents,
     watchTerminalMetadata,
     writeTerminal,
   } satisfies T3TerminalApplicationService;

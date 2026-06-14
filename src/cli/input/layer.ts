@@ -23,8 +23,28 @@ export const makeT3Input = Effect.fn("makeT3Input")(function* () {
     );
   });
 
+  const readStdinBinary = Effect.fn("T3InputLive.readStdinBinary")(function* () {
+    return yield* stdio.stdin.pipe(
+      Stream.runFold(
+        () => new Uint8Array(0),
+        (acc, chunk) => {
+          const merged = new Uint8Array(acc.length + chunk.length);
+          merged.set(acc);
+          merged.set(chunk, acc.length);
+          return merged;
+        },
+      ),
+      Effect.map((bytes) => Buffer.from(bytes).toString("latin1")),
+      Effect.catchTags({
+        PlatformError: (error) =>
+          Effect.fail(new InputError({ message: "failed to read stdin", cause: error })),
+      }),
+    );
+  });
+
   return {
     readStdin,
+    readStdinBinary,
   };
 });
 

@@ -22,4 +22,4 @@ export class TerminalIo extends Context.Service<
     readonly writeOutput: (text: string) => Effect.Effect<void>;
     readonly openRawSession: Effect.Effect<RawTerminalIoSession, TerminalIoError, Scope.Scope>;
   }
->()("t3cli/cli/terminal/TerminalIo") {}
+>()("t3cli/T3TerminalIo") {}

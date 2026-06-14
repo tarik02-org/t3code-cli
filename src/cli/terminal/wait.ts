@@ -4,12 +4,13 @@ import * as Stream from "effect/Stream";
 import type { TerminalMetadataStreamEvent, TerminalSummary } from "#t3tools/contracts";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
-import { TerminalLookupError } from "../../domain/error.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
-import { humanJsonFormatChoices, resolveOutputFormat } from "../output-format.ts";
+import { formatFlag, threadFlag } from "../flags.ts";
+import { resolveOutputFormat } from "../output-format.ts";
 import { T3Output } from "../output/service.ts";
 import { TerminalCliError } from "./error.ts";
+import { requireCommandThreadId } from "./scope.ts";
 
 const terminalWaitTargetChoices = ["exited", "closed", "ended"] as const;
 type TerminalWaitTarget = (typeof terminalWaitTargetChoices)[number];
@@ -40,27 +41,34 @@ type WaitResult =
 
 type WaitResolution =
   | { readonly kind: "result"; readonly value: WaitResult }
-  | { readonly kind: "fail"; readonly error: TerminalCliError | TerminalLookupError };
+  | { readonly kind: "fail"; readonly error: TerminalCliError };
 
 export const waitTerminalCommand = Command.make(
   "wait",
   {
-    thread: Argument.string("thread"),
+    thread: threadFlag,
     terminalId: Argument.string("terminal-id"),
     target: Flag.choice("for", terminalWaitTargetChoices).pipe(Flag.withDefault("exited")),
-    format: Flag.choice("format", humanJsonFormatChoices).pipe(Flag.withDefault("auto")),
+    format: formatFlag,
   },
   ({ thread, terminalId, target, format }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
       const environment = yield* Environment;
       const output = yield* T3Output;
+      const threadId = yield* requireCommandThreadId({
+        thread,
+        env: environment.env,
+      });
       const resolvedFormat = resolveOutputFormat(format, environment, "json");
 
-      yield* application.listTerminals(thread);
+      yield* application.getTerminal({
+        threadId,
+        terminalId,
+      });
 
       const resolution = yield* application.watchTerminalMetadata().pipe(
-        Stream.map((event) => resolveMetadataWait(event, target, thread, terminalId)),
+        Stream.map((event) => resolveMetadataWait(event, target, threadId, terminalId)),
         Stream.filter((value): value is WaitResolution => value !== null),
         Stream.runHead,
       );
@@ -69,7 +77,7 @@ export const waitTerminalCommand = Command.make(
         yield* Effect.fail(
           new TerminalCliError({
             message: "terminal wait stream ended unexpectedly",
-            threadId: thread,
+            threadId,
             terminalId,
           }),
         );
@@ -85,6 +93,14 @@ export const waitTerminalCommand = Command.make(
       }
     }),
 ).pipe(Command.withDescription("wait for terminal lifecycle events"));
+
+function terminalClosedBeforeExitError(threadId: string, terminalId: string) {
+  return new TerminalCliError({
+    message: `terminal closed before an exited event was observed: ${terminalId}`,
+    threadId,
+    terminalId,
+  });
+}
 
 function resolveMetadataWait(
   event: TerminalMetadataStreamEvent,
@@ -129,11 +145,7 @@ function resolveMetadataWait(
     }
     return {
       kind: "fail",
-      error: new TerminalLookupError({
-        message: `terminal not found: ${terminalId} in thread ${threadId}`,
-        threadId,
-        terminalId,
-      }),
+      error: terminalClosedBeforeExitError(threadId, terminalId),
     };
   }
 
@@ -165,11 +177,7 @@ function resolveMetadataWait(
   if (target === "exited") {
     return {
       kind: "fail",
-      error: new TerminalCliError({
-        message: `terminal closed before an exited event was observed: ${terminalId}`,
-        threadId,
-        terminalId,
-      }),
+      error: terminalClosedBeforeExitError(threadId, terminalId),
     };
   }
 

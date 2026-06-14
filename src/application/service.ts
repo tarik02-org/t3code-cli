@@ -12,7 +12,6 @@ import type {
   ProviderUserInputAnswers,
   ServerProvider,
   TerminalAttachStreamEvent,
-  TerminalEvent,
   TerminalMetadataStreamEvent,
   TerminalSessionSnapshot,
   TerminalSummary,
@@ -218,9 +217,6 @@ export type T3TerminalApplicationService = {
     readonly cols?: number;
     readonly rows?: number;
   }) => Stream.Stream<TerminalAttachStreamEvent, ApplicationError>;
-  readonly watchTerminalEvents: (
-    terminal: TerminalRef,
-  ) => Stream.Stream<TerminalEvent, ApplicationError>;
   readonly watchTerminalMetadata: () => Stream.Stream<
     TerminalMetadataStreamEvent,
     ApplicationError

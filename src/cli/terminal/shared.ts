@@ -11,6 +11,7 @@ import type {
 import type { TerminalAttachTarget, TerminalRef } from "../../application/service.ts";
 import { T3Application } from "../../application/service.ts";
 import type { ApplicationError } from "../../application/error.ts";
+import { bytesToLatin1String } from "./encoding.ts";
 import { TerminalCliError, type TerminalIoError } from "./error.ts";
 import { TerminalIo } from "./io-service.ts";
 
@@ -118,7 +119,7 @@ function handleSessionInput(input: {
     if (payload.length > 0) {
       yield* application.writeTerminal({
         terminal: input.terminal,
-        data: Buffer.from(payload).toString("utf8"),
+        data: bytesToLatin1String(payload),
       });
     }
 
@@ -220,14 +221,19 @@ export function filterAttachStreamEvent(
   },
 ): TerminalAttachStreamEvent | null {
   if (event.type === "snapshot" || event.type === "restarted") {
+    if (
+      options.fromSequence !== undefined &&
+      event.type === "restarted" &&
+      typeof event.snapshot.sequence === "number" &&
+      event.snapshot.sequence < options.fromSequence
+    ) {
+      return null;
+    }
     return {
       ...event,
       snapshot: {
         ...event.snapshot,
-        history:
-          options.includeHistory && options.fromSequence === undefined
-            ? event.snapshot.history
-            : "",
+        history: options.includeHistory ? event.snapshot.history : "",
       },
     };
   }
@@ -235,7 +241,7 @@ export function filterAttachStreamEvent(
   if (
     options.fromSequence !== undefined &&
     typeof event.sequence === "number" &&
-    event.sequence <= options.fromSequence
+    event.sequence < options.fromSequence
   ) {
     return null;
   }

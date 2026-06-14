@@ -7,5 +7,6 @@ export class T3Input extends Context.Service<
   T3Input,
   {
     readonly readStdin: () => Effect.Effect<string, InputError>;
+    readonly readStdinBinary: () => Effect.Effect<string, InputError>;
   }
 >()("t3cli/T3Input") {}

@@ -4,8 +4,12 @@ import * as Stream from "effect/Stream";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
 import { T3Application } from "../../application/service.ts";
+import { Environment } from "../../environment/service.ts";
+import { InvalidFlagCombinationError, InvalidLimitError } from "../error.ts";
+import { threadFlag } from "../flags.ts";
 import { T3Output } from "../output/service.ts";
 import { TerminalCliError } from "./error.ts";
+import { requireCommandThreadId } from "./scope.ts";
 import { filterAttachStreamEvent, toTerminalAttachTarget } from "./shared.ts";
 
 const jsonNdjsonFormatChoices = ["json", "ndjson"] as const;
@@ -13,7 +17,7 @@ const jsonNdjsonFormatChoices = ["json", "ndjson"] as const;
 export const readTerminalCommand = Command.make(
   "read",
   {
-    thread: Argument.string("thread"),
+    thread: threadFlag,
     terminalId: Argument.string("terminal-id"),
     history: Flag.boolean("history"),
     follow: Flag.boolean("follow"),
@@ -24,38 +28,38 @@ export const readTerminalCommand = Command.make(
     Effect.gen(function* () {
       const output = yield* T3Output;
       const application = yield* T3Application;
+      const environment = yield* Environment;
+      const threadId = yield* requireCommandThreadId({
+        thread,
+        env: environment.env,
+      });
       const fromSequenceValue = Option.getOrUndefined(fromSequence);
 
       if (fromSequenceValue !== undefined && fromSequenceValue < 0) {
         yield* Effect.fail(
-          new TerminalCliError({
-            message: `invalid from-sequence: ${fromSequenceValue}`,
-            threadId: thread,
-            terminalId,
+          new InvalidLimitError({
+            message: "from-sequence must be a non-negative integer",
+            value: String(fromSequenceValue),
           }),
         );
       }
       if (fromSequenceValue !== undefined && !follow) {
         yield* Effect.fail(
-          new TerminalCliError({
+          new InvalidFlagCombinationError({
             message: "--from-sequence requires --follow",
-            threadId: thread,
-            terminalId,
           }),
         );
       }
       if (follow && format !== "ndjson") {
         yield* Effect.fail(
-          new TerminalCliError({
+          new InvalidFlagCombinationError({
             message: "--follow requires --format ndjson",
-            threadId: thread,
-            terminalId,
           }),
         );
       }
 
       const terminal = yield* application.getTerminal({
-        threadId: thread,
+        threadId,
         terminalId,
       });
       const stream = application
@@ -83,7 +87,7 @@ export const readTerminalCommand = Command.make(
         yield* Effect.fail(
           new TerminalCliError({
             message: "server did not return terminal snapshot",
-            threadId: thread,
+            threadId,
             terminalId,
           }),
         );
