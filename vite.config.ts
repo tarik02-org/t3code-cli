@@ -1,16 +1,19 @@
-import "vite-plus/test/config";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import "vite-plus/test/config";
 import { defineConfig } from "vite-plus";
 import packageJson from "./package.json" with { type: "json" };
 
-const contractsEntry = fileURLToPath(
-  new URL("./upstream-t3code/packages/contracts/src/index.ts", import.meta.url),
-);
+const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   resolve: {
     alias: {
-      "#t3tools/contracts": contractsEntry,
+      "#t3tools/contracts": path.resolve(
+        rootDir,
+        "upstream-t3code/packages/contracts/src/index.ts",
+      ),
     },
   },
   test: {
@@ -45,7 +48,18 @@ export default defineConfig({
     dts: false,
     fixedExtension: false,
     format: "esm",
+    hash: false,
     nodeProtocol: true,
+    outputOptions: {
+      codeSplitting: {
+        groups: [
+          {
+            name: "shared",
+            minShareCount: 2,
+          },
+        ],
+      },
+    },
     sourcemap: false,
   },
   fmt: {

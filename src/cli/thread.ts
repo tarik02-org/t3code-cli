@@ -1,27 +1,25 @@
 import { Command } from "effect/unstable/cli";
 
+import { approveThreadCommand } from "./threads/approve.ts";
 import { archiveThreadCommand } from "./threads/archive.ts";
 import { callbackThreadCommand } from "./threads/callback.ts";
+import { deleteThreadCommand } from "./threads/delete.ts";
 import { interruptThreadCommand } from "./threads/interrupt.ts";
-import { listThreadsCommand } from "./threads/list.ts";
+import { respondThreadCommand } from "./threads/respond.ts";
 import { unarchiveThreadCommand } from "./threads/unarchive.ts";
-import { getThreadMessagesCommand } from "./threads/messages.ts";
-import { sendThreadCommand } from "./threads/send.ts";
-import { startThreadCommand } from "./threads/start.ts";
-import { waitForThreadCommand } from "./threads/wait.ts";
+import { updateThreadCommand } from "./threads/update.ts";
 
 export function createThreadCommand() {
   return Command.make("thread").pipe(
-    Command.withDescription("thread commands"),
+    Command.withDescription("advanced thread commands"),
     Command.withSubcommands([
-      listThreadsCommand,
-      startThreadCommand,
-      sendThreadCommand,
+      approveThreadCommand,
+      respondThreadCommand,
       archiveThreadCommand,
       interruptThreadCommand,
       unarchiveThreadCommand,
-      getThreadMessagesCommand,
-      waitForThreadCommand,
+      updateThreadCommand,
+      deleteThreadCommand,
       callbackThreadCommand,
     ]),
   );

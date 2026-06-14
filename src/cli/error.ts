@@ -29,3 +29,36 @@ export class SelfArchiveError extends Schema.TaggedErrorClass<SelfArchiveError>(
     threadId: Schema.String,
   },
 ) {}
+
+export class DestructiveConfirmationRequiredError extends Schema.TaggedErrorClass<DestructiveConfirmationRequiredError>()(
+  "DestructiveConfirmationRequiredError",
+  { message: Schema.String },
+) {}
+
+export class InvalidFlagCombinationError extends Schema.TaggedErrorClass<InvalidFlagCombinationError>()(
+  "InvalidFlagCombinationError",
+  {
+    message: Schema.String,
+  },
+) {}
+
+export class MissingRequestError extends Schema.TaggedErrorClass<MissingRequestError>()(
+  "MissingRequestError",
+  {
+    message: Schema.String,
+  },
+) {}
+
+export class MissingUpdateFieldsError extends Schema.TaggedErrorClass<MissingUpdateFieldsError>()(
+  "MissingUpdateFieldsError",
+  {
+    message: Schema.String,
+  },
+) {}
+
+export class ConflictingUpdateFlagsError extends Schema.TaggedErrorClass<ConflictingUpdateFlagsError>()(
+  "ConflictingUpdateFlagsError",
+  {
+    message: Schema.String,
+  },
+) {}

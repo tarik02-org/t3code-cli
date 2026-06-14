@@ -1,21 +1,34 @@
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
-
 import { Environment } from "../environment/service.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
-import { ProjectLookupError, ThreadSessionError } from "../domain/error.ts";
+import { ProjectLookupError, ThreadLookupError, ThreadSessionError } from "../domain/error.ts";
 import { resolveProjectScope } from "../domain/helpers.ts";
-import { type StartThreadInput } from "./service.ts";
-import type { SendThreadInput, CallbackThreadInput } from "./service.ts";
+import { type ListThreadsInclude, type StartThreadInput } from "./service.ts";
+import type { CallbackThreadInput, SendThreadInput } from "./service.ts";
+import type { OrchestrationThreadShell } from "#t3tools/contracts";
 import { mergeModelOptions } from "./model-selection.ts";
+import { derivePendingApprovals, derivePendingUserInputs } from "../domain/thread-activities.ts";
 import {
+  sessionNeedsStopBeforeDelete,
+  threadStatus,
+  type ThreadLifecycleStatus,
+} from "../domain/thread-lifecycle.ts";
+import type { OrchestrationThread } from "#t3tools/contracts";
+import type { ProviderApprovalDecision, ProviderUserInputAnswers } from "#t3tools/contracts";
+import {
+  makeThreadApprovalRespondCommand,
   makeThreadArchiveCommand,
+  makeThreadDeleteCommand,
   makeThreadInterruptCommand,
+  makeThreadSessionStopCommand,
   makeThreadStartCommands,
   makeThreadTurnContinueCommand,
   makeThreadUnarchiveCommand,
+  makeThreadUserInputRespondCommand,
 } from "./thread-commands.ts";
+import { makeUpdateThread } from "./thread-update.ts";
 import {
   waitForThread as waitForThreadUntilComplete,
   watchThread as watchThreadEvents,
@@ -27,8 +40,16 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
   const crypto = yield* Crypto.Crypto;
   const path = yield* Path.Path;
   const environment = yield* Environment;
-  const listThreads = Effect.fn("T3ApplicationLive.listThreads")(function* (projectRef: string) {
-    const snapshot = yield* orchestration.getShellSnapshot();
+  const listThreads = Effect.fn("T3ApplicationLive.listThreads")(function* (
+    projectRef: string,
+    options?: {
+      readonly include?: ListThreadsInclude;
+    },
+  ) {
+    const include = options?.include ?? "active";
+    const snapshot = yield* loadThreadsSnapshot(include).pipe(
+      Effect.provideService(T3Orchestration, orchestration),
+    );
     const scope = yield* resolveProjectScope(snapshot, {
       ref: projectRef,
     }).pipe(Effect.provideService(Path.Path, path));
@@ -46,6 +67,10 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     threadId: string,
   ) {
     return yield* orchestration.getThreadSnapshot(threadId);
+  });
+  const showThread = Effect.fn("T3ApplicationLive.showThread")(function* (threadId: string) {
+    const thread = yield* orchestration.getThreadSnapshot(threadId);
+    return projectThreadShow(thread);
   });
   const archiveThread = Effect.fn("T3ApplicationLive.archiveThread")(function* (threadId: string) {
     const command = yield* makeThreadArchiveCommand(threadId).pipe(
@@ -72,6 +97,32 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     }).pipe(Effect.provideService(Crypto.Crypto, crypto));
     return yield* orchestration.dispatch(command);
   });
+  const deleteThread = Effect.fn("T3ApplicationLive.deleteThread")(function* (threadId: string) {
+    const snapshot = yield* loadThreadsSnapshot("all").pipe(
+      Effect.provideService(T3Orchestration, orchestration),
+    );
+    const thread = snapshot.threads.find((item) => item.id === threadId);
+    if (thread === undefined) {
+      return yield* Effect.fail(
+        new ThreadLookupError({
+          message: `thread not found: ${threadId}`,
+          threadId,
+        }),
+      );
+    }
+    if (sessionNeedsStopBeforeDelete(thread.session)) {
+      const stopCommand = yield* makeThreadSessionStopCommand(threadId).pipe(
+        Effect.provideService(Crypto.Crypto, crypto),
+      );
+      yield* orchestration.dispatch(stopCommand);
+    }
+    const command = yield* makeThreadDeleteCommand(threadId).pipe(
+      Effect.provideService(Crypto.Crypto, crypto),
+    );
+    const dispatch = yield* orchestration.dispatch(command);
+    return { threadId, dispatch };
+  });
+  const updateThread = makeUpdateThread({ orchestration, crypto });
   const startThread = Effect.fn("T3ApplicationLive.startThread")(function* (
     startInput: StartThreadInput,
     policy?: {
@@ -205,20 +256,125 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     );
     return { dispatch: result.dispatch, targetThreadId: input.targetThreadId };
   });
+  const approveThread = Effect.fn("T3ApplicationLive.approveThread")(function* (input: {
+    readonly threadId: string;
+    readonly requestId: string;
+    readonly decision: ProviderApprovalDecision;
+  }) {
+    const command = yield* makeThreadApprovalRespondCommand(input).pipe(
+      Effect.provideService(Crypto.Crypto, crypto),
+    );
+    const dispatch = yield* orchestration.dispatch(command);
+    return { threadId: input.threadId, requestId: input.requestId, dispatch };
+  });
+  const respondToThread = Effect.fn("T3ApplicationLive.respondToThread")(function* (input: {
+    readonly threadId: string;
+    readonly requestId: string;
+    readonly answers: ProviderUserInputAnswers;
+  }) {
+    const command = yield* makeThreadUserInputRespondCommand(input).pipe(
+      Effect.provideService(Crypto.Crypto, crypto),
+    );
+    const dispatch = yield* orchestration.dispatch(command);
+    return { threadId: input.threadId, requestId: input.requestId, dispatch };
+  });
 
   return {
+    approveThread,
     archiveThread,
+    deleteThread,
     interruptThread,
+    updateThread,
     unarchiveThread,
     listThreads,
     getThreadMessages,
+    respondToThread,
     sendThread,
+    showThread,
     startThread,
     watchThread,
     waitForThread,
     callbackThread,
   };
 });
+
+const loadThreadsSnapshot = Effect.fn("loadThreadsSnapshot")(function* (
+  include: ListThreadsInclude,
+) {
+  const orchestration = yield* T3Orchestration;
+  if (include === "active") {
+    return yield* orchestration.getShellSnapshot();
+  }
+  if (include === "archived") {
+    return yield* orchestration.getArchivedShellSnapshot();
+  }
+  const [activeSnapshot, archivedSnapshot] = yield* Effect.all([
+    orchestration.getShellSnapshot(),
+    orchestration.getArchivedShellSnapshot(),
+  ]);
+  return {
+    ...activeSnapshot,
+    threads: dedupeThreadsById([...activeSnapshot.threads, ...archivedSnapshot.threads]),
+  };
+});
+
+function dedupeThreadsById(threads: ReadonlyArray<OrchestrationThreadShell>) {
+  const byId = new Map<string, OrchestrationThreadShell>();
+  for (const thread of threads) {
+    byId.set(thread.id, thread);
+  }
+  return [...byId.values()];
+}
+
+export type ThreadShow = {
+  readonly id: string;
+  readonly projectId: string;
+  readonly title: string;
+  readonly status: ThreadLifecycleStatus;
+  readonly session: OrchestrationThread["session"];
+  readonly latestTurn: OrchestrationThread["latestTurn"];
+  readonly modelSelection: OrchestrationThread["modelSelection"];
+  readonly runtimeMode: OrchestrationThread["runtimeMode"];
+  readonly interactionMode: OrchestrationThread["interactionMode"];
+  readonly branch: OrchestrationThread["branch"];
+  readonly worktreePath: OrchestrationThread["worktreePath"];
+  readonly archivedAt: OrchestrationThread["archivedAt"];
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly messageCount: number;
+  readonly hasPendingApprovals: boolean;
+  readonly hasPendingUserInput: boolean;
+  readonly hasActionableProposedPlan: boolean;
+  readonly pendingApprovals: ReturnType<typeof derivePendingApprovals>;
+  readonly pendingUserInputs: ReturnType<typeof derivePendingUserInputs>;
+};
+
+function projectThreadShow(thread: OrchestrationThread): ThreadShow {
+  const pendingApprovals = derivePendingApprovals(thread.activities);
+  const pendingUserInputs = derivePendingUserInputs(thread.activities);
+  return {
+    id: thread.id,
+    projectId: thread.projectId,
+    title: thread.title,
+    status: threadStatus(thread),
+    session: thread.session,
+    latestTurn: thread.latestTurn,
+    modelSelection: thread.modelSelection,
+    runtimeMode: thread.runtimeMode,
+    interactionMode: thread.interactionMode,
+    branch: thread.branch,
+    worktreePath: thread.worktreePath,
+    archivedAt: thread.archivedAt,
+    createdAt: thread.createdAt,
+    updatedAt: thread.updatedAt,
+    messageCount: thread.messages.length,
+    hasPendingApprovals: pendingApprovals.length > 0,
+    hasPendingUserInput: pendingUserInputs.length > 0,
+    hasActionableProposedPlan: thread.proposedPlans.some((plan) => plan.implementedAt === null),
+    pendingApprovals,
+    pendingUserInputs,
+  };
+}
 
 function failIfThreadError(thread: {
   readonly id: string;

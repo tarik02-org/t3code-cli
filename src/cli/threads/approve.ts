@@ -3,30 +3,32 @@ import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
 
 import { formatFlag, threadFlag } from "../flags.ts";
-import { InvalidLimitError } from "../error.ts";
-import { MissingThreadError } from "../error.ts";
+import { MissingRequestError, MissingThreadError } from "../error.ts";
 import { resolveThreadId } from "../../scope/index.ts";
-import { formatThreadMessagesHuman, formatThreadMessagesJson } from "../thread-format.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
 import { resolveOutputFormat } from "../output-format.ts";
 import { T3Output } from "../output/service.ts";
 
-export const getThreadTranscriptCommand = Command.make(
-  "transcript",
+const approvalDecisionFlag = Flag.choice("decision", ["accept", "decline", "cancel"] as const).pipe(
+  Flag.withDescription("Approval decision"),
+);
+
+const requestFlag = Flag.string("request").pipe(
+  Flag.withDescription("Pending approval request id"),
+  Flag.optional,
+);
+
+export const approveThreadCommand = Command.make(
+  "approve",
   {
     thread: threadFlag,
-    limit: Flag.integer("limit").pipe(Flag.withDefault(20)),
-    full: Flag.boolean("full"),
+    request: requestFlag,
+    decision: approvalDecisionFlag,
     format: formatFlag,
   },
-  ({ thread, limit, full, format }) =>
+  ({ thread, request, decision, format }) =>
     Effect.gen(function* () {
-      if (limit < 0) {
-        return yield* Effect.fail(
-          new InvalidLimitError({ message: `invalid limit: ${limit}`, value: String(limit) }),
-        );
-      }
       const application = yield* T3Application;
       const environment = yield* Environment;
       const output = yield* T3Output;
@@ -41,11 +43,19 @@ export const getThreadTranscriptCommand = Command.make(
           }),
         );
       }
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
-      const detail = yield* application.getThreadMessages(threadId);
-      if (resolvedFormat === "json") {
-        return yield* output.printJson(formatThreadMessagesJson(detail, full));
+      const requestId = Option.getOrUndefined(request);
+      if (requestId === undefined || requestId.length === 0) {
+        return yield* Effect.fail(
+          new MissingRequestError({ message: "request id is required: pass --request" }),
+        );
       }
-      return yield* output.writeStdout(formatThreadMessagesHuman(detail, limit));
+      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const result = yield* application.approveThread({ threadId, requestId, decision });
+      if (resolvedFormat === "json") {
+        return yield* output.printJson(result);
+      }
+      return yield* output.printInfo(
+        `approval submitted: ${result.requestId}\nsequence: ${result.dispatch.sequence}`,
+      );
     }),
-).pipe(Command.withDescription("get latest thread transcript"));
+).pipe(Command.withDescription("respond to a pending approval request"));

@@ -1,32 +1,26 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { Command, Flag } from "effect/unstable/cli";
+import { Command } from "effect/unstable/cli";
 
-import { formatFlag, threadFlag } from "../flags.ts";
-import { InvalidLimitError } from "../error.ts";
+import { requireDestructiveConfirmation } from "../confirm.ts";
+import { formatFlag, threadFlag, yesFlag } from "../flags.ts";
+import { formatThreadDeletedHuman } from "../thread-format.ts";
 import { MissingThreadError } from "../error.ts";
 import { resolveThreadId } from "../../scope/index.ts";
-import { formatThreadMessagesHuman, formatThreadMessagesJson } from "../thread-format.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
 import { resolveOutputFormat } from "../output-format.ts";
 import { T3Output } from "../output/service.ts";
 
-export const getThreadTranscriptCommand = Command.make(
-  "transcript",
+export const deleteThreadCommand = Command.make(
+  "delete",
   {
     thread: threadFlag,
-    limit: Flag.integer("limit").pipe(Flag.withDefault(20)),
-    full: Flag.boolean("full"),
+    yes: yesFlag,
     format: formatFlag,
   },
-  ({ thread, limit, full, format }) =>
+  ({ thread, yes, format }) =>
     Effect.gen(function* () {
-      if (limit < 0) {
-        return yield* Effect.fail(
-          new InvalidLimitError({ message: `invalid limit: ${limit}`, value: String(limit) }),
-        );
-      }
       const application = yield* T3Application;
       const environment = yield* Environment;
       const output = yield* T3Output;
@@ -41,11 +35,19 @@ export const getThreadTranscriptCommand = Command.make(
           }),
         );
       }
+      yield* requireDestructiveConfirmation({
+        message: `Delete thread ${threadId}?`,
+        yes,
+        environment,
+      });
       const resolvedFormat = resolveOutputFormat(format, environment, "json");
-      const detail = yield* application.getThreadMessages(threadId);
+      const result = yield* application.deleteThread(threadId);
       if (resolvedFormat === "json") {
-        return yield* output.printJson(formatThreadMessagesJson(detail, full));
+        return yield* output.printJson({
+          threadId: result.threadId,
+          dispatch: result.dispatch,
+        });
       }
-      return yield* output.writeStdout(formatThreadMessagesHuman(detail, limit));
+      return yield* output.printInfo(formatThreadDeletedHuman(result));
     }),
-).pipe(Command.withDescription("get latest thread transcript"));
+).pipe(Command.withDescription("delete thread"));

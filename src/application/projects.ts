@@ -4,9 +4,9 @@ import * as Path from "effect/Path";
 
 import { Environment } from "../environment/service.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
-import { ProjectCreateVisibilityError } from "../domain/error.ts";
-import { findProjectById } from "../domain/helpers.ts";
-import { makeProjectCreateCommand } from "./project-commands.ts";
+import { ProjectCreateVisibilityError, ProjectLookupError } from "../domain/error.ts";
+import { findProjectById, resolveProjectScope } from "../domain/helpers.ts";
+import { makeProjectCreateCommand, makeProjectDeleteCommand } from "./project-commands.ts";
 import { waitForShellSequence } from "./shell-sequence.ts";
 
 export const makeProjectApplication = Effect.fn("makeProjectApplication")(function* () {
@@ -16,6 +16,23 @@ export const makeProjectApplication = Effect.fn("makeProjectApplication")(functi
   const environment = yield* Environment;
   const loadShell = Effect.fn("T3ApplicationLive.loadShell")(function* () {
     return yield* orchestration.getShellSnapshot();
+  });
+  const resolveProject = Effect.fn("T3ApplicationLive.resolveProject")(function* (
+    projectRef: string,
+  ) {
+    const snapshot = yield* orchestration.getShellSnapshot();
+    const scope = yield* resolveProjectScope(snapshot, {
+      ref: projectRef,
+    }).pipe(Effect.provideService(Path.Path, path));
+    if (scope === undefined) {
+      return yield* Effect.fail(
+        new ProjectLookupError({
+          message: `project not found: ${projectRef}`,
+          ref: projectRef,
+        }),
+      );
+    }
+    return scope.project;
   });
   const addProject = Effect.fn("T3ApplicationLive.addProject")(function* (projectInput: {
     readonly path: string;
@@ -42,9 +59,22 @@ export const makeProjectApplication = Effect.fn("makeProjectApplication")(functi
     }
     return { dispatch, project };
   });
+  const deleteProject = Effect.fn("T3ApplicationLive.deleteProject")(function* (input: {
+    readonly projectId: string;
+    readonly force?: boolean;
+  }) {
+    const command = yield* makeProjectDeleteCommand({
+      projectId: input.projectId,
+      ...(input.force === true ? { force: true } : {}),
+    }).pipe(Effect.provideService(Crypto.Crypto, crypto));
+    const dispatch = yield* orchestration.dispatch(command);
+    return { projectId: input.projectId, dispatch };
+  });
 
   return {
     loadShell,
     addProject,
+    resolveProject,
+    deleteProject,
   };
 });

@@ -9,10 +9,12 @@ import type {
   OrchestrationShellSnapshot,
   OrchestrationThread,
   OrchestrationThreadShell,
+  ProviderUserInputAnswers,
   ServerProvider,
 } from "#t3tools/contracts";
 
 import type { ApplicationError } from "./error.ts";
+import type { ThreadShow } from "./threads.ts";
 
 export type StartThreadInput = {
   readonly projectRef?: string;
@@ -34,6 +36,18 @@ export type CallbackThreadInput = {
   readonly fromThreadId: string;
   readonly targetThreadId: string;
   readonly prompt: string;
+};
+
+export type ListThreadsInclude = "active" | "archived" | "all";
+
+export type UpdateThreadInput = {
+  readonly threadId: string;
+  readonly title?: string;
+  readonly provider?: string;
+  readonly model?: string;
+  readonly options?: NonNullable<ModelSelection["options"]>;
+  readonly branch?: string | null;
+  readonly worktreePath?: string | null;
 };
 
 export type StartThreadPolicy = {
@@ -61,7 +75,22 @@ export class T3Application extends Context.Service<
       { readonly dispatch: DispatchResult; readonly project: OrchestrationProjectShell },
       ApplicationError
     >;
-    readonly listThreads: (projectRef: string) => Effect.Effect<
+    readonly resolveProject: (
+      projectRef: string,
+    ) => Effect.Effect<OrchestrationProjectShell, ApplicationError>;
+    readonly deleteProject: (input: {
+      readonly projectId: string;
+      readonly force?: boolean;
+    }) => Effect.Effect<
+      { readonly projectId: string; readonly dispatch: DispatchResult },
+      ApplicationError
+    >;
+    readonly listThreads: (
+      projectRef: string,
+      options?: {
+        readonly include?: ListThreadsInclude;
+      },
+    ) => Effect.Effect<
       {
         readonly project: OrchestrationProjectShell;
         readonly threads: ReadonlyArray<OrchestrationThreadShell>;
@@ -71,9 +100,35 @@ export class T3Application extends Context.Service<
     readonly getThreadMessages: (
       threadId: string,
     ) => Effect.Effect<OrchestrationThread, ApplicationError>;
+    readonly showThread: (threadId: string) => Effect.Effect<ThreadShow, ApplicationError>;
+    readonly approveThread: (input: {
+      readonly threadId: string;
+      readonly requestId: string;
+      readonly decision: "accept" | "decline" | "cancel";
+    }) => Effect.Effect<
+      { readonly threadId: string; readonly requestId: string; readonly dispatch: DispatchResult },
+      ApplicationError
+    >;
+    readonly respondToThread: (input: {
+      readonly threadId: string;
+      readonly requestId: string;
+      readonly answers: ProviderUserInputAnswers;
+    }) => Effect.Effect<
+      { readonly threadId: string; readonly requestId: string; readonly dispatch: DispatchResult },
+      ApplicationError
+    >;
     readonly archiveThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
     readonly interruptThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
     readonly unarchiveThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
+    readonly deleteThread: (
+      threadId: string,
+    ) => Effect.Effect<
+      { readonly threadId: string; readonly dispatch: DispatchResult },
+      ApplicationError
+    >;
+    readonly updateThread: (
+      input: UpdateThreadInput,
+    ) => Effect.Effect<DispatchResult, ApplicationError>;
     readonly startThread: (
       input: StartThreadInput,
       policy?: StartThreadPolicy,

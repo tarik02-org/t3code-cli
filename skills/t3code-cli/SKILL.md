@@ -19,6 +19,34 @@ export T3CODE_PROJECT_ROOT="$PWD"   # when not using local-auth cwd resolution
 
 First-time setup: [reference/setup.md](reference/setup.md)
 
+## Self-identity (check before spawning threads)
+
+Before starting new threads, check your own identity to maintain consistency:
+
+```sh
+# Check current thread identity
+t3cli show --format json
+```
+
+The output includes `modelSelection` with:
+
+- `instanceId` — the provider (e.g., `cursor`, `codex`, `codex_work`)
+- `model` — the model slug (e.g., `composer-2.5`, `gpt-5.5`, `claude-opus-4-8`)
+
+**Preferred behavior**: When spawning additional threads, use the same provider (`instanceId`) and model family unless the user explicitly requests otherwise. This ensures consistent behavior and cost predictability.
+
+Example workflow:
+
+```sh
+# Check self identity
+SELF=$(t3cli show --format json)
+PROVIDER=$(echo "$SELF" | jq -r '.modelSelection.instanceId')
+MODEL=$(echo "$SELF" | jq -r '.modelSelection.model')
+
+# Start a new thread with same provider/model
+t3cli start "task description" --provider "$PROVIDER" --model "$MODEL" --wait
+```
+
 ## Scope resolution
 
 | Target   | Flag         | Env (first match wins)                                              |
@@ -41,14 +69,14 @@ t3cli model list
 **Start and wait**
 
 ```sh
-t3cli thread start "task" --format json --wait
-t3cli thread start "task" --format ndjson --wait   # stream events
+t3cli start "task" --format json --wait
+t3cli start "task" --format ndjson --wait   # stream events
 ```
 
 **Follow-up**
 
 ```sh
-t3cli thread send "continue" --thread <id> --format json --wait
+t3cli send "continue" --thread <id> --format json --wait
 ```
 
 **Wait vs Callback — when to use which**
@@ -80,9 +108,9 @@ Use cases: handoff long tasks, parallel work notifications, async workflows.
 **Inspect**
 
 ```sh
-t3cli thread list --format json
-t3cli thread messages --thread <id> --format json
-printf '%s' "$PROMPT" | t3cli thread start --stdin --format json
+t3cli list --format json
+t3cli transcript --thread <id> --format json
+printf '%s' "$PROMPT" | t3cli start --stdin --format json
 ```
 
 **Lifecycle**
