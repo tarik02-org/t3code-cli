@@ -1,11 +1,9 @@
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Match from "effect/Match";
-import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import type { TerminalEvent, TerminalSummary } from "#t3tools/contracts";
+import type { TerminalMetadataStreamEvent, TerminalSummary } from "#t3tools/contracts";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
+import { TerminalLookupError } from "../../domain/error.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
 import { humanJsonFormatChoices, resolveOutputFormat } from "../output-format.ts";
@@ -14,6 +12,34 @@ import { TerminalCliError } from "./error.ts";
 
 const terminalWaitTargetChoices = ["exited", "closed", "ended"] as const;
 type TerminalWaitTarget = (typeof terminalWaitTargetChoices)[number];
+
+type WaitResult =
+  | {
+      readonly threadId: string;
+      readonly terminalId: string;
+      readonly target: TerminalWaitTarget;
+      readonly status: string;
+      readonly exitCode?: number | null;
+      readonly exitSignal?: number | null;
+      readonly updatedAt?: string;
+      readonly sequence?: number;
+      readonly alreadySatisfied: boolean;
+      readonly missingTreatedAsClosed?: true;
+    }
+  | {
+      readonly threadId: string;
+      readonly terminalId: string;
+      readonly target: TerminalWaitTarget;
+      readonly status: "exited" | "closed";
+      readonly exitCode?: number | null;
+      readonly exitSignal?: number | null;
+      readonly sequence?: number;
+      readonly alreadySatisfied: false;
+    };
+
+type WaitResolution =
+  | { readonly kind: "result"; readonly value: WaitResult }
+  | { readonly kind: "fail"; readonly error: TerminalCliError | TerminalLookupError };
 
 export const waitTerminalCommand = Command.make(
   "wait",
@@ -30,119 +56,138 @@ export const waitTerminalCommand = Command.make(
       const output = yield* T3Output;
       const resolvedFormat = resolveOutputFormat(format, environment, "json");
 
-      const currentResult = yield* Effect.exit(
-        application.getTerminal({
-          threadId: thread,
-          terminalId,
-        }),
+      yield* application.listTerminals(thread);
+
+      const resolution = yield* application.watchTerminalMetadata().pipe(
+        Stream.runFold(
+          () => null as WaitResolution | null,
+          (state, event) => state ?? resolveMetadataWait(event, target, thread, terminalId),
+        ),
       );
 
-      if (Exit.isFailure(currentResult)) {
-        const failure = Exit.findErrorOption(currentResult);
-        if (Option.isNone(failure)) {
-          yield* Effect.fail(
-            new TerminalCliError({
-              message: "terminal lookup failed without an error value",
-              threadId: thread,
-              terminalId,
-            }),
-          );
-        } else {
-          const error = failure.value;
-          yield* Match.value(error).pipe(
-            Match.tag("TerminalLookupError", () => {
-              if (target !== "closed" && target !== "ended") {
-                return Effect.fail(error);
-              }
-              const result = {
-                threadId: thread,
-                terminalId,
-                target,
-                status: "closed",
-                alreadySatisfied: true,
-                missingTreatedAsClosed: true,
-              } as const;
-              return resolvedFormat === "json"
-                ? output.printJson(result)
-                : output.printInfo(`terminal closed: ${terminalId} (${thread})`);
-            }),
-            Match.orElse(() => Effect.fail(error)),
-          );
-          return;
-        }
-      } else {
-        const current = currentResult.value;
-        if (targetSatisfiedBySummary(target, current)) {
-          const result = {
-            threadId: current.threadId,
-            terminalId: current.terminalId,
-            target,
-            status: current.status,
-            exitCode: current.exitCode,
-            exitSignal: current.exitSignal,
-            updatedAt: current.updatedAt,
-            alreadySatisfied: true,
-          } as const;
-          if (resolvedFormat === "json") {
-            yield* output.printJson(result);
-          } else {
-            yield* output.printInfo(formatWaitHuman(result));
-          }
-          return;
-        }
-
-        const item = yield* Stream.runHead(
-          waitEventStream(application, target, thread, terminalId),
+      if (resolution === null) {
+        yield* Effect.fail(
+          new TerminalCliError({
+            message: "terminal wait stream ended unexpectedly",
+            threadId: thread,
+            terminalId,
+          }),
         );
-        const matched = Option.getOrUndefined(item);
-        if (matched === undefined) {
-          yield* Effect.fail(
-            new TerminalCliError({
-              message: "terminal wait stream ended unexpectedly",
-              threadId: thread,
-              terminalId,
-            }),
-          );
+      } else if (resolution.kind === "fail") {
+        yield* Effect.fail(resolution.error);
+      } else {
+        const result = resolution.value;
+        if (resolvedFormat === "json") {
+          yield* output.printJson(result);
         } else {
-          if (target === "exited" && matched.type === "closed") {
-            yield* Effect.fail(
-              new TerminalCliError({
-                message: `terminal closed before an exited event was observed: ${terminalId}`,
-                threadId: thread,
-                terminalId,
-              }),
-            );
-          }
-
-          const result =
-            matched.type === "exited"
-              ? ({
-                  threadId: thread,
-                  terminalId,
-                  target,
-                  status: matched.type,
-                  exitCode: matched.exitCode,
-                  exitSignal: matched.exitSignal,
-                  ...(typeof matched.sequence === "number" ? { sequence: matched.sequence } : {}),
-                  alreadySatisfied: false,
-                } as const)
-              : ({
-                  threadId: thread,
-                  terminalId,
-                  target,
-                  status: matched.type,
-                  ...(typeof matched.sequence === "number" ? { sequence: matched.sequence } : {}),
-                  alreadySatisfied: false,
-                } as const);
-          if (resolvedFormat === "json") {
-            yield* output.printJson(result);
-          } else {
-            yield* output.printInfo(formatWaitHuman(result));
-          }
+          yield* output.printInfo(formatWaitHuman(result));
         }
       }
     }),
 ).pipe(Command.withDescription("wait for terminal lifecycle events"));
+
+function resolveMetadataWait(
+  event: TerminalMetadataStreamEvent,
+  target: TerminalWaitTarget,
+  threadId: string,
+  terminalId: string,
+): WaitResolution | null {
+  if (event.type === "snapshot") {
+    const terminal = event.terminals.find(
+      (candidate) => candidate.threadId === threadId && candidate.terminalId === terminalId,
+    );
+    if (terminal !== undefined) {
+      if (targetSatisfiedBySummary(target, terminal)) {
+        return {
+          kind: "result",
+          value: {
+            threadId: terminal.threadId,
+            terminalId: terminal.terminalId,
+            target,
+            status: terminal.status,
+            exitCode: terminal.exitCode,
+            exitSignal: terminal.exitSignal,
+            updatedAt: terminal.updatedAt,
+            alreadySatisfied: true,
+          },
+        };
+      }
+      return null;
+    }
+    if (target === "closed" || target === "ended") {
+      return {
+        kind: "result",
+        value: {
+          threadId,
+          terminalId,
+          target,
+          status: "closed",
+          alreadySatisfied: true,
+          missingTreatedAsClosed: true,
+        },
+      };
+    }
+    return {
+      kind: "fail",
+      error: new TerminalLookupError({
+        message: `terminal not found: ${terminalId} in thread ${threadId}`,
+        threadId,
+        terminalId,
+      }),
+    };
+  }
+
+  if (event.type === "upsert") {
+    if (event.terminal.threadId !== threadId || event.terminal.terminalId !== terminalId) {
+      return null;
+    }
+    if ((target === "exited" || target === "ended") && event.terminal.status === "exited") {
+      return {
+        kind: "result",
+        value: {
+          threadId,
+          terminalId,
+          target,
+          status: "exited",
+          exitCode: event.terminal.exitCode,
+          exitSignal: event.terminal.exitSignal,
+          alreadySatisfied: false,
+        },
+      };
+    }
+    return null;
+  }
+
+  if (event.threadId !== threadId || event.terminalId !== terminalId) {
+    return null;
+  }
+
+  if (target === "exited") {
+    return {
+      kind: "fail",
+      error: new TerminalCliError({
+        message: `terminal closed before an exited event was observed: ${terminalId}`,
+        threadId,
+        terminalId,
+      }),
+    };
+  }
+
+  if (target === "closed" || target === "ended") {
+    return {
+      kind: "result",
+      value: {
+        threadId,
+        terminalId,
+        target,
+        status: "closed",
+        alreadySatisfied: false,
+      },
+    };
+  }
+
+  return null;
+}
 
 function targetSatisfiedBySummary(target: TerminalWaitTarget, terminal: TerminalSummary) {
   if (target === "exited") {
@@ -152,43 +197,6 @@ function targetSatisfiedBySummary(target: TerminalWaitTarget, terminal: Terminal
     return false;
   }
   return terminal.status === "exited";
-}
-
-function waitEventStream(
-  application: T3Application["Service"],
-  target: TerminalWaitTarget,
-  threadId: string,
-  terminalId: string,
-) {
-  const stream = application.watchTerminalEvents({
-    threadId,
-    terminalId,
-  });
-
-  if (target === "exited") {
-    return stream.pipe(
-      Stream.filter(
-        (event): event is Extract<TerminalEvent, { readonly type: "exited" | "closed" }> =>
-          event.type === "exited" || event.type === "closed",
-      ),
-    );
-  }
-
-  if (target === "closed") {
-    return stream.pipe(
-      Stream.filter(
-        (event): event is Extract<TerminalEvent, { readonly type: "closed" }> =>
-          event.type === "closed",
-      ),
-    );
-  }
-
-  return stream.pipe(
-    Stream.filter(
-      (event): event is Extract<TerminalEvent, { readonly type: "exited" | "closed" }> =>
-        event.type === "exited" || event.type === "closed",
-    ),
-  );
 }
 
 function formatWaitHuman(input: {

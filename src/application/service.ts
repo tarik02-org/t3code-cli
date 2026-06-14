@@ -13,6 +13,7 @@ import type {
   ServerProvider,
   TerminalAttachStreamEvent,
   TerminalEvent,
+  TerminalMetadataStreamEvent,
   TerminalSessionSnapshot,
   TerminalSummary,
 } from "#t3tools/contracts";
@@ -154,6 +155,10 @@ export class T3Application extends Context.Service<
     readonly watchTerminalEvents: (
       terminal: TerminalRef,
     ) => Stream.Stream<TerminalEvent, ApplicationError>;
+    readonly watchTerminalMetadata: () => Stream.Stream<
+      TerminalMetadataStreamEvent,
+      ApplicationError
+    >;
     readonly writeTerminal: (input: {
       readonly terminal: TerminalRef;
       readonly data: string;
