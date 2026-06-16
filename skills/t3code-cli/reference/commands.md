@@ -5,6 +5,7 @@ t3cli
 ├── project list|add|delete
 ├── model list
 ├── list|start|send|show|transcript|wait
+├── terminal list|create|attach|read|stream|wait|write|destroy
 └── thread approve|respond|archive|interrupt|unarchive|update|delete|callback
 ```
 
@@ -61,6 +62,27 @@ t3cli show [--thread <id>] [--format auto|human|json]
 t3cli transcript [--thread <id>] [--limit N] [--full] [--format json]
 t3cli wait [--thread <id>] [--format auto|human|ndjson]
 ```
+
+## terminal
+
+Thread scope uses `--thread` or `T3CODE_THREAD_ID`. Terminal ids remain positional arguments.
+
+```sh
+t3cli terminal list [--thread <id>] [--format auto|human|json]
+t3cli terminal create [--thread <id>] [command] [--id <id>] [--attach] [--format auto|human|json]
+t3cli terminal attach [--thread <id>] <terminal-id>
+t3cli terminal read [--thread <id>] <terminal-id> [--history] [--format json|ndjson]
+t3cli terminal read [--thread <id>] <terminal-id> --history --follow --format ndjson [--from-sequence <n>]
+t3cli terminal stream [--thread <id>] <terminal-id> [--format ndjson] [--from-sequence <n>]
+t3cli terminal wait [--thread <id>] <terminal-id> [--for exited|closed|ended] [--format auto|human|json]
+t3cli terminal write [--thread <id>] <terminal-id> <data> [--format auto|human|json] [--quiet]
+t3cli terminal write [--thread <id>] <terminal-id> --stdin [--format auto|human|json] [--quiet]
+t3cli terminal write [--thread <id>] <terminal-id> --hex <hex> [--format auto|human|json] [--quiet]
+t3cli terminal write [--thread <id>] <terminal-id> --base64 <base64> [--format auto|human|json] [--quiet]
+t3cli terminal destroy [--thread <id>] <terminal-id> [--yes] [--format auto|human|json] [--quiet]
+```
+
+`--from-sequence` is inclusive: after the initial snapshot, only events with `sequence >= n` are emitted. `terminal write` treats payloads as raw bytes (latin1). `terminal destroy` requires `--yes` in non-interactive mode.
 
 ## advanced thread commands
 

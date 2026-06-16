@@ -6,7 +6,18 @@ import {
   ServerConfig,
   ServerProviders,
   ServerSettingsError,
+  TerminalCwdError,
+  TerminalHistoryError,
+  TerminalNotRunningError,
+  TerminalSessionLookupError,
   WS_METHODS,
+  WsSubscribeTerminalEventsRpc,
+  WsSubscribeTerminalMetadataRpc,
+  WsTerminalAttachRpc,
+  WsTerminalCloseRpc,
+  WsTerminalOpenRpc,
+  WsTerminalResizeRpc,
+  WsTerminalWriteRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,
@@ -30,6 +41,13 @@ export const WsServerGetConfigRpc = Rpc.make(WS_METHODS.serverGetConfig, {
 });
 
 export const CliWsRpcGroup = RpcGroup.make(
+  WsTerminalOpenRpc,
+  WsTerminalAttachRpc,
+  WsTerminalWriteRpc,
+  WsTerminalResizeRpc,
+  WsTerminalCloseRpc,
+  WsSubscribeTerminalEventsRpc,
+  WsSubscribeTerminalMetadataRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,
@@ -42,4 +60,8 @@ export type CliRpcRequestError =
   | KeybindingsConfigError
   | OrchestrationDispatchCommandError
   | OrchestrationGetSnapshotError
+  | TerminalCwdError
+  | TerminalHistoryError
+  | TerminalNotRunningError
+  | TerminalSessionLookupError
   | ServerSettingsError;

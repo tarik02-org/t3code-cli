@@ -1,12 +1,14 @@
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
+import * as Stream from "effect/Stream";
 import { Environment } from "../environment/service.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import { ProjectLookupError, ThreadLookupError, ThreadSessionError } from "../domain/error.ts";
 import { resolveProjectScope } from "../domain/helpers.ts";
 import { type ListThreadsInclude, type StartThreadInput } from "./service.ts";
 import type { CallbackThreadInput, SendThreadInput } from "./service.ts";
+import type { T3ThreadApplicationService } from "./service.ts";
 import type { OrchestrationThreadShell } from "#t3tools/contracts";
 import { mergeModelOptions } from "./model-selection.ts";
 import { derivePendingApprovals, derivePendingUserInputs } from "../domain/thread-activities.ts";
@@ -40,6 +42,14 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
   const crypto = yield* Crypto.Crypto;
   const path = yield* Path.Path;
   const environment = yield* Environment;
+  const awaitShellSequence = (sequence: number) =>
+    waitForShellSequence({ sequence }).pipe(Effect.provideService(T3Orchestration, orchestration));
+  const awaitThreadCompletion = (threadId: string) =>
+    waitForThreadUntilComplete({ threadId }).pipe(
+      Effect.provideService(T3Orchestration, orchestration),
+    );
+  const streamThreadEvents = (threadId: string) =>
+    watchThreadEvents({ threadId }).pipe(Stream.provideService(T3Orchestration, orchestration));
   const listThreads = Effect.fn("T3ApplicationLive.listThreads")(function* (
     projectRef: string,
     options?: {
@@ -122,7 +132,11 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     const dispatch = yield* orchestration.dispatch(command);
     return { threadId, dispatch };
   });
-  const updateThread = makeUpdateThread({ orchestration, crypto });
+  const updateThread: T3ThreadApplicationService["updateThread"] = (input) =>
+    makeUpdateThread()(input).pipe(
+      Effect.provideService(T3Orchestration, orchestration),
+      Effect.provideService(Crypto.Crypto, crypto),
+    );
   const startThread = Effect.fn("T3ApplicationLive.startThread")(function* (
     startInput: StartThreadInput,
     policy?: {
@@ -158,20 +172,14 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
       serverConfig,
     }).pipe(Effect.provideService(Crypto.Crypto, crypto));
     const createDispatch = yield* orchestration.dispatch(commands.createCommand);
-    yield* waitForShellSequence({
-      orchestration,
-      sequence: createDispatch.sequence,
-    });
+    yield* awaitShellSequence(createDispatch.sequence);
     const dispatch = yield* orchestration.dispatch(commands.turnCommand);
     const threadId = commands.threadId;
     const until = policy?.until ?? "dispatch";
     if (until === "dispatch") {
       return { dispatch, project: scope.project, threadId };
     }
-    yield* waitForShellSequence({
-      orchestration,
-      sequence: dispatch.sequence,
-    });
+    yield* awaitShellSequence(dispatch.sequence);
     if (until === "visible") {
       const thread = yield* Effect.scoped(
         Effect.gen(function* () {
@@ -181,10 +189,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
       );
       return { dispatch, project: scope.project, threadId, thread };
     }
-    const thread = yield* waitForThreadUntilComplete({
-      orchestration,
-      threadId,
-    });
+    const thread = yield* awaitThreadCompletion(threadId);
     yield* failIfThreadError(thread);
     return { dispatch, project: scope.project, threadId, thread };
   });
@@ -210,10 +215,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     if (until === "dispatch") {
       return { dispatch, threadId: input.threadId };
     }
-    yield* waitForShellSequence({
-      orchestration,
-      sequence: dispatch.sequence,
-    });
+    yield* awaitShellSequence(dispatch.sequence);
     if (until === "visible") {
       const thread = yield* Effect.scoped(
         Effect.gen(function* () {
@@ -223,33 +225,20 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
       );
       return { dispatch, threadId: input.threadId, thread };
     }
-    const thread = yield* waitForThreadUntilComplete({
-      orchestration,
-      threadId: input.threadId,
-    });
+    const thread = yield* awaitThreadCompletion(input.threadId);
     yield* failIfThreadError(thread);
     return { dispatch, threadId: input.threadId, thread };
   });
-  const watchThread = (threadId: string) =>
-    watchThreadEvents({
-      orchestration,
-      threadId,
-    });
+  const watchThread = (threadId: string) => streamThreadEvents(threadId);
   const waitForThread = Effect.fn("T3ApplicationLive.waitForThread")(function* (threadId: string) {
-    const thread = yield* waitForThreadUntilComplete({
-      orchestration,
-      threadId,
-    });
+    const thread = yield* awaitThreadCompletion(threadId);
     yield* failIfThreadError(thread);
     return thread;
   });
   const callbackThread = Effect.fn("T3ApplicationLive.callbackThread")(function* (
     input: CallbackThreadInput,
   ) {
-    yield* waitForThreadUntilComplete({
-      orchestration,
-      threadId: input.fromThreadId,
-    });
+    yield* awaitThreadCompletion(input.fromThreadId);
     const result = yield* sendThread(
       { threadId: input.targetThreadId, message: input.prompt },
       { until: "dispatch" },
@@ -295,7 +284,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     watchThread,
     waitForThread,
     callbackThread,
-  };
+  } satisfies T3ThreadApplicationService;
 });
 
 const loadThreadsSnapshot = Effect.fn("loadThreadsSnapshot")(function* (

@@ -5,6 +5,10 @@ import {
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
   ServerSettingsError,
+  TerminalCwdError,
+  TerminalHistoryError,
+  TerminalNotRunningError,
+  TerminalSessionLookupError,
 } from "#t3tools/contracts";
 import { HttpClientError } from "effect/unstable/http";
 import { RpcClientError } from "effect/unstable/rpc";
@@ -20,12 +24,18 @@ const RpcErrorCauseSchema = Schema.Union([
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
   ServerSettingsError,
+  TerminalCwdError,
+  TerminalHistoryError,
+  TerminalNotRunningError,
+  TerminalSessionLookupError,
   AuthTransportError,
   T3CodeConnectionError,
   HttpClientError.HttpClientErrorSchema,
   UrlError,
   Schema.instanceOf(Schema.SchemaError),
 ]);
+
+export type RpcKnownCause = Schema.Schema.Type<typeof RpcErrorCauseSchema>;
 
 export class RpcError extends Schema.TaggedErrorClass<RpcError>()("RpcError", {
   message: Schema.String,

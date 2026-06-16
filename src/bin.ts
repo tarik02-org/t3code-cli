@@ -9,6 +9,7 @@ import { createCliCommand } from "./cli/app.ts";
 import { NodeEnvironmentLive } from "./environment/layer.ts";
 import { T3InputLive } from "./cli/input/layer.ts";
 import { T3OutputLive } from "./cli/output/layer.ts";
+import { NodeTerminalIoLive } from "./cli/terminal/io-node-layer.ts";
 import { T3Output } from "./cli/output/service.ts";
 import { AppLayer } from "./runtime/layer.ts";
 import { T3VersionBundledLive, T3VersionPackageJsonLive } from "./version/layer.ts";
@@ -27,6 +28,7 @@ const CliLayer = Layer.mergeAll(
   NodeEnvironmentLive,
   T3InputLive.pipe(Layer.provide(NodeServices.layer)),
   T3OutputLive.pipe(Layer.provide(NodeServices.layer)),
+  NodeTerminalIoLive,
   VersionLive.pipe(Layer.provide(NodeServices.layer)),
 );
 

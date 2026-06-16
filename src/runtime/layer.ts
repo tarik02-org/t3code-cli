@@ -16,6 +16,7 @@ import { T3CodeConnectionError } from "../connection/error.ts";
 import { T3CodeConnectionProvider, makeT3CodeConnectionProvider } from "../connection/service.ts";
 import { T3OrchestrationLive } from "../orchestration/layer.ts";
 import { T3RpcLive } from "../rpc/layer.ts";
+import { T3RpcOperationsLive } from "../rpc/operation.ts";
 import { NodeSqlClientFactoryLive } from "../sql/node-sqlite-client.ts";
 import { NodeCliPathLayer } from "../cli-path/layer.ts";
 
@@ -66,8 +67,11 @@ const T3RpcLayer = T3RpcLive.pipe(
     ),
   ),
 );
-export const T3OrchestrationLayer = T3OrchestrationLive.pipe(Layer.provide(T3RpcLayer));
-const T3ApplicationLayer = T3ApplicationLive.pipe(Layer.provide(T3OrchestrationLayer));
+const T3RpcOperationsLayer = T3RpcOperationsLive.pipe(Layer.provide(T3RpcLayer));
+export const T3OrchestrationLayer = T3OrchestrationLive.pipe(Layer.provide(T3RpcOperationsLayer));
+const T3ApplicationLayer = T3ApplicationLive.pipe(
+  Layer.provide(Layer.mergeAll(T3RpcOperationsLayer, T3OrchestrationLayer)),
+);
 
 export const AuthAppLayer = Layer.mergeAll(T3ConfigLive, T3AuthLayer);
 
@@ -75,6 +79,7 @@ export const AppLayer = Layer.mergeAll(
   T3ConfigLive,
   T3AuthLayer,
   T3RpcLayer,
+  T3RpcOperationsLayer,
   T3OrchestrationLayer,
   T3ApplicationLayer,
   NodeCliPathLayer,

@@ -1,6 +1,7 @@
 import { Command } from "effect/unstable/cli";
 
 import { createAuthCommand } from "./auth.ts";
+import { createTerminalCommandGroup } from "./terminal.ts";
 import { createModelCommand } from "./model.ts";
 import { createProjectCommand } from "./project.ts";
 import { createThreadCommand } from "./thread.ts";
@@ -19,6 +20,7 @@ export function createCliCommand() {
       listThreadsCommand,
       createModelCommand(),
       createProjectCommand(),
+      createTerminalCommandGroup(),
       startThreadCommand,
       sendThreadCommand,
       showThreadCommand,
