@@ -16,6 +16,7 @@
     "src/connection/index.ts",
     "src/contracts/index.ts",
     "src/layout/index.ts",
+    "src/node/index.ts",
     "src/orchestration/index.ts",
     "src/rpc/index.ts",
     "src/runtime/index.ts",
