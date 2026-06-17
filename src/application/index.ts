@@ -5,6 +5,15 @@ export {
   T3TerminalApplication,
   T3ThreadApplication,
 } from "./service.ts";
+export {
+  makeT3Application,
+  T3ApplicationLive,
+  T3ApplicationSlicesLive,
+  T3ModelApplicationLive,
+  T3ProjectApplicationLive,
+  T3TerminalApplicationLive,
+  T3ThreadApplicationLive,
+} from "./layer.ts";
 export type {
   SendThreadInput,
   StartThreadInput,

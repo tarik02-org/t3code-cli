@@ -35,6 +35,7 @@ export default defineConfig({
       connection: "src/connection/index.ts",
       contracts: "src/contracts/index.ts",
       layout: "src/layout/index.ts",
+      node: "src/node/index.ts",
       orchestration: "src/orchestration/index.ts",
       rpc: "src/rpc/index.ts",
       scope: "src/scope/index.ts",

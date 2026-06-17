@@ -70,6 +70,10 @@
       "types": "./dist/src/layout/index.d.ts",
       "default": "./dist/layout.js"
     },
+    "./node": {
+      "types": "./dist/src/node/index.d.ts",
+      "default": "./dist/node.js"
+    },
     "./orchestration": {
       "types": "./dist/src/orchestration/index.d.ts",
       "default": "./dist/orchestration.js"
