@@ -1,5 +1,16 @@
 # t3code-cli
 
+## 0.11.0
+
+### Minor Changes
+
+- 1eb8ed3: Add `thread delete` and `project delete` commands with interactive confirmation.
+- 1310049: Add `thread interrupt` and `thread unarchive` commands.
+- 07120ba: Expose service constructors, live layers, and Node adapters for library consumers.
+- 70d0693: Require `--force` when an agent command targets its own thread for mutating thread actions.
+- 5efff6d: Add `--archived` and `--all` flags to `thread list` for listing archived threads.
+- 189b120: Add `t3cli thread update` to change thread title, model, branch, and worktree metadata.
+
 ## 0.10.0
 
 ### Minor Changes
