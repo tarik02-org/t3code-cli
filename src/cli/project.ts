@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
 
+import { extraArgsConfig } from "./extra-args.ts";
 import { formatFlag, projectPathFlag } from "./flags.ts";
 import { formatProjectAddedHuman, formatProjectsHuman } from "./project-format.ts";
 import { deleteProjectCommand } from "./projects/delete.ts";
@@ -21,6 +22,7 @@ const listCommand = Command.make(
   "list",
   {
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ format }) =>
     Effect.gen(function* () {
@@ -43,6 +45,7 @@ const addCommand = Command.make(
     path: projectPathFlag,
     title: Flag.string("title").pipe(Flag.optional),
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ path, title, format }) =>
     Effect.gen(function* () {

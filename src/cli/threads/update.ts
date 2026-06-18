@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
 
+import { extraArgsConfig } from "../extra-args.ts";
 import { formatFlag, modelFlags, selfActionForceFlag, threadFlag } from "../flags.ts";
 import {
   ConflictingUpdateFlagsError,
@@ -30,6 +31,7 @@ export const updateThreadCommand = Command.make(
     worktree: Flag.string("worktree").pipe(Flag.optional),
     clearWorktree: Flag.boolean("clear-worktree").pipe(Flag.optional),
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({
     thread,

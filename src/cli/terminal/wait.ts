@@ -6,6 +6,7 @@ import { Argument, Command, Flag } from "effect/unstable/cli";
 
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
+import { extraArgsConfig } from "../extra-args.ts";
 import { formatFlag, threadFlag } from "../flags.ts";
 import { resolveOutputFormat } from "../output-format.ts";
 import { T3Output } from "../output/service.ts";
@@ -50,6 +51,7 @@ export const waitTerminalCommand = Command.make(
     terminalId: Argument.string("terminal-id"),
     target: Flag.choice("for", terminalWaitTargetChoices).pipe(Flag.withDefault("exited")),
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ thread, terminalId, target, format }) =>
     Effect.gen(function* () {

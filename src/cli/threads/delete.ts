@@ -3,6 +3,7 @@ import * as Option from "effect/Option";
 import { Command } from "effect/unstable/cli";
 
 import { requireDestructiveConfirmation } from "../confirm.ts";
+import { extraArgsConfig } from "../extra-args.ts";
 import { formatFlag, selfActionForceFlag, threadFlag, yesFlag } from "../flags.ts";
 import { formatThreadDeletedHuman } from "../thread-format.ts";
 import { MissingThreadError } from "../error.ts";
@@ -20,6 +21,7 @@ export const deleteThreadCommand = Command.make(
     force: selfActionForceFlag,
     yes: yesFlag,
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ thread, force, yes, format }) =>
     Effect.gen(function* () {

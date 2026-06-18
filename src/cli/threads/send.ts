@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
+import { extraArgsConfig } from "../extra-args.ts";
 import { modelFlags, selfActionForceFlag, threadFlag, threadFormatFlag } from "../flags.ts";
 import { readInitialMessage } from "../message-input.ts";
 import { buildModelOptions } from "../model-options.ts";
@@ -25,6 +26,7 @@ export const sendThreadCommand = Command.make(
     ...modelFlags,
     wait: Flag.boolean("wait"),
     format: threadFormatFlag,
+    ...extraArgsConfig,
   },
   ({
     thread,

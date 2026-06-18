@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import { Command, Flag } from "effect/unstable/cli";
 
 import type { ListThreadsInclude } from "../../application/service.ts";
+import { extraArgsConfig } from "../extra-args.ts";
 import { formatFlag, projectFlag } from "../flags.ts";
 import { InvalidFlagCombinationError } from "../error.ts";
 import { requireCommandProjectRef } from "../require.ts";
@@ -18,6 +19,7 @@ export const listThreadsCommand = Command.make(
     archived: Flag.boolean("archived").pipe(Flag.withDescription("List archived threads only")),
     all: Flag.boolean("all").pipe(Flag.withDescription("List active and archived threads")),
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ project, archived, all, format }) =>
     Effect.gen(function* () {

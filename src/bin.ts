@@ -4,7 +4,6 @@ import * as Layer from "effect/Layer";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Command } from "effect/unstable/cli";
-
 import { createCliCommand } from "./cli/app.ts";
 import { NodeEnvironmentLive } from "./environment/layer.ts";
 import { T3InputLive } from "./cli/input/layer.ts";
@@ -36,6 +35,11 @@ const program = Effect.gen(function* () {
   const version = yield* T3Version;
   return yield* Command.run(createCliCommand(), { version: version.version });
 }).pipe(
+  Effect.catchTag("ShowHelp", (error) =>
+    Effect.sync(() => {
+      process.exitCode = error.errors.length > 0 ? 1 : 0;
+    }),
+  ),
   Effect.tapError((error) =>
     Effect.gen(function* () {
       const output = yield* T3Output;

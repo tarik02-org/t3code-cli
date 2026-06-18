@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
 
+import { extraArgsConfig } from "../extra-args.ts";
 import { formatFlag, threadFlag } from "../flags.ts";
 import { MissingRequestError, MissingThreadError } from "../error.ts";
 import { readJsonAnswers } from "../message-input.ts";
@@ -25,6 +26,7 @@ export const respondThreadCommand = Command.make(
     answers: Flag.string("answers").pipe(Flag.optional),
     stdin: Flag.boolean("stdin"),
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ thread, request, answers, stdin, format }) =>
     Effect.gen(function* () {

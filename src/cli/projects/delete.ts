@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import { Command } from "effect/unstable/cli";
 
 import { requireDestructiveConfirmation } from "../confirm.ts";
+import { extraArgsConfig } from "../extra-args.ts";
 import { forceFlag, formatFlag, projectFlag, yesFlag } from "../flags.ts";
 import { formatProjectDeletedHuman } from "../project-format.ts";
 import { requireCommandProjectRef } from "../require.ts";
@@ -17,6 +18,7 @@ export const deleteProjectCommand = Command.make(
     force: forceFlag,
     yes: yesFlag,
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ project, force, yes, format }) =>
     Effect.gen(function* () {

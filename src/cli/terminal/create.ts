@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
+import { extraArgsConfig } from "../extra-args.ts";
 import { formatTerminalCreatedHuman } from "../terminal-format.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
@@ -19,6 +20,7 @@ export const createTerminalCommand = Command.make(
     id: Flag.string("id").pipe(Flag.optional),
     attach: Flag.boolean("attach"),
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ thread, command, id, attach, format }) =>
     Effect.gen(function* () {

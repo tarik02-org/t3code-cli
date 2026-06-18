@@ -12,6 +12,7 @@ import {
 import { T3Auth } from "../auth/service.ts";
 import { T3Config } from "../config/service.ts";
 import { Environment } from "../environment/service.ts";
+import { extraArgsConfig } from "./extra-args.ts";
 import { formatFlag } from "./flags.ts";
 import { resolveOutputFormat } from "./output-format.ts";
 import { T3Output } from "./output/service.ts";
@@ -29,6 +30,7 @@ const pairCommand = Command.make(
     url: Flag.string("url"),
     local: Flag.boolean("local"),
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ url, local, format }) =>
     Effect.gen(function* () {
@@ -59,6 +61,7 @@ const localCommand = Command.make(
     label: Flag.string("label").pipe(Flag.withDefault("t3cli")),
     subject: Flag.string("subject").pipe(Flag.withDefault("t3cli-local")),
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ baseDir, origin, role, label, subject, format }) =>
     Effect.gen(function* () {
@@ -90,6 +93,7 @@ const statusCommand = Command.make(
   "status",
   {
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ format }) =>
     Effect.gen(function* () {

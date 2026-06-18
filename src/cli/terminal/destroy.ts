@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
 import { requireDestructiveConfirmation } from "../confirm.ts";
+import { extraArgsConfig } from "../extra-args.ts";
 import { formatTerminalDestroyedHuman } from "../terminal-format.ts";
 import { T3Application } from "../../application/service.ts";
 import { Environment } from "../../environment/service.ts";
@@ -18,6 +19,7 @@ export const destroyTerminalCommand = Command.make(
     quiet: Flag.boolean("quiet"),
     yes: yesFlag,
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ thread, terminalId, quiet, yes, format }) =>
     Effect.gen(function* () {
