@@ -40,7 +40,7 @@ export type RpcKnownCause = Schema.Schema.Type<typeof RpcErrorCauseSchema>;
 export class RpcError extends Schema.TaggedErrorClass<RpcError>()("RpcError", {
   message: Schema.String,
   method: Schema.optionalKey(Schema.String),
-  cause: Schema.optionalKey(RpcErrorCauseSchema),
+  cause: Schema.optionalKey(Schema.Unknown),
 }) {}
 
 export type OrchestrationError = RpcError;

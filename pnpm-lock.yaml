@@ -6,15 +6,33 @@ settings:
 
 catalogs:
   default:
+    '@effect/platform-node':
+      specifier: 4.0.0-beta.78
+      version: 4.0.0-beta.78
     '@effect/vitest':
       specifier: 4.0.0-beta.78
       version: 4.0.0-beta.78
+    '@noble/curves':
+      specifier: 1.9.1
+      version: 1.9.1
+    '@noble/hashes':
+      specifier: 1.8.0
+      version: 1.8.0
+    '@types/node':
+      specifier: ^25.9.1
+      version: 25.9.1
     effect:
       specifier: 4.0.0-beta.78
       version: 4.0.0-beta.78
+    jose:
+      specifier: 6.2.2
+      version: 6.2.2
     vite-plus:
       specifier: 0.1.24
       version: 0.1.24
+    yaml:
+      specifier: ^2.9.0
+      version: 2.9.0
 
 patchedDependencies:
   '@effect/vitest@4.0.0-beta.78':
@@ -38,9 +56,15 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.0-beta.78(patch_hash=74fd480109c3bd975255bf5573a64718451bcae02b523c432bc18e9aa27b52fd)(effect@4.0.0-beta.78)(vitest@4.1.0(@types/node@25.9.1)(vite@8.0.14(@types/node@25.9.1)(yaml@2.9.0)))
+      '@t3tools/client-runtime':
+        specifier: workspace:*
+        version: link:upstream-t3code/packages/client-runtime
       '@t3tools/contracts':
         specifier: workspace:*
         version: link:upstream-t3code/packages/contracts
+      '@t3tools/shared':
+        specifier: workspace:*
+        version: link:upstream-t3code/packages/shared
       '@total-typescript/shoehorn':
         specifier: ^0.1.2
         version: 0.1.2
@@ -54,6 +78,25 @@ importers:
         specifier: ^0.1.24
         version: 0.1.24(@types/node@25.9.1)(typescript@6.0.3)(vite@8.0.14(@types/node@25.9.1)(yaml@2.9.0))(yaml@2.9.0)
 
+  upstream-t3code/packages/client-runtime:
+    dependencies:
+      '@t3tools/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@t3tools/shared':
+        specifier: workspace:*
+        version: link:../shared
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-beta.78
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.0-beta.78(patch_hash=74fd480109c3bd975255bf5573a64718451bcae02b523c432bc18e9aa27b52fd)(effect@4.0.0-beta.78)(vitest@4.1.0(@types/node@25.9.1)(vite@8.0.14(@types/node@25.9.1)(yaml@2.9.0)))
+      vite-plus:
+        specifier: 'catalog:'
+        version: 0.1.24(@types/node@25.9.1)(typescript@6.0.3)(vite@8.0.14(@types/node@25.9.1)(yaml@2.9.0))(yaml@2.9.0)
+
   upstream-t3code/packages/contracts:
     dependencies:
       effect:
@@ -63,6 +106,40 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.0-beta.78(patch_hash=74fd480109c3bd975255bf5573a64718451bcae02b523c432bc18e9aa27b52fd)(effect@4.0.0-beta.78)(vitest@4.1.0(@types/node@25.9.1)(vite@8.0.14(@types/node@25.9.1)(yaml@2.9.0)))
+      vite-plus:
+        specifier: 'catalog:'
+        version: 0.1.24(@types/node@25.9.1)(typescript@6.0.3)(vite@8.0.14(@types/node@25.9.1)(yaml@2.9.0))(yaml@2.9.0)
+
+  upstream-t3code/packages/shared:
+    dependencies:
+      '@noble/curves':
+        specifier: 'catalog:'
+        version: 1.9.1
+      '@noble/hashes':
+        specifier: 'catalog:'
+        version: 1.8.0
+      '@t3tools/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-beta.78
+      jose:
+        specifier: 'catalog:'
+        version: 6.2.2
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.0
+    devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.0-beta.78(effect@4.0.0-beta.78)(ioredis@5.10.1)
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.0-beta.78(patch_hash=74fd480109c3bd975255bf5573a64718451bcae02b523c432bc18e9aa27b52fd)(effect@4.0.0-beta.78)(vitest@4.1.0(@types/node@25.9.1)(vite@8.0.14(@types/node@25.9.1)(yaml@2.9.0)))
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.9.1
       vite-plus:
         specifier: 'catalog:'
         version: 0.1.24(@types/node@25.9.1)(typescript@6.0.3)(vite@8.0.14(@types/node@25.9.1)(yaml@2.9.0))(yaml@2.9.0)
@@ -212,6 +289,14 @@ packages:
     peerDependencies:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
+
+  '@noble/curves@1.9.1':
+    resolution: {integrity: sha512-k11yZxZg+t+gWvBbIswW0yoJlu8cHOC7dhunwOzoWH/mXGBiYyR4YY6hAEK/3EUs4UpB8la1RfdRpeGsFHkWsA==}
+    engines: {node: ^14.21.3 || >=16}
+
+  '@noble/hashes@1.8.0':
+    resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
+    engines: {node: ^14.21.3 || >=16}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -1015,6 +1100,9 @@ packages:
   isexe@2.0.0:
     resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
 
+  jose@6.2.2:
+    resolution: {integrity: sha512-d7kPDd34KO/YnzaDOlikGpOurfF0ByC2sEV4cANCtdqLlTfBlw2p14O/5d/zv40gJPbIQxfES3nSx1/oYNyuZQ==}
+
   js-yaml@3.14.2:
     resolution: {integrity: sha512-PMSmkqxr106Xa156c2M265Z+FTrPl+oxd/rgOQy2tijQeK5TxQ43psO1ZCwhVOSdnn+RzkzlRz/eY4BgJBYVpg==}
     hasBin: true
@@ -1771,6 +1859,12 @@ snapshots:
       '@tybys/wasm-util': 0.10.2
     optional: true
 
+  '@noble/curves@1.9.1':
+    dependencies:
+      '@noble/hashes': 1.8.0
+
+  '@noble/hashes@1.8.0': {}
+
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
       '@nodelib/fs.stat': 2.0.5
@@ -2303,6 +2397,8 @@ snapshots:
   is-windows@1.0.2: {}
 
   isexe@2.0.0: {}
+
+  jose@6.2.2: {}
 
   js-yaml@3.14.2:
     dependencies:

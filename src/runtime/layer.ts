@@ -1,3 +1,4 @@
+import { rpcSessionFactoryLayer } from "@t3tools/client-runtime/rpc";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
@@ -13,6 +14,7 @@ import { T3AuthTransportLive } from "../auth/transport.ts";
 import { T3ConfigLive } from "../config/layer.ts";
 import { T3Config } from "../config/service.ts";
 import { T3CodeConnectionError } from "../connection/error.ts";
+import { T3PreparedConnectionProviderLive } from "../connection/prepared.ts";
 import { T3CodeConnectionProvider, makeT3CodeConnectionProvider } from "../connection/service.ts";
 import { T3OrchestrationLive } from "../orchestration/layer.ts";
 import { T3RpcLive } from "../rpc/layer.ts";
@@ -61,9 +63,10 @@ const T3ConfigConnectionProviderLayer = Layer.effect(
 const T3RpcLayer = T3RpcLive.pipe(
   Layer.provide(
     Layer.mergeAll(
-      T3ConfigConnectionProviderLayer,
-      T3AuthTransportLayer,
-      NodeSocket.layerWebSocketConstructor,
+      T3PreparedConnectionProviderLive.pipe(
+        Layer.provide(Layer.mergeAll(T3ConfigConnectionProviderLayer, NodeHttpClient.layerUndici)),
+      ),
+      rpcSessionFactoryLayer.pipe(Layer.provide(NodeSocket.layerWebSocketConstructor)),
     ),
   ),
 );

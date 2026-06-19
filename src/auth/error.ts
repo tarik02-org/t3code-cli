@@ -1,7 +1,6 @@
 import * as Cause from "effect/Cause";
 import * as Schema from "effect/Schema";
 import { PlatformError } from "effect/PlatformError";
-import { HttpClientError } from "effect/unstable/http";
 
 import { ConfigError, UrlError } from "../config/error.ts";
 
@@ -22,13 +21,7 @@ export class AuthTransportError extends Schema.TaggedErrorClass<AuthTransportErr
   "AuthTransportError",
   {
     message: Schema.String,
-    cause: Schema.optionalKey(
-      Schema.Union([
-        HttpClientError.HttpClientErrorSchema,
-        Schema.instanceOf(Schema.SchemaError),
-        UrlError,
-      ]),
-    ),
+    cause: Schema.optionalKey(Schema.Unknown),
   },
 ) {}
 
