@@ -55,6 +55,23 @@ export class TerminalLookupError extends Schema.TaggedErrorClass<TerminalLookupE
   },
 ) {}
 
+export class ProjectActionLookupError extends Schema.TaggedErrorClass<ProjectActionLookupError>()(
+  "ProjectActionLookupError",
+  {
+    message: Schema.String,
+    projectId: Schema.String,
+    selector: Schema.String,
+  },
+) {}
+
+export class ProjectActionValidationError extends Schema.TaggedErrorClass<ProjectActionValidationError>()(
+  "ProjectActionValidationError",
+  {
+    message: Schema.String,
+    projectId: Schema.String,
+  },
+) {}
+
 export type DomainError =
   | ProjectLookupError
   | ModelSelectionError
@@ -62,4 +79,6 @@ export type DomainError =
   | ThreadSessionError
   | ThreadLookupError
   | ProjectCreateVisibilityError
-  | TerminalLookupError;
+  | TerminalLookupError
+  | ProjectActionLookupError
+  | ProjectActionValidationError;

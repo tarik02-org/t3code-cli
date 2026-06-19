@@ -1,5 +1,6 @@
 import { Command } from "effect/unstable/cli";
 
+import { createActionCommand } from "./action.ts";
 import { createAuthCommand } from "./auth.ts";
 import { createTerminalCommandGroup } from "./terminal.ts";
 import { createModelCommand } from "./model.ts";
@@ -16,6 +17,7 @@ export function createCliCommand() {
   return Command.make("t3cli").pipe(
     Command.withDescription("non-interactive cli for running t3code server"),
     Command.withSubcommands([
+      createActionCommand(),
       createAuthCommand(),
       listThreadsCommand,
       createModelCommand(),

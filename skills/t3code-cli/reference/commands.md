@@ -2,6 +2,7 @@
 
 ```
 t3cli
+├── action list|run|add|update|delete
 ├── project list|add|delete
 ├── model list
 ├── list|start|send|show|transcript|wait
@@ -42,6 +43,33 @@ t3cli project delete [--project <ref>] [--force] [--yes] [--format json]
 ```sh
 t3cli model list [--all] [--provider <name>] [--format json]
 ```
+
+## action
+
+Project-defined toolbar actions are called `action` in the CLI and map to project scripts in the server contract. Project scope for `list`, `add`, `update`, and `delete` uses `--project`, `T3CODE_PROJECT_ROOT`, `T3CODE_PROJECT_ID`, or cwd with local auth. `run` uses `--thread` or `T3CODE_THREAD_ID` and infers the project from the thread.
+
+```sh
+t3cli action list [--project <ref>] [--format auto|human|json]
+t3cli action run --thread <id> (--id <id> | --name <name>)
+  [--terminal <id>] [--attach] [--format auto|human|json]
+t3cli action add [--project <ref>] --name <name> --command <command>
+  [--id <id>] [--icon play|test|lint|configure|build|debug]
+  [--setup] [--preview-url <url>] [--auto-open-preview]
+  [--format auto|human|json]
+t3cli action update [--project <ref>] (--id <id> | --name <name>)
+  [--set-name <name>] [--command <command>]
+  [--icon play|test|lint|configure|build|debug]
+  [--setup | --no-setup]
+  [--preview-url <url> | --clear-preview-url]
+  [--auto-open-preview | --no-auto-open-preview | --clear-auto-open-preview]
+  [--format auto|human|json]
+t3cli action delete [--project <ref>] (--id <id> | --name <name>)
+  [--yes] [--format auto|human|json]
+```
+
+Selectors require exactly one of `--id` or `--name`. `--name` matching trims the query, compares case-insensitively, and fails if zero or multiple actions match. `add` generates an id from `--name` when omitted. Default `add` values are `--icon play` and non-setup.
+
+Mutations dispatch `project.meta.update` with the next full scripts array and wait for the shell sequence before printing. `--setup` enforces one setup action per project by clearing setup from the others. Preview fields are editable, but `action run` does not open previews. `action run` opens a new terminal by default, can target `--terminal <id>`, and can attach with `--attach`.
 
 ## thread workflow
 
