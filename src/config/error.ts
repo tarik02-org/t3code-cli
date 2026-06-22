@@ -19,8 +19,8 @@ export class ConfigError extends Schema.TaggedErrorClass<ConfigError>()("ConfigE
   cause: Schema.optionalKey(ConfigErrorCauseSchema),
 }) {}
 
-export class CredentialDecryptError extends Schema.TaggedErrorClass<CredentialDecryptError>()(
-  "CredentialDecryptError",
+export class CredentialCipherError extends Schema.TaggedErrorClass<CredentialCipherError>()(
+  "CredentialCipherError",
   {
     cause: Schema.Defect(),
   },

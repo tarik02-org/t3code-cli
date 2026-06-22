@@ -16,6 +16,7 @@ import { T3AuthLive } from "./layer.ts";
 import { T3Auth } from "./service.ts";
 import { T3AuthTransport } from "./transport.ts";
 import { T3CredentialCryptoLive } from "../config/credential.ts";
+import { T3CredentialCipherWebLive } from "../config/credential-cipher-web.ts";
 import { T3ConfigLive } from "../config/layer.ts";
 import { StoredConfigV2FileJson } from "../config/schema.ts";
 import { Environment } from "../environment/service.ts";
@@ -42,6 +43,7 @@ function makeAuthLayer(homeDir: string) {
     Layer.provide(
       Layer.mergeAll(
         platformLayer,
+        T3CredentialCipherWebLive,
         Layer.succeed(T3ConfigSelection)({
           getSelectedEnvironment: () => Effect.succeed(undefined),
         }),

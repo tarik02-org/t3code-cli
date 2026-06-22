@@ -15,6 +15,7 @@ import {
   parseKeyringPassword,
   shouldFallbackToKeyFile,
 } from "./credential.ts";
+import { T3CredentialCipherWebLive } from "./credential-cipher-web.ts";
 
 vi.mock("./keyring.ts", async () => {
   const EffectModule = await import("effect/Effect");
@@ -26,6 +27,7 @@ vi.mock("./keyring.ts", async () => {
 function makeCredentialLayer(homeDir: string) {
   return Layer.mergeAll(
     NodeServices.layer,
+    T3CredentialCipherWebLive,
     Layer.succeed(Environment)({
       cwd: homeDir,
       homeDir,

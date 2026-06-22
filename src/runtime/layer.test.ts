@@ -10,6 +10,7 @@ import { Command } from "effect/unstable/cli";
 import { vi } from "vite-plus/test";
 
 import { T3CliConfigSelectionLive } from "../cli/selection-layer.ts";
+import { T3CredentialCipherNodeLive } from "../config/credential-cipher-node.ts";
 import { cliEnvironmentSetting } from "../cli/environment-flag.ts";
 import { Environment } from "../environment/service.ts";
 import type { ResolvedConfig } from "../config/types.ts";
@@ -33,6 +34,7 @@ function makeCliAppLayer(homeDir: string) {
   });
   return BaseAppLayer.pipe(
     Layer.provideMerge(T3CliConfigSelectionLive),
+    Layer.provide(T3CredentialCipherNodeLive),
     Layer.provide(Layer.mergeAll(NodeServices.layer, environmentLayer)),
   );
 }

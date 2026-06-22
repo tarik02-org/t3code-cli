@@ -13,6 +13,7 @@ import { vi } from "vite-plus/test";
 import { Environment } from "../environment/service.ts";
 import { decryptEnvironment } from "./codec.ts";
 import { makeT3CredentialCrypto, T3CredentialCryptoLive } from "./credential.ts";
+import { T3CredentialCipherWebLive } from "./credential-cipher-web.ts";
 import { migrateV1FileToEncrypted } from "./migration.ts";
 import { T3ConfigLive } from "./layer.ts";
 import { StoredConfigV1FileJson, StoredConfigV2FileJson } from "./schema.ts";
@@ -55,7 +56,7 @@ function makeConfigLayer(
         });
   return T3ConfigLive.pipe(
     Layer.provide(T3CredentialCryptoLive),
-    Layer.provide(Layer.mergeAll(platformLayer, selectionLayer)),
+    Layer.provide(Layer.mergeAll(platformLayer, selectionLayer, T3CredentialCipherWebLive)),
   );
 }
 
@@ -68,7 +69,13 @@ describe("config persistence", () => {
       Effect.flatMap((homeDir) =>
         Effect.gen(function* () {
           const credentialCrypto = yield* makeT3CredentialCrypto().pipe(
-            Effect.provide(Layer.mergeAll(NodeServices.layer, makeEnvironmentLayer(homeDir))),
+            Effect.provide(
+              Layer.mergeAll(
+                NodeServices.layer,
+                T3CredentialCipherWebLive,
+                makeEnvironmentLayer(homeDir),
+              ),
+            ),
           );
           const migrated = yield* migrateV1FileToEncrypted(credentialCrypto, {
             url: "https://app.example.com",
@@ -442,7 +449,13 @@ describe("config persistence", () => {
       Effect.flatMap((homeDir) =>
         Effect.gen(function* () {
           const credentialCrypto = yield* makeT3CredentialCrypto().pipe(
-            Effect.provide(Layer.mergeAll(NodeServices.layer, makeEnvironmentLayer(homeDir))),
+            Effect.provide(
+              Layer.mergeAll(
+                NodeServices.layer,
+                T3CredentialCipherWebLive,
+                makeEnvironmentLayer(homeDir),
+              ),
+            ),
           );
           const token = yield* credentialCrypto.encrypt({
             environmentName: "home",

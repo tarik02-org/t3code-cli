@@ -22,8 +22,7 @@ import { T3RpcOperationsLive } from "../rpc/operation.ts";
 import { NodeSqlClientFactoryLive } from "../sql/node-sqlite-client.ts";
 import { NodeCliPathLayer } from "../cli-path/layer.ts";
 
-export const T3CredentialCryptoLayer = T3CredentialCryptoLive;
-export const T3ConfigLayer = T3ConfigLive.pipe(Layer.provide(T3CredentialCryptoLayer));
+export const T3ConfigLayer = T3ConfigLive.pipe(Layer.provide(T3CredentialCryptoLive));
 export const T3AuthTransportLayer = T3AuthTransportLive.pipe(
   Layer.provide(NodeHttpClient.layerUndici),
 );

@@ -1,30 +1,36 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-
+import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
+import * as Encoding from "effect/Encoding";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Result from "effect/Result";
 
 import { Environment } from "../environment/service.ts";
+import {
+  T3CredentialCipher,
+  credentialCipherNonceByteLength,
+} from "./credential-cipher-service.ts";
 import {
   T3CredentialCrypto,
   type CredentialDecryptInput,
   type CredentialEncryptInput,
 } from "./credential-service.ts";
-import { ConfigError, CredentialDecryptError, isPlatformNotFoundError } from "./error.ts";
+import { ConfigError, isPlatformNotFoundError } from "./error.ts";
 import { hardenPrivateFileMode } from "./file-mode.ts";
 import { getKeyringStore, KeyringOperationError, keyringErrorMessage } from "./keyring.ts";
 import { resolveKeyFilePath } from "./paths.ts";
 
 const configSchemaVersion = 2;
 const masterKeyByteLength = 32;
-const gcmNonceByteLength = 12;
 const keyringService = "t3cli";
 const keyringAccount = "master-key";
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
 
 export type KeyringReadResult =
   | { readonly kind: "missing" }
-  | { readonly kind: "present"; readonly key: Buffer }
+  | { readonly kind: "present"; readonly key: Uint8Array }
   | { readonly kind: "corrupt"; readonly message: string }
   | { readonly kind: "unavailable"; readonly message: string };
 
@@ -40,6 +46,8 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const environment = yield* Environment;
+  const cryptoService = yield* Crypto.Crypto;
+  const cipher = yield* T3CredentialCipher;
   const keyFilePath = resolveKeyFilePath(path, environment);
 
   const readKeyFileMasterKey = Effect.fn("readKeyFileMasterKey")(function* (filePath: string) {
@@ -59,7 +67,17 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
     if (raw === undefined) {
       return undefined;
     }
-    const key = Buffer.from(raw.trim(), "base64");
+    const key = yield* decodeBase64Bytes(raw.trim()).pipe(
+      Effect.catchTags({
+        EncodingError: (error) =>
+          Effect.fail(
+            new ConfigError({
+              message: "invalid credential key file: invalid base64",
+              cause: error,
+            }),
+          ),
+      }),
+    );
     if (key.byteLength !== masterKeyByteLength) {
       return yield* Effect.fail(
         new ConfigError({ message: "invalid credential key file: unexpected key length" }),
@@ -70,7 +88,7 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
 
   const writeKeyFileMasterKey = Effect.fn("writeKeyFileMasterKey")(function* (
     filePath: string,
-    key: Buffer,
+    key: Uint8Array,
   ) {
     yield* fs.makeDirectory(path.dirname(filePath), { recursive: true, mode: 0o700 }).pipe(
       Effect.catchTags({
@@ -80,7 +98,7 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
           ),
       }),
     );
-    yield* fs.writeFileString(filePath, `${key.toString("base64")}\n`, { mode: 0o600 }).pipe(
+    yield* fs.writeFileString(filePath, `${Encoding.encodeBase64(key)}\n`, { mode: 0o600 }).pipe(
       Effect.catchTags({
         PlatformError: (error) =>
           Effect.fail(
@@ -110,7 +128,7 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
         return fileKey;
       }
     }
-    const generated = randomBytes(masterKeyByteLength);
+    const generated = yield* secureRandomBytes(cryptoService, masterKeyByteLength);
     const writeResult = yield* writeKeyringMasterKey(generated);
     if (writeResult.kind === "stored") {
       return generated;
@@ -123,20 +141,32 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
     input: CredentialEncryptInput,
   ) {
     const masterKey = yield* getMasterKey();
-    const nonce = randomBytes(gcmNonceByteLength);
-    const cipher = createCipheriv("aes-256-gcm", masterKey, nonce, {
-      authTagLength: 16,
-    });
-    cipher.setAAD(buildAad(input));
-    const ciphertext = Buffer.concat([cipher.update(input.token, "utf8"), cipher.final()]);
-    const tag = cipher.getAuthTag();
+    const nonce = yield* secureRandomBytes(cryptoService, credentialCipherNonceByteLength);
+    const encrypted = yield* cipher
+      .encrypt({
+        key: masterKey,
+        nonce,
+        plaintext: encodeUtf8(input.token),
+        additionalData: buildCredentialAad(input),
+      })
+      .pipe(
+        Effect.catchTags({
+          CredentialCipherError: (error) =>
+            Effect.fail(
+              new ConfigError({
+                message: "failed to encrypt credential token",
+                cause: error.cause,
+              }),
+            ),
+        }),
+      );
     return {
       kind: "encrypted" as const,
       alg: "aes-256-gcm" as const,
       key: "default" as const,
-      nonce: nonce.toString("base64"),
-      ciphertext: ciphertext.toString("base64"),
-      tag: tag.toString("base64"),
+      nonce: Encoding.encodeBase64(nonce),
+      ciphertext: Encoding.encodeBase64(encrypted.ciphertext),
+      tag: Encoding.encodeBase64(encrypted.tag),
     };
   });
 
@@ -144,20 +174,29 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
     input: CredentialDecryptInput,
   ) {
     const masterKey = yield* getMasterKey();
-    return yield* Effect.try({
-      try: () => decryptToken(masterKey, input),
-      catch: (cause) => new CredentialDecryptError({ cause }),
-    }).pipe(
-      Effect.catchTags({
-        CredentialDecryptError: (error) =>
-          Effect.fail(
-            new ConfigError({
-              message: "failed to decrypt credential token",
-              cause: error.cause,
-            }),
-          ),
-      }),
-    );
+    const nonce = yield* decodeBase64Field(input.token.nonce, "token nonce");
+    const ciphertext = yield* decodeBase64Field(input.token.ciphertext, "token ciphertext");
+    const tag = yield* decodeBase64Field(input.token.tag, "token tag");
+    const plaintext = yield* cipher
+      .decrypt({
+        key: masterKey,
+        nonce,
+        ciphertext,
+        tag,
+        additionalData: buildCredentialAad(input),
+      })
+      .pipe(
+        Effect.catchTags({
+          CredentialCipherError: (error) =>
+            Effect.fail(
+              new ConfigError({
+                message: "failed to decrypt credential token",
+                cause: error.cause,
+              }),
+            ),
+        }),
+      );
+    return decodeUtf8(plaintext);
   });
 
   return { encrypt, decrypt };
@@ -165,27 +204,52 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
 
 export const T3CredentialCryptoLive = Layer.effect(T3CredentialCrypto, makeT3CredentialCrypto());
 
-function buildAad(input: {
+function buildCredentialAad(input: {
   readonly environmentName: string;
   readonly url: string;
   readonly local: boolean;
 }) {
-  return Buffer.from(
+  return encodeUtf8(
     `${configSchemaVersion}\0${input.environmentName}\0${input.url}\0${input.local}`,
-    "utf8",
   );
 }
 
-function decryptToken(masterKey: Buffer, input: CredentialDecryptInput) {
-  const nonce = Buffer.from(input.token.nonce, "base64");
-  const ciphertext = Buffer.from(input.token.ciphertext, "base64");
-  const tag = Buffer.from(input.token.tag, "base64");
-  const decipher = createDecipheriv("aes-256-gcm", masterKey, nonce, {
-    authTagLength: 16,
-  });
-  decipher.setAAD(buildAad(input));
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+function encodeUtf8(value: string) {
+  return textEncoder.encode(value);
+}
+
+function decodeUtf8(value: Uint8Array) {
+  return textDecoder.decode(value);
+}
+
+function secureRandomBytes(cryptoService: Crypto.Crypto, size: number) {
+  return cryptoService.randomBytes(size).pipe(
+    Effect.mapError(
+      (error) =>
+        new ConfigError({
+          message: "failed to generate secure random bytes",
+          cause: error,
+        }),
+    ),
+  );
+}
+
+function decodeBase64Bytes(value: string) {
+  return Effect.fromResult(Encoding.decodeBase64(value));
+}
+
+function decodeBase64Field(value: string, field: string) {
+  return decodeBase64Bytes(value).pipe(
+    Effect.catchTags({
+      EncodingError: (error) =>
+        Effect.fail(
+          new ConfigError({
+            message: `invalid encrypted token ${field}`,
+            cause: error,
+          }),
+        ),
+    }),
+  );
 }
 
 function readKeyringMasterKey(): Effect.Effect<KeyringReadResult> {
@@ -229,17 +293,24 @@ export function parseKeyringPassword(password: string | null): KeyringReadResult
   if (password === null || password.length === 0) {
     return { kind: "missing" };
   }
-  const key = Buffer.from(password, "base64");
-  if (key.byteLength !== masterKeyByteLength) {
-    return {
-      kind: "corrupt",
-      message: "unexpected key length",
-    };
-  }
-  return { kind: "present", key };
+  return Result.match(Encoding.decodeBase64(password.trim()), {
+    onFailure: () => ({
+      kind: "corrupt" as const,
+      message: "invalid base64 key",
+    }),
+    onSuccess: (key) => {
+      if (key.byteLength !== masterKeyByteLength) {
+        return {
+          kind: "corrupt" as const,
+          message: "unexpected key length",
+        };
+      }
+      return { kind: "present" as const, key };
+    },
+  });
 }
 
-function writeKeyringMasterKey(key: Buffer): Effect.Effect<KeyringWriteResult> {
+function writeKeyringMasterKey(key: Uint8Array): Effect.Effect<KeyringWriteResult> {
   return Effect.gen(function* () {
     const store = yield* getKeyringStore();
     if (store === null) {
@@ -250,7 +321,7 @@ function writeKeyringMasterKey(key: Buffer): Effect.Effect<KeyringWriteResult> {
     }
     return yield* Effect.try({
       try: () => {
-        store.writePassword(keyringService, keyringAccount, key.toString("base64"));
+        store.writePassword(keyringService, keyringAccount, Encoding.encodeBase64(key));
         return { kind: "stored" } as const;
       },
       catch: (cause) => new KeyringOperationError({ cause }),
