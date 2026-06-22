@@ -106,7 +106,9 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
           ),
       }),
     );
-    yield* hardenPrivateFileMode(fs, filePath, "credential key");
+    yield* hardenPrivateFileMode(filePath, "credential key").pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+    );
   });
 
   const getMasterKey = Effect.fn("T3CredentialCryptoLive.getMasterKey")(function* () {
@@ -124,7 +126,9 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
     if (shouldFallbackToKeyFile(keyringResult)) {
       const fileKey = yield* readKeyFileMasterKey(keyFilePath);
       if (fileKey !== undefined) {
-        yield* hardenPrivateFileMode(fs, keyFilePath, "credential key");
+        yield* hardenPrivateFileMode(keyFilePath, "credential key").pipe(
+          Effect.provideService(FileSystem.FileSystem, fs),
+        );
         return fileKey;
       }
     }

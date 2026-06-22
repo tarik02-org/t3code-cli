@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import type * as FileSystem from "effect/FileSystem";
+import * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
@@ -67,6 +67,8 @@ export function writeEncryptedConfigFile(
           Effect.fail(new ConfigError({ message: "failed to write config", cause: error })),
       }),
     );
-    yield* hardenPrivateFileMode(fs, configFilePath, "config");
+    yield* hardenPrivateFileMode(configFilePath, "config").pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+    );
   });
 }

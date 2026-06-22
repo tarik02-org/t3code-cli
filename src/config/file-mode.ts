@@ -1,16 +1,16 @@
 import * as Effect from "effect/Effect";
-import type * as FileSystem from "effect/FileSystem";
+import * as FileSystem from "effect/FileSystem";
 
 import { ConfigError } from "./error.ts";
 
 const privateFileMode = 0o600;
 
-export function hardenPrivateFileMode(
-  fs: FileSystem.FileSystem,
+export const hardenPrivateFileMode = Effect.fn("hardenPrivateFileMode")(function* (
   filePath: string,
   label: "config" | "credential key",
 ) {
-  return fs.chmod(filePath, privateFileMode).pipe(
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs.chmod(filePath, privateFileMode).pipe(
     Effect.mapError(
       (error) =>
         new ConfigError({
@@ -19,4 +19,4 @@ export function hardenPrivateFileMode(
         }),
     ),
   );
-}
+});
