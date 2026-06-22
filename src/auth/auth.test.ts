@@ -15,26 +15,19 @@ import { T3AuthPairing } from "./pairing.ts";
 import { T3AuthLive } from "./layer.ts";
 import { T3Auth } from "./service.ts";
 import { T3AuthTransport } from "./transport.ts";
-import * as Config from "../config/layer.ts";
-import * as CredentialCrypto from "../config/credential.ts";
-import { layerWeb } from "../config/credential-cipher-web.ts";
+import { layer as T3ConfigLive } from "../config/layer.ts";
+import { layer as T3CredentialCryptoLive } from "../config/credential.ts";
+import { layerWeb as T3CredentialCipherWebLive } from "../config/credential-cipher-web.ts";
 import { StoredConfigV2FileJson } from "../config/schema.ts";
 import { Environment } from "../environment/service.ts";
 import { T3ConfigSelection } from "../config/selection.ts";
 
 vi.mock("../config/keyring.ts", async (importOriginal) => {
   const EffectModule = await import("effect/Effect");
-  const { KeyringModuleLoadError } = await import("../config/error.ts");
   const actual = await importOriginal<typeof import("../config/keyring.ts")>();
   return {
     ...actual,
-    getKeyringStore: () =>
-      EffectModule.fail(
-        new KeyringModuleLoadError({
-          reason: "module-not-found",
-          cause: new Error("keyring unavailable in test"),
-        }),
-      ),
+    getKeyringStore: () => EffectModule.succeed(undefined),
   };
 });
 
@@ -47,12 +40,12 @@ function makeAuthLayer(homeDir: string) {
     stderrIsTTY: false,
   });
   const platformLayer = Layer.mergeAll(NodeServices.layer, environmentLayer);
-  const configLayer = Config.layer.pipe(
-    Layer.provide(CredentialCrypto.layer),
+  const configLayer = T3ConfigLive.pipe(
+    Layer.provide(T3CredentialCryptoLive),
     Layer.provide(
       Layer.mergeAll(
         platformLayer,
-        layerWeb,
+        T3CredentialCipherWebLive,
         Layer.succeed(T3ConfigSelection)({
           getSelectedEnvironment: () => Effect.succeed(undefined),
         }),

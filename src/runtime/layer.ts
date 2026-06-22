@@ -10,8 +10,8 @@ import { T3LocalAuthOriginLive } from "../auth/local-origin.ts";
 import { T3LocalAuthTokenLive } from "../auth/local-token.ts";
 import { T3AuthPairingLive } from "../auth/pairing.ts";
 import { T3AuthTransportLive } from "../auth/transport.ts";
-import * as Config from "../config/layer.ts";
-import * as CredentialCrypto from "../config/credential.ts";
+import { layer as T3ConfigLive } from "../config/layer.ts";
+import { layer as T3CredentialCryptoLive } from "../config/credential.ts";
 import { T3ConfigSelectionLive } from "../config/selection-layer.ts";
 import { T3Config } from "../config/service.ts";
 import { T3CodeConnectionError } from "../connection/error.ts";
@@ -22,7 +22,7 @@ import { T3RpcOperationsLive } from "../rpc/operation.ts";
 import { NodeSqlClientFactoryLive } from "../sql/node-sqlite-client.ts";
 import { NodeCliPathLayer } from "../cli-path/layer.ts";
 
-export const T3ConfigLayer = Config.layer.pipe(Layer.provide(CredentialCrypto.layer));
+export const T3ConfigLayer = T3ConfigLive.pipe(Layer.provide(T3CredentialCryptoLive));
 export const T3AuthTransportLayer = T3AuthTransportLive.pipe(
   Layer.provide(NodeHttpClient.layerUndici),
 );

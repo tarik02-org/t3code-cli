@@ -11,28 +11,21 @@ import { expect, vi } from "vite-plus/test";
 
 import { Environment } from "../environment/service.ts";
 import { make, parseKeyringPassword, shouldFallbackToKeyFile } from "./credential.ts";
-import { layerWeb } from "./credential-cipher-web.ts";
+import { layerWeb as T3CredentialCipherWebLive } from "./credential-cipher-web.ts";
 
 vi.mock("./keyring.ts", async (importOriginal) => {
   const EffectModule = await import("effect/Effect");
-  const { KeyringModuleLoadError } = await import("./error.ts");
   const actual = await importOriginal<typeof import("./keyring.ts")>();
   return {
     ...actual,
-    getKeyringStore: () =>
-      EffectModule.fail(
-        new KeyringModuleLoadError({
-          reason: "module-not-found",
-          cause: new Error("keyring unavailable in test"),
-        }),
-      ),
+    getKeyringStore: () => EffectModule.succeed(undefined),
   };
 });
 
 function makeCredentialLayer(homeDir: string) {
   return Layer.mergeAll(
     NodeServices.layer,
-    layerWeb,
+    T3CredentialCipherWebLive,
     Layer.succeed(Environment)({
       cwd: homeDir,
       homeDir,

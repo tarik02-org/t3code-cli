@@ -12,9 +12,9 @@ import { vi } from "vite-plus/test";
 
 import { Environment } from "../environment/service.ts";
 import { decryptEnvironment, encryptEnvironment } from "./codec.ts";
-import * as Config from "./layer.ts";
-import * as CredentialCrypto from "./credential.ts";
-import { layerWeb } from "./credential-cipher-web.ts";
+import { layer as T3ConfigLive } from "./layer.ts";
+import { layer as T3CredentialCryptoLive } from "./credential.ts";
+import { layerWeb as T3CredentialCipherWebLive } from "./credential-cipher-web.ts";
 import { migrateV1FileToEncrypted } from "./migration.ts";
 import { StoredConfigV1FileJson, StoredConfigV2FileJson } from "./schema.ts";
 import { T3ConfigSelection } from "./selection.ts";
@@ -23,17 +23,10 @@ import { T3Config } from "./service.ts";
 
 vi.mock("./keyring.ts", async (importOriginal) => {
   const EffectModule = await import("effect/Effect");
-  const { KeyringModuleLoadError } = await import("./error.ts");
   const actual = await importOriginal<typeof import("./keyring.ts")>();
   return {
     ...actual,
-    getKeyringStore: () =>
-      EffectModule.fail(
-        new KeyringModuleLoadError({
-          reason: "module-not-found",
-          cause: new Error("keyring unavailable in test"),
-        }),
-      ),
+    getKeyringStore: () => EffectModule.succeed(undefined),
   };
 });
 
@@ -48,8 +41,10 @@ function makeEnvironmentLayer(homeDir: string, env: Record<string, string> = {})
 }
 
 function makeCredentialCryptoLayer(homeDir: string) {
-  return CredentialCrypto.layer.pipe(
-    Layer.provide(Layer.mergeAll(NodeServices.layer, layerWeb, makeEnvironmentLayer(homeDir))),
+  return T3CredentialCryptoLive.pipe(
+    Layer.provide(
+      Layer.mergeAll(NodeServices.layer, T3CredentialCipherWebLive, makeEnvironmentLayer(homeDir)),
+    ),
   );
 }
 
@@ -69,9 +64,9 @@ function makeConfigLayer(
       : Layer.succeed(T3ConfigSelection)({
           getSelectedEnvironment: () => Effect.succeed(input.selection),
         });
-  return Config.layer.pipe(
-    Layer.provide(CredentialCrypto.layer),
-    Layer.provide(Layer.mergeAll(platformLayer, selectionLayer, layerWeb)),
+  return T3ConfigLive.pipe(
+    Layer.provide(T3CredentialCryptoLive),
+    Layer.provide(Layer.mergeAll(platformLayer, selectionLayer, T3CredentialCipherWebLive)),
   );
 }
 

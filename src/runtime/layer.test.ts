@@ -10,7 +10,7 @@ import { Command } from "effect/unstable/cli";
 import { vi } from "vite-plus/test";
 
 import { T3CliConfigSelectionLive } from "../cli/selection-layer.ts";
-import { layerNode } from "../config/credential-cipher-node.ts";
+import { layerNode as T3CredentialCipherNodeLive } from "../config/credential-cipher-node.ts";
 import { cliEnvironmentSetting } from "../cli/environment-flag.ts";
 import { Environment } from "../environment/service.ts";
 import type { ResolvedConfig } from "../config/types.ts";
@@ -19,17 +19,10 @@ import { BaseAppLayer } from "./layer.ts";
 
 vi.mock("../config/keyring.ts", async (importOriginal) => {
   const EffectModule = await import("effect/Effect");
-  const { KeyringModuleLoadError } = await import("../config/error.ts");
   const actual = await importOriginal<typeof import("../config/keyring.ts")>();
   return {
     ...actual,
-    getKeyringStore: () =>
-      EffectModule.fail(
-        new KeyringModuleLoadError({
-          reason: "module-not-found",
-          cause: new Error("keyring unavailable in test"),
-        }),
-      ),
+    getKeyringStore: () => EffectModule.succeed(undefined),
   };
 });
 
@@ -43,7 +36,7 @@ function makeCliAppLayer(homeDir: string) {
   });
   return BaseAppLayer.pipe(
     Layer.provideMerge(T3CliConfigSelectionLive),
-    Layer.provide(layerNode),
+    Layer.provide(T3CredentialCipherNodeLive),
     Layer.provide(Layer.mergeAll(NodeServices.layer, environmentLayer)),
   );
 }

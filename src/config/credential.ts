@@ -10,14 +10,7 @@ import * as Result from "effect/Result";
 import { Environment } from "../environment/service.ts";
 import { T3CredentialCipher, credentialCipherNonceByteLength } from "./credential-cipher.ts";
 import type { EncryptedToken } from "./schema.ts";
-import {
-  ConfigError,
-  KeyringOperationError,
-  describeCredentialCipherError,
-  describeKeyringModuleLoadError,
-  describeKeyringOperationError,
-  isPlatformNotFoundError,
-} from "./error.ts";
+import { ConfigError, CredentialCipherError, isPlatformNotFoundError } from "./error.ts";
 import { hardenPrivateFileMode } from "./file-mode.ts";
 import { getKeyringStore } from "./keyring.ts";
 import { resolveKeyFilePath } from "./paths.ts";
@@ -179,17 +172,7 @@ export const make = Effect.fn("makeT3CredentialCrypto")(function* () {
         plaintext: encodeUtf8(input.token),
         additionalData: buildCredentialAad(input),
       })
-      .pipe(
-        Effect.catchTags({
-          CredentialCipherError: (error) =>
-            Effect.fail(
-              new ConfigError({
-                message: describeCredentialCipherError(error),
-                cause: error,
-              }),
-            ),
-        }),
-      );
+      .pipe(Effect.mapError(mapCredentialCipherError));
     return {
       kind: "encrypted" as const,
       alg: "aes-256-gcm" as const,
@@ -215,17 +198,7 @@ export const make = Effect.fn("makeT3CredentialCrypto")(function* () {
         tag,
         additionalData: buildCredentialAad(input),
       })
-      .pipe(
-        Effect.catchTags({
-          CredentialCipherError: (error) =>
-            Effect.fail(
-              new ConfigError({
-                message: describeCredentialCipherError(error),
-                cause: error,
-              }),
-            ),
-        }),
-      );
+      .pipe(Effect.mapError(mapCredentialCipherError));
     return decodeUtf8(plaintext);
   });
 
@@ -286,27 +259,15 @@ function decodeBase64Field(value: string, field: string) {
 function readKeyringMasterKey(): Effect.Effect<KeyringReadResult> {
   return Effect.gen(function* () {
     const store = yield* getKeyringStore();
-    return yield* Effect.try({
-      try: () => parseKeyringPassword(store.readPassword(keyringService, keyringAccount)),
-      catch: (cause) => new KeyringOperationError({ operation: "read-password", cause }),
-    }).pipe(
-      Effect.catchTags({
-        KeyringOperationError: (error) =>
-          Effect.succeed({
-            kind: "unavailable",
-            message: describeKeyringOperationError(error),
-          } satisfies KeyringReadResult),
-      }),
-    );
-  }).pipe(
-    Effect.catchTags({
-      KeyringModuleLoadError: (error) =>
-        Effect.succeed({
-          kind: "unavailable",
-          message: describeKeyringModuleLoadError(error),
-        } satisfies KeyringReadResult),
-    }),
-  );
+    if (store === undefined) {
+      return keyringUnavailable("OS keyring backend is not available");
+    }
+    try {
+      return parseKeyringPassword(store.readPassword(keyringService, keyringAccount));
+    } catch {
+      return keyringUnavailable("failed to read credential key from OS keyring");
+    }
+  });
 }
 
 export function parseKeyringPassword(password: string | null): KeyringReadResult {
@@ -333,28 +294,28 @@ export function parseKeyringPassword(password: string | null): KeyringReadResult
 function writeKeyringMasterKey(key: Uint8Array): Effect.Effect<KeyringWriteResult> {
   return Effect.gen(function* () {
     const store = yield* getKeyringStore();
-    return yield* Effect.try({
-      try: () => {
-        store.writePassword(keyringService, keyringAccount, Encoding.encodeBase64(key));
-        return { kind: "stored" } as const;
-      },
-      catch: (cause) => new KeyringOperationError({ operation: "write-password", cause }),
-    }).pipe(
-      Effect.catchTags({
-        KeyringOperationError: (error) =>
-          Effect.succeed({
-            kind: "unavailable",
-            message: describeKeyringOperationError(error),
-          } satisfies KeyringWriteResult),
-      }),
-    );
-  }).pipe(
-    Effect.catchTags({
-      KeyringModuleLoadError: (error) =>
-        Effect.succeed({
-          kind: "unavailable",
-          message: describeKeyringModuleLoadError(error),
-        } satisfies KeyringWriteResult),
-    }),
-  );
+    if (store === undefined) {
+      return keyringUnavailable("OS keyring backend is not available");
+    }
+    try {
+      store.writePassword(keyringService, keyringAccount, Encoding.encodeBase64(key));
+      return { kind: "stored" as const };
+    } catch {
+      return keyringUnavailable("failed to write credential key to OS keyring");
+    }
+  });
+}
+
+function keyringUnavailable(message: string) {
+  return { kind: "unavailable" as const, message };
+}
+
+function mapCredentialCipherError(error: CredentialCipherError) {
+  return new ConfigError({
+    message:
+      error.operation === "encrypt"
+        ? "failed to encrypt credential cipher payload"
+        : "failed to decrypt credential cipher payload",
+    cause: error,
+  });
 }
