@@ -1,49 +1,27 @@
 import "vite-plus/test/config";
 
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { Command } from "effect/unstable/cli";
 
-import { T3CliConfigSelectionLive } from "../cli/selection-layer.ts";
-import { layerNode as T3CredentialCipherNodeLive } from "../config/credential-cipher-node.ts";
-import { unavailableKeystoreFactoryLayer } from "../config/keystore-test.ts";
 import { cliEnvironmentSetting } from "../cli/environment-flag.ts";
-import { Environment } from "../environment/service.ts";
 import type { ResolvedConfig } from "../config/types.ts";
 import { T3Config } from "../config/service.ts";
-import { BaseAppLayer } from "./layer.ts";
+import { makeTempHomeScoped } from "../test/helpers/temp-home.ts";
+import { cliConfigRoutingLayerTest } from "../test/layers/cli-config-routing.ts";
 
-function makeCliAppLayer(homeDir: string) {
-  const environmentLayer = Layer.succeed(Environment)({
-    cwd: homeDir,
-    homeDir,
-    env: { T3CLI_ENV: "home" },
-    stdoutIsTTY: false,
-    stderrIsTTY: false,
-  });
-  return BaseAppLayer.pipe(
-    Layer.provideMerge(T3CliConfigSelectionLive),
-    Layer.provide(T3CredentialCipherNodeLive),
-    Layer.provide(unavailableKeystoreFactoryLayer),
-    Layer.provide(Layer.mergeAll(NodeServices.layer, environmentLayer)),
-  );
-}
-
-describe("CLI app layer composition", () => {
+describe("CLI config routing", () => {
   it.effect(
     "routes --environment through Command.run to T3Config.resolve ahead of default and T3CLI_ENV",
     () =>
       Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        return yield* fs.makeTempDirectoryScoped({ prefix: "t3cli-runtime-test-" });
+        return yield* makeTempHomeScoped("t3cli-runtime-");
       }).pipe(
-        Effect.flatMap((homeDir) =>
-          Effect.gen(function* () {
-            const cliAppLayer = makeCliAppLayer(homeDir);
+        Effect.flatMap((homeDir) => {
+          const testLayer = cliConfigRoutingLayerTest(homeDir);
+          return Effect.gen(function* () {
             const resolvedRef = yield* Ref.make<ResolvedConfig | undefined>(undefined);
             const resolveProbeCommand = Command.make("resolve-probe", {}, () =>
               Effect.gen(function* () {
@@ -68,9 +46,9 @@ describe("CLI app layer composition", () => {
                 token: "work-token",
                 local: false,
               });
-            }).pipe(Effect.provide(cliAppLayer));
+            }).pipe(Effect.provide(testLayer));
 
-            yield* runResolveProbe(["--environment", "work"]).pipe(Effect.provide(cliAppLayer));
+            yield* runResolveProbe(["--environment", "work"]).pipe(Effect.provide(testLayer));
 
             const resolved = yield* Ref.get(resolvedRef);
             assert.isDefined(resolved);
@@ -79,8 +57,8 @@ describe("CLI app layer composition", () => {
               assert.equal(resolved.environment, "work");
               assert.equal(resolved.token, "work-token");
             }
-          }),
-        ),
+          });
+        }),
         Effect.provide(NodeServices.layer),
         Effect.scoped,
       ),

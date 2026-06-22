@@ -11,16 +11,7 @@ import {
   validateCredentialEnvVars,
 } from "./resolve.ts";
 import { resolveConfiguredEnvironment } from "./selection-resolve.ts";
-import type { EncryptedConfig } from "./types.ts";
-
-const sampleEncrypted = (input: {
-  readonly default?: string;
-  readonly environments?: EncryptedConfig["environments"];
-}): EncryptedConfig => ({
-  version: 2,
-  ...(input.default !== undefined ? { default: input.default } : {}),
-  environments: input.environments ?? {},
-});
+import { sampleEncrypted, sampleEncryptedToken } from "../test/fixtures/encrypted-config.ts";
 
 describe("resolveConfiguredEnvironment", () => {
   it("prefers cli flag over T3CLI_ENV", () => {
@@ -109,14 +100,7 @@ describe("resolveDefaultForUpsert", () => {
             home: {
               url: "https://home.example",
               local: false,
-              token: {
-                kind: "encrypted",
-                alg: "aes-256-gcm",
-                key: "default",
-                nonce: "n",
-                ciphertext: "c",
-                tag: "t",
-              },
+              token: sampleEncryptedToken(),
             },
           },
         }),
@@ -135,26 +119,12 @@ describe("resolveDefaultForUpsert", () => {
             home: {
               url: "https://home.example",
               local: false,
-              token: {
-                kind: "encrypted",
-                alg: "aes-256-gcm",
-                key: "default",
-                nonce: "n",
-                ciphertext: "c",
-                tag: "t",
-              },
+              token: sampleEncryptedToken(),
             },
             work: {
               url: "https://work.example",
               local: false,
-              token: {
-                kind: "encrypted",
-                alg: "aes-256-gcm",
-                key: "default",
-                nonce: "n2",
-                ciphertext: "c2",
-                tag: "t2",
-              },
+              token: { ...sampleEncryptedToken(), nonce: "n2", ciphertext: "c2", tag: "t2" },
             },
           },
         }),
