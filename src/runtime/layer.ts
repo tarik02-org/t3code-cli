@@ -11,6 +11,8 @@ import { T3LocalAuthTokenLive } from "../auth/local-token.ts";
 import { T3AuthPairingLive } from "../auth/pairing.ts";
 import { T3AuthTransportLive } from "../auth/transport.ts";
 import { T3ConfigLive } from "../config/layer.ts";
+import { T3CredentialCryptoLive } from "../config/credential.ts";
+import { T3ConfigSelectionLive } from "../config/selection-layer.ts";
 import { T3Config } from "../config/service.ts";
 import { T3CodeConnectionError } from "../connection/error.ts";
 import { T3CodeConnectionProvider, makeT3CodeConnectionProvider } from "../connection/service.ts";
@@ -20,6 +22,8 @@ import { T3RpcOperationsLive } from "../rpc/operation.ts";
 import { NodeSqlClientFactoryLive } from "../sql/node-sqlite-client.ts";
 import { NodeCliPathLayer } from "../cli-path/layer.ts";
 
+export const T3CredentialCryptoLayer = T3CredentialCryptoLive;
+export const T3ConfigLayer = T3ConfigLive.pipe(Layer.provide(T3CredentialCryptoLayer));
 export const T3AuthTransportLayer = T3AuthTransportLive.pipe(
   Layer.provide(NodeHttpClient.layerUndici),
 );
@@ -33,7 +37,7 @@ export const T3LocalAuthLayer = T3LocalAuthLive.pipe(
 export const T3AuthPairingLayer = T3AuthPairingLive.pipe(Layer.provide(T3AuthTransportLayer));
 export const T3AuthLayer = T3AuthLive.pipe(
   Layer.provide(
-    Layer.mergeAll(T3ConfigLive, T3AuthTransportLayer, T3LocalAuthLayer, T3AuthPairingLayer),
+    Layer.mergeAll(T3ConfigLayer, T3AuthTransportLayer, T3LocalAuthLayer, T3AuthPairingLayer),
   ),
 );
 const T3ConfigConnectionProviderLayer = Layer.effect(
@@ -56,7 +60,7 @@ const T3ConfigConnectionProviderLayer = Layer.effect(
       ),
     );
   }),
-).pipe(Layer.provide(T3ConfigLive));
+).pipe(Layer.provide(T3ConfigLayer));
 
 const T3RpcLayer = T3RpcLive.pipe(
   Layer.provide(
@@ -73,10 +77,8 @@ const T3ApplicationLayer = T3ApplicationLive.pipe(
   Layer.provide(Layer.mergeAll(T3RpcOperationsLayer, T3OrchestrationLayer)),
 );
 
-export const AuthAppLayer = Layer.mergeAll(T3ConfigLive, T3AuthLayer);
-
-export const AppLayer = Layer.mergeAll(
-  T3ConfigLive,
+export const BaseAppLayer = Layer.mergeAll(
+  T3ConfigLayer,
   T3AuthLayer,
   T3RpcLayer,
   T3RpcOperationsLayer,
@@ -84,3 +86,9 @@ export const AppLayer = Layer.mergeAll(
   T3ApplicationLayer,
   NodeCliPathLayer,
 );
+
+export const BaseAuthAppLayer = Layer.mergeAll(T3ConfigLayer, T3AuthLayer);
+
+export const AuthAppLayer = BaseAuthAppLayer.pipe(Layer.provideMerge(T3ConfigSelectionLive));
+
+export const AppLayer = BaseAppLayer.pipe(Layer.provideMerge(T3ConfigSelectionLive));

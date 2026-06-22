@@ -7,6 +7,13 @@ import packageJson from "./package.json" with { type: "json" };
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
+function shouldBundlePackDependency(id: string): boolean {
+  if (id === "@napi-rs/keyring" || id.startsWith("@napi-rs/keyring-")) {
+    return false;
+  }
+  return true;
+}
+
 export default defineConfig({
   resolve: {
     alias: {
@@ -43,7 +50,7 @@ export default defineConfig({
       t3tools: "src/t3tools/index.ts",
     },
     deps: {
-      alwaysBundle: /^.+$/,
+      alwaysBundle: shouldBundlePackDependency,
       onlyBundle: false,
     },
     dts: false,

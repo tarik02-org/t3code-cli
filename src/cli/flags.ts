@@ -35,6 +35,16 @@ export const yesFlag = Flag.boolean("yes").pipe(
   Flag.withDefault(false),
 );
 
+export const replaceFlag = Flag.boolean("replace").pipe(
+  Flag.withDescription("Replace an existing environment with the same name"),
+  Flag.withDefault(false),
+);
+
+export const authNameFlag = Flag.string("name").pipe(
+  Flag.withDescription("Auth environment name"),
+  Flag.optional,
+);
+
 export const forceFlag = Flag.boolean("force").pipe(
   Flag.withDescription("Delete non-empty project (cascade thread deletes)"),
   Flag.withDefault(false),

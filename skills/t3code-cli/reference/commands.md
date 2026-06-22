@@ -13,16 +13,19 @@ Auth commands: [setup.md](setup.md)
 
 ## Global flags
 
-`--help` · `--version` · `--completions bash|zsh|fish|sh` · `--log-level all|trace|debug|info|warn|warning|error|fatal|none`
+`--help` · `--version` · `--environment <name>` · `--completions bash|zsh|fish|sh` · `--log-level all|trace|debug|info|warn|warning|error|fatal|none`
 
 ## Environment variables
 
 | Variable               | Maps to                  | Priority |
 | ---------------------- | ------------------------ | -------- |
+| `T3CLI_ENV`            | `--environment`          | 1        |
 | `T3CODE_PROJECT_ROOT`  | `--project`              | 1        |
 | `T3CODE_PROJECT_ID`    | `--project`              | 2        |
 | `T3CODE_WORKTREE_PATH` | `--worktree`             | 1        |
 | `T3CODE_THREAD_ID`     | `--thread`               | 1        |
+| `T3CODE_URL`           | server URL override      | —        |
+| `T3CODE_TOKEN`         | auth token override      | —        |
 | `T3CLI_AGENT`          | Non-human default format | —        |
 
 Also treated as agent env (no live TTY): `CI`, `CODEX_CI`, `CODEX_THREAD_ID`.

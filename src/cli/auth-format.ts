@@ -1,45 +1,74 @@
-import type { AuthSessionState } from "../auth/schema.ts";
-import type { ResolvedConfig } from "../config/service.ts";
-import type { LocalAuthResult, PairResult } from "../auth/type.ts";
+import type {
+  AuthEnvironmentListItem,
+  AuthStatusResult,
+  LocalAuthResult,
+  PairResult,
+} from "../auth/type.ts";
 
-export function formatAuthPaired(result: PairResult) {
-  return `paired: ${result.url}\nrole: ${result.role}\nexpires: ${result.expiresAt}`;
+export function formatAuthPaired(result: PairResult & { readonly name: string }) {
+  return `paired: ${result.url}\nname: ${result.name}\nrole: ${result.role}\nexpires: ${result.expiresAt}`;
 }
 
-export function formatAuthLocalHuman(result: LocalAuthResult) {
+export function formatAuthLocalHuman(result: LocalAuthResult & { readonly name: string }) {
   return [
     `paired: ${result.url}`,
+    `name: ${result.name}`,
     `role: ${result.role}`,
     `expires: ${result.expiresAt}`,
     `baseDir: ${result.baseDir}`,
   ].join("\n");
 }
 
-export function formatAuthLocalJson(result: LocalAuthResult) {
+export function formatAuthLocalJson(result: LocalAuthResult & { readonly name: string }) {
   return result;
 }
 
-export function formatAuthStatusHuman(input: {
-  readonly config: ResolvedConfig;
-  readonly result: AuthSessionState;
-}) {
+export function formatAuthStatusHuman(input: AuthStatusResult) {
   return [
+    ...(input.config.environment !== undefined ? [`environment: ${input.config.environment}`] : []),
     `url: ${input.config.url}`,
     `local: ${input.config.local ? "yes" : "no"}`,
-    `authenticated: ${input.result.authenticated ? "yes" : "no"}`,
-    ...(input.result.role !== undefined ? [`role: ${input.result.role}`] : []),
-    ...(input.result.expiresAt !== undefined ? [`expires: ${input.result.expiresAt}`] : []),
+    `source: ${input.config.source}`,
+    `authenticated: ${input.session.authenticated ? "yes" : "no"}`,
+    ...(input.session.role !== undefined ? [`role: ${input.session.role}`] : []),
+    ...(input.session.expiresAt !== undefined ? [`expires: ${input.session.expiresAt}`] : []),
   ].join("\n");
 }
 
-export function formatAuthStatusJson(input: {
-  readonly config: ResolvedConfig;
-  readonly result: AuthSessionState;
-}) {
+export function formatAuthStatusJson(input: AuthStatusResult) {
   return {
-    ...input.result,
+    ...input.session,
+    ...(input.config.environment !== undefined ? { environment: input.config.environment } : {}),
     url: input.config.url,
     source: input.config.source,
     local: input.config.local,
   };
+}
+
+export function formatAuthListHuman(environments: readonly AuthEnvironmentListItem[]) {
+  if (environments.length === 0) {
+    return "no environments";
+  }
+  return environments
+    .map((environment) => {
+      const markers = [
+        environment.default ? "default" : undefined,
+        environment.active ? "active" : undefined,
+      ].filter((marker) => marker !== undefined);
+      const suffix = markers.length > 0 ? ` (${markers.join(", ")})` : "";
+      return `${environment.name}: ${environment.url} [local=${environment.local ? "yes" : "no"}]${suffix}`;
+    })
+    .join("\n");
+}
+
+export function formatAuthListJson(environments: readonly AuthEnvironmentListItem[]) {
+  return environments;
+}
+
+export function formatAuthUseHuman(result: { readonly name: string }) {
+  return `default environment: ${result.name}`;
+}
+
+export function formatAuthUnpairHuman(result: { readonly name: string }) {
+  return `removed environment: ${result.name}`;
 }

@@ -29,3 +29,33 @@ export const requireDestructiveConfirmation = Effect.fn("requireDestructiveConfi
     yield* Effect.fail(new DestructiveConfirmationRequiredError({ message: "aborted" }));
   },
 );
+
+export const requireEnvironmentReplaceConfirmation = Effect.fn(
+  "requireEnvironmentReplaceConfirmation",
+)(function* (input: {
+  readonly name: string;
+  readonly replace: boolean;
+  readonly environment: EnvironmentShape;
+}) {
+  if (input.replace) {
+    return;
+  }
+  if (!isInteractiveHumanTerminal(input.environment)) {
+    yield* Effect.fail(
+      new DestructiveConfirmationRequiredError({
+        message: `environment '${input.name}' already exists: pass --replace`,
+      }),
+    );
+    return;
+  }
+  const confirmed = yield* Prompt.run(
+    Prompt.confirm({
+      message: `Environment '${input.name}' already exists. Replace?`,
+      initial: false,
+    }),
+  );
+  if (confirmed) {
+    return;
+  }
+  yield* Effect.fail(new DestructiveConfirmationRequiredError({ message: "aborted" }));
+});

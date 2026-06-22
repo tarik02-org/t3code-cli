@@ -1,6 +1,8 @@
 export {
   AppLayer,
   AuthAppLayer,
+  BaseAppLayer,
+  BaseAuthAppLayer,
   T3AuthLayer,
   T3AuthPairingLayer,
   T3AuthTransportLayer,
