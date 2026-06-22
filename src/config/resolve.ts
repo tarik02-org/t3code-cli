@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 
 import { validateEnvironmentName } from "./environment-name.ts";
-import { ConfigError } from "./error.ts";
+import { ConfigError, configErrorFromUrl } from "./error.ts";
 import type { EncryptedConfig, ResolvedConfig } from "./types.ts";
 import { normalizeHttpBaseUrl } from "./url.ts";
 
@@ -65,6 +65,7 @@ export function buildResolvedConfigFromEnv(input: {
   readonly envToken: string;
 }) {
   return normalizeHttpBaseUrl(input.envUrl).pipe(
+    Effect.mapError(configErrorFromUrl),
     Effect.map((normalizedUrl) => {
       return {
         url: normalizedUrl,
@@ -89,7 +90,9 @@ export function buildResolvedConfigFromStored(input: {
         new ConfigError({ message: `environment not found: ${input.selectedName}` }),
       );
     }
-    const normalizedUrl = yield* normalizeHttpBaseUrl(selectedEnvironment.url);
+    const normalizedUrl = yield* normalizeHttpBaseUrl(selectedEnvironment.url).pipe(
+      Effect.mapError(configErrorFromUrl),
+    );
     return {
       url: normalizedUrl,
       token: input.token,

@@ -1,5 +1,6 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Encoding from "effect/Encoding";
 import * as Schema from "effect/Schema";
 import { PlatformError } from "effect/PlatformError";
 
@@ -36,7 +37,7 @@ export class KeystoreUnavailableError extends Schema.TaggedErrorClass<KeystoreUn
   },
 ) {}
 
-export type ConfigServiceError = ConfigError | UrlError;
+export type ConfigServiceError = ConfigError;
 
 export function configErrorFromPlatformError(message: string, error: PlatformError) {
   return new ConfigError({ message, cause: error });
@@ -70,6 +71,13 @@ export function catchSchemaError(message: string) {
   return {
     SchemaError: (error: Schema.SchemaError) =>
       Effect.fail(configErrorFromSchemaError(message, error)),
+  } as const;
+}
+
+export function catchEncodingError(message: string) {
+  return {
+    EncodingError: (error: Encoding.EncodingError) =>
+      Effect.fail(new ConfigError({ message, cause: error })),
   } as const;
 }
 

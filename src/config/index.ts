@@ -21,5 +21,5 @@ export { layerNode as T3MasterKeyKeystoreFactoryNodeLive } from "./keystore-keyr
 export { T3ConfigSelection } from "./selection.ts";
 export { T3ConfigSelectionLive } from "./selection-layer.ts";
 export { resolveConfigFilePath, resolveKeyFilePath, resolveT3cliConfigDir } from "./paths.ts";
-export { ConfigError, UrlError } from "./error.ts";
+export { ConfigError, KeystoreUnavailableError, UrlError } from "./error.ts";
 export type { ConfigServiceError } from "./error.ts";

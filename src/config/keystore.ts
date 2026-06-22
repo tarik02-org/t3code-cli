@@ -19,7 +19,7 @@ export type MasterKeyKeystore = {
 export class T3MasterKeyKeystoreFactory extends Context.Service<
   T3MasterKeyKeystoreFactory,
   {
-    readonly make: () => Effect.Effect<MasterKeyKeystore, ConfigError | KeystoreUnavailableError>;
+    readonly make: () => Effect.Effect<MasterKeyKeystore, KeystoreUnavailableError>;
   }
 >()("t3cli/T3MasterKeyKeystoreFactory") {}
 

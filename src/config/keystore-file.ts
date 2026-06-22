@@ -4,6 +4,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
 import {
+  catchEncodingError,
   catchPlatformError,
   catchPlatformErrorUnlessNotFound,
   ConfigError,
@@ -34,15 +35,7 @@ export const makeFileKeystore = Effect.fn("makeFileKeystore")(function* () {
         return { kind: "missing" };
       }
       const key = yield* Effect.fromResult(Encoding.decodeBase64(raw.trim())).pipe(
-        Effect.catchTags({
-          EncodingError: (error) =>
-            Effect.fail(
-              new ConfigError({
-                message: "invalid credential key file: invalid base64",
-                cause: error,
-              }),
-            ),
-        }),
+        Effect.catchTags(catchEncodingError("invalid credential key file: invalid base64")),
       );
       if (key.byteLength !== masterKeyByteLength) {
         return yield* Effect.fail(

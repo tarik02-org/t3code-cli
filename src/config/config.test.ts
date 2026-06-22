@@ -1,7 +1,9 @@
 import "vite-plus/test/config";
 
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -14,6 +16,7 @@ import { T3CredentialCrypto, layer as T3CredentialCryptoLive } from "./credentia
 import { layer as T3ConfigLive } from "./layer.ts";
 import { layerWeb as T3CredentialCipherWebLive } from "./credential-cipher-web.ts";
 import { unavailableKeystoreFactoryLayer } from "./keystore-test.ts";
+import { ConfigError } from "./error.ts";
 import { migrateV1FileToEncrypted } from "./migration.ts";
 import { StoredConfigV1FileJson, StoredConfigV2FileJson } from "./schema.ts";
 import { T3ConfigSelection } from "./selection.ts";
@@ -99,6 +102,28 @@ describe("config persistence", () => {
       Effect.provide(NodeServices.layer),
       Effect.scoped,
     ),
+  );
+
+  it.effect("maps invalid v1 urls to ConfigError when migrating directly", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const homeDir = yield* fs.makeTempDirectory({ prefix: "t3cli-migrate-url-error" });
+      const exit = yield* migrateV1FileToEncrypted({
+        url: "not-a-url",
+        token: "secret-token",
+        local: false,
+      }).pipe(Effect.provide(makeCredentialCryptoLayer(homeDir)), Effect.exit);
+      assert.isTrue(Exit.isFailure(exit));
+      if (!Exit.isFailure(exit)) {
+        return;
+      }
+      const error = Cause.findErrorOption(exit.cause);
+      assert.isTrue(Option.isSome(error));
+      if (Option.isSome(error)) {
+        assert.instanceOf(error.value, ConfigError);
+        assert.equal(error.value.message, "invalid url");
+      }
+    }).pipe(Effect.provide(NodeServices.layer), Effect.scoped),
   );
 
   it.effect("persists v1 config as encrypted v2 on first read", () =>

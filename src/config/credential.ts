@@ -9,7 +9,7 @@ import * as Path from "effect/Path";
 import { Environment } from "../environment/service.ts";
 import { T3CredentialCipher, credentialCipherNonceByteLength } from "./credential-cipher.ts";
 import type { EncryptedToken } from "./schema.ts";
-import { ConfigError, CredentialCipherError } from "./error.ts";
+import { catchEncodingError, ConfigError, CredentialCipherError } from "./error.ts";
 import { makeFileKeystore } from "./keystore-file.ts";
 import { T3MasterKeyKeystoreFactory, masterKeyByteLength } from "./keystore.ts";
 
@@ -181,15 +181,7 @@ const secureRandomBytes = Effect.fn("secureRandomBytes")(function* (size: number
 
 function decodeBase64Field(value: string, field: string) {
   return Effect.fromResult(Encoding.decodeBase64(value)).pipe(
-    Effect.catchTags({
-      EncodingError: (error) =>
-        Effect.fail(
-          new ConfigError({
-            message: `invalid encrypted token ${field}`,
-            cause: error,
-          }),
-        ),
-    }),
+    Effect.catchTags(catchEncodingError(`invalid encrypted token ${field}`)),
   );
 }
 

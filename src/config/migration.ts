@@ -33,7 +33,6 @@ export const readEncryptedConfigFromValue = Effect.fn("readEncryptedConfigFromVa
     return { config: migrated, migratedFromV1: true as const };
   }).pipe(
     Effect.catchTags({
-      UrlError: (error) => Effect.fail(configErrorFromUrl(error)),
       SchemaError: (error) =>
         Effect.fail(configErrorFromSchemaError("failed to read config", error)),
     }),
