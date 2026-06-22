@@ -1,20 +1,27 @@
-import type * as Path from "effect/Path";
+import * as Effect from "effect/Effect";
+import * as Path from "effect/Path";
 
-import type { EnvironmentShape } from "../environment/service.ts";
+import { Environment } from "../environment/service.ts";
 
-export function resolveT3cliConfigDir(path: Path.Path, environment: EnvironmentShape) {
+export const resolveT3cliConfigDir = Effect.fn("resolveT3cliConfigDir")(function* () {
+  const path = yield* Path.Path;
+  const environment = yield* Environment;
   const xdgConfigHome = environment.env["XDG_CONFIG_HOME"]?.trim();
   const root =
     xdgConfigHome !== undefined && xdgConfigHome.length > 0
       ? xdgConfigHome
       : path.join(environment.homeDir, ".config");
   return path.join(root, "t3cli");
-}
+});
 
-export function resolveConfigFilePath(path: Path.Path, environment: EnvironmentShape) {
-  return path.join(resolveT3cliConfigDir(path, environment), "config.json");
-}
+export const resolveConfigFilePath = Effect.fn("resolveConfigFilePath")(function* () {
+  const path = yield* Path.Path;
+  const configDir = yield* resolveT3cliConfigDir();
+  return path.join(configDir, "config.json");
+});
 
-export function resolveKeyFilePath(path: Path.Path, environment: EnvironmentShape) {
-  return path.join(resolveT3cliConfigDir(path, environment), "key");
-}
+export const resolveKeyFilePath = Effect.fn("resolveKeyFilePath")(function* () {
+  const path = yield* Path.Path;
+  const configDir = yield* resolveT3cliConfigDir();
+  return path.join(configDir, "key");
+});

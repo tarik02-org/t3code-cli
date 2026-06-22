@@ -6,7 +6,6 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 
-import { Environment } from "../environment/service.ts";
 import {
   T3CredentialCipher,
   credentialCipherNonceByteLength,
@@ -45,10 +44,9 @@ export function shouldFallbackToKeyFile(result: KeyringReadResult) {
 export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const environment = yield* Environment;
   const cryptoService = yield* Crypto.Crypto;
   const cipher = yield* T3CredentialCipher;
-  const keyFilePath = resolveKeyFilePath(path, environment);
+  const keyFilePath = yield* resolveKeyFilePath();
 
   const readKeyFileMasterKey = Effect.fn("readKeyFileMasterKey")(function* (filePath: string) {
     const raw = yield* fs.readFileString(filePath).pipe(

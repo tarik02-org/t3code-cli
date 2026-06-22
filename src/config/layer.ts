@@ -28,7 +28,7 @@ export const makeT3Config = Effect.fn("makeT3Config")(function* () {
   const environment = yield* Environment;
   const credentialCrypto = yield* T3CredentialCrypto;
   const configSelection = yield* T3ConfigSelection;
-  const configFilePath = resolveConfigFilePath(path, environment);
+  const configFilePath = yield* resolveConfigFilePath();
 
   const readEncrypted = Effect.fn("T3ConfigLive.readEncrypted")(function* () {
     return yield* readEncryptedConfigFile(fs, path, configFilePath, credentialCrypto);
