@@ -8,7 +8,7 @@ import type { WaitEvent } from "../application/service.ts";
 import { ThreadSessionError } from "../domain/error.ts";
 import { latestAssistantMessage } from "../domain/thread-lifecycle.ts";
 import type { T3Output } from "./output/service.ts";
-import { formatWaitDoneHuman, formatWaitEventNdjson } from "./thread-format.ts";
+import { formatWaitDoneHuman, formatWaitEventNdjson } from "./format/thread.ts";
 
 export function printWaitEventsNdjson(
   output: T3Output["Service"],

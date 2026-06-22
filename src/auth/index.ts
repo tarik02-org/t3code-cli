@@ -17,7 +17,13 @@ export type { AuthError } from "./error.ts";
 export type { AuthSessionState, AuthWebSocketTicketResult } from "./schema.ts";
 export type {
   AuthConfigInput,
+  AuthEnvironmentListItem,
+  AuthEnvironmentSummary,
+  AuthResolvedConfig,
   AuthSessionRole,
+  AuthStatusResult,
+  AuthUnpairResult,
+  AuthUseResult,
   LocalAuthInput,
   LocalAuthOriginInput,
   LocalAuthResult,
@@ -25,4 +31,5 @@ export type {
   LocalAuthTokenResult,
   PairingUrl,
   PairResult,
+  PersistEnvironmentInput,
 } from "./type.ts";

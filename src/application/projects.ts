@@ -2,7 +2,7 @@ import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 
-import { Environment } from "../environment/service.ts";
+import { CliRuntime } from "../cli/runtime/service.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import { ProjectCreateVisibilityError, ProjectLookupError } from "../domain/error.ts";
 import { findProjectById, resolveProjectScope } from "../domain/helpers.ts";
@@ -14,7 +14,7 @@ export const makeProjectApplication = Effect.fn("makeProjectApplication")(functi
   const orchestration = yield* T3Orchestration;
   const crypto = yield* Crypto.Crypto;
   const path = yield* Path.Path;
-  const environment = yield* Environment;
+  const cliRuntime = yield* CliRuntime;
   const loadShell: T3ProjectApplicationService["loadShell"] = Effect.fn(
     "T3ApplicationLive.loadShell",
   )(function* () {
@@ -40,11 +40,10 @@ export const makeProjectApplication = Effect.fn("makeProjectApplication")(functi
   const addProject: T3ProjectApplicationService["addProject"] = Effect.fn(
     "T3ApplicationLive.addProject",
   )(function* (projectInput: { readonly path: string; readonly title?: string }) {
-    const command = yield* makeProjectCreateCommand(projectInput).pipe(
-      Effect.provideService(Path.Path, path),
-      Effect.provideService(Crypto.Crypto, crypto),
-      Effect.provideService(Environment, environment),
-    );
+    const command = yield* makeProjectCreateCommand({
+      ...projectInput,
+      cwd: cliRuntime.cwd,
+    }).pipe(Effect.provideService(Path.Path, path), Effect.provideService(Crypto.Crypto, crypto));
     const dispatch = yield* orchestration.dispatch(command);
     const snapshot = yield* waitForShellSequence({ sequence: dispatch.sequence }).pipe(
       Effect.provideService(T3Orchestration, orchestration),

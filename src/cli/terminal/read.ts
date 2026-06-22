@@ -4,7 +4,6 @@ import * as Stream from "effect/Stream";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
 import { T3Application } from "../../application/service.ts";
-import { Environment } from "../../environment/service.ts";
 import { InvalidFlagCombinationError, InvalidLimitError } from "../error.ts";
 import { threadFlag } from "../flags.ts";
 import { T3Output } from "../output/service.ts";
@@ -28,11 +27,7 @@ export const readTerminalCommand = Command.make(
     Effect.gen(function* () {
       const output = yield* T3Output;
       const application = yield* T3Application;
-      const environment = yield* Environment;
-      const threadId = yield* requireCommandThreadId({
-        thread,
-        env: environment.env,
-      });
+      const threadId = yield* requireCommandThreadId({ thread });
       const fromSequenceValue = Option.getOrUndefined(fromSequence);
 
       if (fromSequenceValue !== undefined && fromSequenceValue < 0) {

@@ -4,16 +4,14 @@ import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import { CommandId, ProjectId, type ClientOrchestrationCommand } from "#t3tools/contracts";
 
-import { Environment } from "../environment/service.ts";
-
 export const makeProjectCreateCommand = Effect.fn("makeProjectCreateCommand")(function* (input: {
   readonly path: string;
   readonly title?: string;
+  readonly cwd: string;
 }) {
   const path = yield* Path.Path;
   const crypto = yield* Crypto.Crypto;
-  const environment = yield* Environment;
-  const workspaceRoot = path.resolve(environment.cwd, input.path);
+  const workspaceRoot = path.resolve(input.cwd, input.path);
   const projectId = ProjectId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie));
   const title = input.title?.trim();
   const createdAt = DateTime.formatIso(yield* DateTime.now);

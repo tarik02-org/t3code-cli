@@ -12,7 +12,7 @@ import * as Socket from "effect/unstable/socket/Socket";
 
 import { T3AuthTransport } from "../auth/transport.ts";
 import { T3CodeConnectionProvider } from "../connection/service.ts";
-import { normalizeHttpBaseUrl, toWebSocketEndpointUrl } from "../config/url.ts";
+import { normalizeHttpBaseUrl, toWebSocketEndpointUrl } from "../config/url/url.ts";
 import { CliWsRpcGroup } from "./ws-group.ts";
 import { RpcError } from "./error.ts";
 import { T3Rpc, type WsClient } from "./service.ts";

@@ -3,7 +3,7 @@ import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
 
 import { T3Application, type ProjectActionSelector } from "../application/service.ts";
-import { Environment } from "../environment/service.ts";
+import { loadT3CliEnv } from "../config/env/env.ts";
 import {
   formatActionAddedHuman,
   formatActionDeletedHuman,
@@ -11,16 +11,17 @@ import {
   formatActionRunHuman,
   formatActionUpdatedHuman,
 } from "./action-format.ts";
-import { requireDestructiveConfirmation } from "./confirm.ts";
 import {
   ConflictingUpdateFlagsError,
   InvalidFlagCombinationError,
   MissingUpdateFieldsError,
 } from "./error.ts";
 import { formatFlag, projectFlag, threadFlag, yesFlag } from "./flags.ts";
-import { resolveOutputFormat } from "./output-format.ts";
+import { resolveOutputFormat } from "./format/output.ts";
+import { requireDestructiveConfirmation } from "./interaction/confirm.ts";
 import { T3Output } from "./output/service.ts";
 import { requireCommandProjectRef } from "./require.ts";
+import { CliRuntime } from "./runtime/service.ts";
 import { requireCommandThreadId } from "./terminal/scope.ts";
 import { runAttachedTerminalSession, snapshotToTerminalAttachTarget } from "./terminal/shared.ts";
 
@@ -63,15 +64,14 @@ const listActionsCommand = Command.make(
   ({ project, format }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
       const projectRef = yield* requireCommandProjectRef({
         project,
-        env: environment.env,
-        cwd: environment.cwd,
       });
       const result = yield* application.listActions(projectRef);
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       if (resolvedFormat === "json") {
         yield* output.printJson(result);
       } else {
@@ -93,11 +93,11 @@ const runActionCommand = Command.make(
   ({ thread, id, name, terminal, attach, format }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
       const threadId = yield* requireCommandThreadId({
         thread,
-        env: environment.env,
       });
       const selector = yield* requireActionSelector({ id, name });
       const terminalId = Option.getOrUndefined(terminal);
@@ -112,7 +112,7 @@ const runActionCommand = Command.make(
           terminal: snapshotToTerminalAttachTarget(result.terminal),
         });
       } else {
-        const resolvedFormat = resolveOutputFormat(format, environment, "json");
+        const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
         if (resolvedFormat === "json") {
           yield* output.printJson(result);
         } else {
@@ -138,12 +138,11 @@ const addActionCommand = Command.make(
   ({ project, name, command, id, icon, setup, previewUrl, autoOpenPreview, format }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
       const projectRef = yield* requireCommandProjectRef({
         project,
-        env: environment.env,
-        cwd: environment.cwd,
       });
       const idValue = Option.getOrUndefined(id);
       const previewUrlValue = Option.getOrUndefined(previewUrl);
@@ -157,7 +156,7 @@ const addActionCommand = Command.make(
         ...(previewUrlValue !== undefined ? { previewUrl: previewUrlValue } : {}),
         ...(autoOpenPreview ? { autoOpenPreview: true } : {}),
       });
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       if (resolvedFormat === "json") {
         yield* output.printJson(result);
       } else {
@@ -208,12 +207,11 @@ const updateActionCommand = Command.make(
   }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
       const projectRef = yield* requireCommandProjectRef({
         project,
-        env: environment.env,
-        cwd: environment.cwd,
       });
       const selector = yield* requireActionSelector({ id, name });
       const patch = yield* buildUpdatePatch({
@@ -233,7 +231,7 @@ const updateActionCommand = Command.make(
         selector,
         ...patch,
       });
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       if (resolvedFormat === "json") {
         yield* output.printJson(result);
       } else {
@@ -260,12 +258,11 @@ const deleteActionCommand = Command.make(
   ({ project, id, name, yes, format }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
       const projectRef = yield* requireCommandProjectRef({
         project,
-        env: environment.env,
-        cwd: environment.cwd,
       });
       const selector = yield* requireActionSelector({ id, name });
       const listed = yield* application.listActions(projectRef);
@@ -274,13 +271,14 @@ const deleteActionCommand = Command.make(
       yield* requireDestructiveConfirmation({
         message: `Delete action selected by ${selectorLabel} from ${listed.project.title}?`,
         yes,
-        environment,
+        cliRuntime,
+        t3CliEnv,
       });
       const result = yield* application.deleteAction({
         projectRef,
         selector,
       });
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       if (resolvedFormat === "json") {
         yield* output.printJson(result);
       } else {

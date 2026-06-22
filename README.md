@@ -41,15 +41,27 @@ npx skills add tarik02/t3cli
 
 ## Authentication
 
+`t3cli` stores multiple named auth environments in `~/.config/t3cli/config.json` (or `$XDG_CONFIG_HOME/t3cli/config.json`). Tokens are encrypted at rest with AES-256-GCM; the master key is stored in the OS keyring when available, otherwise in `~/.config/t3cli/key`.
+
 ```sh
-t3cli auth pair --url <url> [--local]     # Pair with a remote server
-t3cli auth local                          # Local t3code installation
-t3cli auth status                         # Check current auth
+t3cli auth pair --url <url> [--name <name>] [--replace] [--local]   # Pair with a remote server
+t3cli auth local [--name <name>] [--replace]                        # Local t3code installation
+t3cli auth status [--format json]                                   # Check current auth
+t3cli env list [--format json]                                      # List stored environments
+t3cli env use <name> [--format json]                                # Set default environment
+t3cli env remove [--name <name>] [--yes]                            # Remove local credentials
+t3cli --environment <name> ...                                      # Use a specific environment once
 ```
 
 - Use `auth pair` with a pairing URL from a running t3code server
-- Use `auth local` to authenticate against a local t3code installation
+- Default environment names: hostname slug from the paired URL, or `local` for `auth local`
+- `auth pair` / `auth local` set the default environment only when creating the first stored environment; use `env use` to switch afterward
+- `--replace` overwrites an existing environment and makes it the default
+- `env remove` removes local CLI credentials only; any remote token can remain valid until natural expiry
+- Use `auth local` or `auth pair --local` to authenticate against a local t3code installation
 - Local auth enables automatic project resolution from the current directory
+- Set `T3CLI_ENV=<name>` to select an environment when `--environment` is omitted
+- `T3CODE_URL` and `T3CODE_TOKEN` override the selected environment only when both are set
 
 ## Project Management
 
@@ -159,12 +171,15 @@ t3cli terminal destroy [--thread <id>] <terminal-id> [--yes] [--format auto|huma
 
 When flags are omitted, the CLI reads these environment variables (first match wins):
 
-| Variable               | Used by                                   |
-| ---------------------- | ----------------------------------------- |
-| `T3CODE_PROJECT_ROOT`  | `--project`                               |
-| `T3CODE_PROJECT_ID`    | `--project` (after `T3CODE_PROJECT_ROOT`) |
-| `T3CODE_WORKTREE_PATH` | `--worktree`                              |
-| `T3CODE_THREAD_ID`     | `--thread`                                |
+| Variable               | Used by                                       |
+| ---------------------- | --------------------------------------------- |
+| `T3CODE_PROJECT_ROOT`  | `--project`                                   |
+| `T3CODE_PROJECT_ID`    | `--project` (after `T3CODE_PROJECT_ROOT`)     |
+| `T3CODE_WORKTREE_PATH` | `--worktree`                                  |
+| `T3CODE_THREAD_ID`     | `--thread`                                    |
+| `T3CLI_ENV`            | `--environment`                               |
+| `T3CODE_URL`           | server URL override (requires `T3CODE_TOKEN`) |
+| `T3CODE_TOKEN`         | auth token override (requires `T3CODE_URL`)   |
 
 ### Project Resolution
 
@@ -193,6 +208,7 @@ t3cli wait --format ndjson
 ```sh
 --help                    # Show help
 --version                 # Show version
+--environment <name>      # Auth environment for this command
 --completions <shell>     # Generate shell completions (bash|zsh|fish|sh)
 --log-level <level>        # Set log level
 ```

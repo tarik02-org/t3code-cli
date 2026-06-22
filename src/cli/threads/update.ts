@@ -8,12 +8,13 @@ import {
   MissingThreadError,
   MissingUpdateFieldsError,
 } from "../error.ts";
-import { requireSelfActionConfirmation } from "../self-action.ts";
+import { requireSelfActionConfirmation } from "../interaction/self-action.ts";
 import { buildModelOptions } from "../model-options.ts";
-import { resolveThreadId } from "../../scope/index.ts";
+import { resolveThreadId } from "../scope/index.ts";
 import { T3Application } from "../../application/service.ts";
-import { Environment } from "../../environment/service.ts";
-import { resolveOutputFormat } from "../output-format.ts";
+import { CliRuntime } from "../../cli/runtime/service.ts";
+import { loadT3CliEnv } from "../../config/env/env.ts";
+import { resolveOutputFormat } from "../format/output.ts";
 import { T3Output } from "../output/service.ts";
 
 export const updateThreadCommand = Command.make(
@@ -50,11 +51,12 @@ export const updateThreadCommand = Command.make(
   }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
       const threadId = resolveThreadId({
         value: Option.getOrUndefined(thread),
-        env: environment.env,
+        scope: t3CliEnv.scope,
       });
       if (threadId === undefined) {
         return yield* Effect.fail(
@@ -67,7 +69,8 @@ export const updateThreadCommand = Command.make(
       yield* requireSelfActionConfirmation({
         threadId,
         force,
-        environment,
+        cliRuntime,
+        t3CliEnv,
         action: "update",
       });
 
@@ -141,7 +144,7 @@ export const updateThreadCommand = Command.make(
             ? { worktreePath: worktreeValue }
             : {}),
       });
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       if (resolvedFormat === "json") {
         return yield* output.printJson(dispatch);
       }

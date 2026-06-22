@@ -5,10 +5,11 @@ import type { ListThreadsInclude } from "../../application/service.ts";
 import { formatFlag, projectFlag } from "../flags.ts";
 import { InvalidFlagCombinationError } from "../error.ts";
 import { requireCommandProjectRef } from "../require.ts";
-import { formatThreadsHuman } from "../thread-format.ts";
+import { formatThreadsHuman } from "../format/thread.ts";
 import { T3Application } from "../../application/service.ts";
-import { Environment } from "../../environment/service.ts";
-import { resolveOutputFormat } from "../output-format.ts";
+import { CliRuntime } from "../../cli/runtime/service.ts";
+import { loadT3CliEnv } from "../../config/env/env.ts";
+import { resolveOutputFormat } from "../format/output.ts";
 import { T3Output } from "../output/service.ts";
 
 export const listThreadsCommand = Command.make(
@@ -22,7 +23,8 @@ export const listThreadsCommand = Command.make(
   ({ project, archived, all, format }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
       if (archived && all) {
         yield* Effect.fail(
@@ -32,12 +34,8 @@ export const listThreadsCommand = Command.make(
         );
       }
       const include: ListThreadsInclude = archived ? "archived" : all ? "all" : "active";
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
-      const projectRef = yield* requireCommandProjectRef({
-        project,
-        env: environment.env,
-        cwd: environment.cwd,
-      });
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
+      const projectRef = yield* requireCommandProjectRef({ project });
       const result = yield* application.listThreads(projectRef, { include });
       if (resolvedFormat === "json") {
         yield* output.printJson(result.threads);

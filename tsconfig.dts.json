@@ -15,12 +15,10 @@
     "src/config/index.ts",
     "src/connection/index.ts",
     "src/contracts/index.ts",
-    "src/layout/index.ts",
     "src/node/index.ts",
     "src/orchestration/index.ts",
     "src/rpc/index.ts",
     "src/runtime/index.ts",
-    "src/scope/index.ts",
     "src/t3tools/index.ts"
   ]
 }

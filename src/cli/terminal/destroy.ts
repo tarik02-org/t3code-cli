@@ -1,12 +1,13 @@
 import * as Effect from "effect/Effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
-import { requireDestructiveConfirmation } from "../confirm.ts";
-import { formatTerminalDestroyedHuman } from "../terminal-format.ts";
+import { requireDestructiveConfirmation } from "../interaction/confirm.ts";
+import { formatTerminalDestroyedHuman } from "../format/terminal.ts";
 import { T3Application } from "../../application/service.ts";
-import { Environment } from "../../environment/service.ts";
+import { CliRuntime } from "../../cli/runtime/service.ts";
+import { loadT3CliEnv } from "../../config/env/env.ts";
 import { formatFlag, threadFlag, yesFlag } from "../flags.ts";
-import { resolveOutputFormat } from "../output-format.ts";
+import { resolveOutputFormat } from "../format/output.ts";
 import { T3Output } from "../output/service.ts";
 import { requireCommandThreadId } from "./scope.ts";
 
@@ -22,16 +23,15 @@ export const destroyTerminalCommand = Command.make(
   ({ thread, terminalId, quiet, yes, format }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
-      const threadId = yield* requireCommandThreadId({
-        thread,
-        env: environment.env,
-      });
+      const threadId = yield* requireCommandThreadId({ thread });
       yield* requireDestructiveConfirmation({
         message: `Destroy terminal ${terminalId} in thread ${threadId} and delete its history?`,
         yes,
-        environment,
+        cliRuntime,
+        t3CliEnv,
       });
       const terminal = {
         threadId,
@@ -41,7 +41,7 @@ export const destroyTerminalCommand = Command.make(
       if (quiet) {
         return;
       }
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       if (resolvedFormat === "json") {
         yield* output.printJson({
           threadId: terminal.threadId,

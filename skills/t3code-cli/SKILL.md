@@ -49,11 +49,12 @@ t3cli start "task description" --provider "$PROVIDER" --model "$MODEL" --wait
 
 ## Scope resolution
 
-| Target   | Flag         | Env (first match wins)                                              |
-| -------- | ------------ | ------------------------------------------------------------------- |
-| Project  | `--project`  | `T3CODE_PROJECT_ROOT` → `T3CODE_PROJECT_ID` → cwd (local auth only) |
-| Worktree | `--worktree` | `T3CODE_WORKTREE_PATH` → inferred from cwd                          |
-| Thread   | `--thread`   | `T3CODE_THREAD_ID`                                                  |
+| Target      | Flag            | Env (first match wins)                                              |
+| ----------- | --------------- | ------------------------------------------------------------------- |
+| Environment | `--environment` | `T3CLI_ENV` → config default                                        |
+| Project     | `--project`     | `T3CODE_PROJECT_ROOT` → `T3CODE_PROJECT_ID` → cwd (local auth only) |
+| Worktree    | `--worktree`    | `T3CODE_WORKTREE_PATH` → inferred from cwd                          |
+| Thread      | `--thread`      | `T3CODE_THREAD_ID`                                                  |
 
 Project matching: id → `workspaceRoot` → ancestor under workspace → known thread `worktreePath`. Remote pairing without `--local` requires explicit `--project` or `T3CODE_PROJECT_*`.
 
