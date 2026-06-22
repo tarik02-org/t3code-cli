@@ -1,13 +1,10 @@
-// @effect-diagnostics nodeBuiltinImport:off - Integration tests use real temp directories.
 import "vite-plus/test/config";
 
-import { randomBytes } from "node:crypto";
-import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-
+import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { expect, vi } from "vite-plus/test";
@@ -23,6 +20,19 @@ vi.mock("./keyring.ts", () => ({
   getKeyringStore: () => null,
 }));
 
+function makeCredentialLayer(homeDir: string) {
+  return Layer.mergeAll(
+    NodeServices.layer,
+    Layer.succeed(Environment)({
+      cwd: homeDir,
+      homeDir,
+      env: {},
+      stdoutIsTTY: false,
+      stderrIsTTY: false,
+    }),
+  );
+}
+
 describe("keyring fallback", () => {
   it("treats invalid stored keyring values as corrupt", () => {
     const result = parseKeyringPassword("not-a-valid-key");
@@ -30,121 +40,104 @@ describe("keyring fallback", () => {
     expect(shouldFallbackToKeyFile(result)).toBe(false);
   });
 
-  it("falls back to key file when keyring backend is unavailable", async () => {
-    const homeDir = await mkdtemp(join(tmpdir(), "t3cli-credential-test-"));
-    const keyPath = join(homeDir, ".config", "t3cli", "key");
-    const masterKey = randomBytes(32);
-    try {
-      await mkdir(dirname(keyPath), { recursive: true });
-      await writeFile(keyPath, `${masterKey.toString("base64")}\n`, { mode: 0o600 });
-      const crypto = await Effect.runPromise(
-        makeT3CredentialCrypto().pipe(
-          Effect.provide(
-            Layer.mergeAll(
-              NodeServices.layer,
-              Layer.succeed(Environment)({
-                cwd: homeDir,
-                homeDir,
-                env: {},
-                stdoutIsTTY: false,
-                stderrIsTTY: false,
-              }),
-            ),
-          ),
-        ),
-      );
-      const encrypted = await Effect.runPromise(
-        crypto.encrypt({
-          environmentName: "home",
-          url: "https://home.example",
-          local: false,
-          token: "secret-token",
+  it.effect("falls back to key file when keyring backend is unavailable", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const cryptoService = yield* Crypto.Crypto;
+      const homeDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3cli-credential-test-" });
+      return { fs, path, cryptoService, homeDir };
+    }).pipe(
+      Effect.flatMap(({ fs, path, cryptoService, homeDir }) =>
+        Effect.gen(function* () {
+          const keyPath = path.join(homeDir, ".config", "t3cli", "key");
+          const masterKey = yield* cryptoService.randomBytes(32);
+          yield* fs.makeDirectory(path.dirname(keyPath), { recursive: true });
+          yield* fs.writeFileString(keyPath, `${Buffer.from(masterKey).toString("base64")}\n`, {
+            mode: 0o600,
+          });
+          const credentialCrypto = yield* makeT3CredentialCrypto().pipe(
+            Effect.provide(makeCredentialLayer(homeDir)),
+          );
+          const encrypted = yield* credentialCrypto.encrypt({
+            environmentName: "home",
+            url: "https://home.example",
+            local: false,
+            token: "secret-token",
+          });
+          const token = yield* credentialCrypto.decrypt({
+            environmentName: "home",
+            url: "https://home.example",
+            local: false,
+            token: encrypted,
+          });
+          assert.equal(token, "secret-token");
         }),
-      );
-      const token = await Effect.runPromise(
-        crypto.decrypt({
-          environmentName: "home",
-          url: "https://home.example",
-          local: false,
-          token: encrypted,
-        }),
-      );
-      assert.equal(token, "secret-token");
-    } finally {
-      await rm(homeDir, { recursive: true, force: true });
-    }
-  });
+      ),
+      Effect.provide(NodeServices.layer),
+      Effect.scoped,
+    ),
+  );
 
-  it("hardens existing key file permissions to 0600 on use", async () => {
-    const homeDir = await mkdtemp(join(tmpdir(), "t3cli-credential-test-"));
-    const keyPath = join(homeDir, ".config", "t3cli", "key");
-    const masterKey = randomBytes(32);
-    try {
-      await mkdir(dirname(keyPath), { recursive: true });
-      await writeFile(keyPath, `${masterKey.toString("base64")}\n`, { mode: 0o644 });
-      const crypto = await Effect.runPromise(
-        makeT3CredentialCrypto().pipe(
-          Effect.provide(
-            Layer.mergeAll(
-              NodeServices.layer,
-              Layer.succeed(Environment)({
-                cwd: homeDir,
-                homeDir,
-                env: {},
-                stdoutIsTTY: false,
-                stderrIsTTY: false,
-              }),
-            ),
-          ),
-        ),
-      );
-      await Effect.runPromise(
-        crypto.encrypt({
-          environmentName: "home",
-          url: "https://home.example",
-          local: false,
-          token: "secret-token",
+  it.effect("hardens existing key file permissions to 0600 on use", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const cryptoService = yield* Crypto.Crypto;
+      const homeDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3cli-credential-test-" });
+      return { fs, path, cryptoService, homeDir };
+    }).pipe(
+      Effect.flatMap(({ fs, path, cryptoService, homeDir }) =>
+        Effect.gen(function* () {
+          const keyPath = path.join(homeDir, ".config", "t3cli", "key");
+          const masterKey = yield* cryptoService.randomBytes(32);
+          yield* fs.makeDirectory(path.dirname(keyPath), { recursive: true });
+          yield* fs.writeFileString(keyPath, `${Buffer.from(masterKey).toString("base64")}\n`, {
+            mode: 0o644,
+          });
+          const credentialCrypto = yield* makeT3CredentialCrypto().pipe(
+            Effect.provide(makeCredentialLayer(homeDir)),
+          );
+          yield* credentialCrypto.encrypt({
+            environmentName: "home",
+            url: "https://home.example",
+            local: false,
+            token: "secret-token",
+          });
+          const keyStat = yield* fs.stat(keyPath);
+          assert.equal(keyStat.mode & 0o777, 0o600);
         }),
-      );
-      const keyStat = await stat(keyPath);
-      assert.equal(keyStat.mode & 0o777, 0o600);
-    } finally {
-      await rm(homeDir, { recursive: true, force: true });
-    }
-  });
+      ),
+      Effect.provide(NodeServices.layer),
+      Effect.scoped,
+    ),
+  );
 
-  it("creates key file with 0600 permissions when keyring is unavailable", async () => {
-    const homeDir = await mkdtemp(join(tmpdir(), "t3cli-credential-test-"));
-    const keyPath = join(homeDir, ".config", "t3cli", "key");
-    try {
-      const crypto = await Effect.runPromise(
-        makeT3CredentialCrypto().pipe(
-          Effect.provide(
-            Layer.mergeAll(
-              NodeServices.layer,
-              Layer.succeed(Environment)({
-                cwd: homeDir,
-                homeDir,
-                env: {},
-                stdoutIsTTY: false,
-                stderrIsTTY: false,
-              }),
-            ),
-          ),
-        ),
-      );
-      await Effect.runPromise(
-        crypto.encrypt({
-          environmentName: "home",
-          url: "https://home.example",
-          local: false,
-          token: "rotate-write",
+  it.effect("creates key file with 0600 permissions when keyring is unavailable", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const homeDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3cli-credential-test-" });
+      return { fs, path, homeDir };
+    }).pipe(
+      Effect.flatMap(({ fs, path, homeDir }) =>
+        Effect.gen(function* () {
+          const keyPath = path.join(homeDir, ".config", "t3cli", "key");
+          const credentialCrypto = yield* makeT3CredentialCrypto().pipe(
+            Effect.provide(makeCredentialLayer(homeDir)),
+          );
+          yield* credentialCrypto.encrypt({
+            environmentName: "home",
+            url: "https://home.example",
+            local: false,
+            token: "rotate-write",
+          });
+          const keyStat = yield* fs.stat(keyPath);
+          assert.equal(keyStat.mode & 0o777, 0o600);
         }),
-      );
-      const keyStat = await stat(keyPath);
-      assert.equal(keyStat.mode & 0o777, 0o600);
-    } finally {
-      await rm(homeDir, { recursive: true, force: true });
-    }
-  });
+      ),
+      Effect.provide(NodeServices.layer),
+      Effect.scoped,
+    ),
+  );
 });

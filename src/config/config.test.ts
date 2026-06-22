@@ -1,62 +1,26 @@
-// @effect-diagnostics nodeBuiltinImport:off - Integration tests use real temp directories.
 import "vite-plus/test/config";
-
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
 
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
+import { vi } from "vite-plus/test";
 
 import { Environment } from "../environment/service.ts";
 import { decryptEnvironment } from "./codec.ts";
-import type { CredentialCrypto } from "./credential-service.ts";
-import { T3CredentialCrypto } from "./credential-service.ts";
+import { makeT3CredentialCrypto, T3CredentialCryptoLive } from "./credential.ts";
 import { migrateV1FileToEncrypted } from "./migration.ts";
 import { T3ConfigLive } from "./layer.ts";
 import { T3ConfigSelection } from "./selection.ts";
 import { T3ConfigSelectionLive } from "./selection-layer.ts";
 import { T3Config } from "./service.ts";
 
-const testMasterKey = Buffer.alloc(32, 7);
-
-const testCredentialCrypto: CredentialCrypto = {
-  encrypt: (input) =>
-    Effect.sync(() => {
-      const nonce = randomBytes(12);
-      const cipher = createCipheriv("aes-256-gcm", testMasterKey, nonce, { authTagLength: 16 });
-      cipher.setAAD(
-        Buffer.from(`2\0${input.environmentName}\0${input.url}\0${input.local}`, "utf8"),
-      );
-      const ciphertext = Buffer.concat([cipher.update(input.token, "utf8"), cipher.final()]);
-      return {
-        kind: "encrypted" as const,
-        alg: "aes-256-gcm" as const,
-        key: "default" as const,
-        nonce: nonce.toString("base64"),
-        ciphertext: ciphertext.toString("base64"),
-        tag: cipher.getAuthTag().toString("base64"),
-      };
-    }),
-  decrypt: (input) =>
-    Effect.sync(() => {
-      const nonce = Buffer.from(input.token.nonce, "base64");
-      const ciphertext = Buffer.from(input.token.ciphertext, "base64");
-      const tag = Buffer.from(input.token.tag, "base64");
-      const decipher = createDecipheriv("aes-256-gcm", testMasterKey, nonce, {
-        authTagLength: 16,
-      });
-      decipher.setAAD(
-        Buffer.from(`2\0${input.environmentName}\0${input.url}\0${input.local}`, "utf8"),
-      );
-      decipher.setAuthTag(tag);
-      return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
-    }),
-};
+vi.mock("./keyring.ts", () => ({
+  getKeyringStore: () => null,
+}));
 
 function makeEnvironmentLayer(homeDir: string, env: Record<string, string> = {}) {
   return Layer.succeed(Environment)({
@@ -77,6 +41,7 @@ function makeConfigLayer(
   } = {},
 ) {
   const environmentLayer = makeEnvironmentLayer(homeDir, input.env ?? {});
+  const platformLayer = Layer.mergeAll(NodeServices.layer, environmentLayer);
   const selectionLayer =
     input.useSelectionLive === true
       ? T3ConfigSelectionLive.pipe(Layer.provide(environmentLayer))
@@ -84,104 +49,122 @@ function makeConfigLayer(
           getSelectedEnvironment: () => Effect.succeed(input.selection),
         });
   return T3ConfigLive.pipe(
-    Layer.provide(
-      Layer.mergeAll(
-        NodeServices.layer,
-        Layer.succeed(T3CredentialCrypto, testCredentialCrypto),
-        environmentLayer,
-        selectionLayer,
-      ),
-    ),
+    Layer.provide(T3CredentialCryptoLive),
+    Layer.provide(Layer.mergeAll(platformLayer, selectionLayer)),
   );
 }
 
 describe("config persistence", () => {
   it.effect("migrates v1 flat config and roundtrips encrypted tokens", () =>
     Effect.gen(function* () {
-      const migrated = yield* migrateV1FileToEncrypted(testCredentialCrypto, {
-        url: "https://app.example.com",
-        token: "secret-token",
-        local: false,
-      });
-      assert.equal(migrated.default, "app.example.com");
-      const token = yield* decryptEnvironment(testCredentialCrypto, {
-        environmentName: "app.example.com",
-        url: "https://app.example.com",
-        local: false,
-        token: migrated.environments["app.example.com"]!.token,
-      });
-      assert.equal(token, "secret-token");
-    }),
+      const fs = yield* FileSystem.FileSystem;
+      return yield* fs.makeTempDirectoryScoped({ prefix: "t3cli-config-test-" });
+    }).pipe(
+      Effect.flatMap((homeDir) =>
+        Effect.gen(function* () {
+          const credentialCrypto = yield* makeT3CredentialCrypto().pipe(
+            Effect.provide(Layer.mergeAll(NodeServices.layer, makeEnvironmentLayer(homeDir))),
+          );
+          const migrated = yield* migrateV1FileToEncrypted(credentialCrypto, {
+            url: "https://app.example.com",
+            token: "secret-token",
+            local: false,
+          });
+          assert.equal(migrated.default, "app.example.com");
+          const token = yield* decryptEnvironment(credentialCrypto, {
+            environmentName: "app.example.com",
+            url: "https://app.example.com",
+            local: false,
+            token: migrated.environments["app.example.com"]!.token,
+          });
+          assert.equal(token, "secret-token");
+        }),
+      ),
+      Effect.provide(NodeServices.layer),
+      Effect.scoped,
+    ),
   );
 
-  it("persists v1 config as encrypted v2 on first read", async () => {
-    const homeDir = await mkdtemp(join(tmpdir(), "t3cli-config-test-"));
-    const secretToken = "legacy-plaintext-token";
-    const configPath = join(homeDir, ".config", "t3cli", "config.json");
-    try {
-      await mkdir(dirname(configPath), { recursive: true });
-      await writeFile(
-        configPath,
-        `${JSON.stringify({
-          url: "https://home.example",
-          token: secretToken,
-          local: false,
-        })}\n`,
-        { mode: 0o600 },
-      );
-      await Effect.runPromise(
+  it.effect("persists v1 config as encrypted v2 on first read", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const homeDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3cli-config-test-" });
+      return { fs, path, homeDir };
+    }).pipe(
+      Effect.flatMap(({ fs, path, homeDir }) =>
         Effect.gen(function* () {
-          const config = yield* T3Config;
-          yield* config.listEnvironments();
-        }).pipe(Effect.provide(makeConfigLayer(homeDir))),
-      );
-      const raw = await readFile(configPath, "utf8");
-      assert.equal(raw.includes(secretToken), false);
-      assert.equal(raw.includes('"version": 2'), true);
-      assert.equal(raw.includes('"kind": "encrypted"'), true);
-    } finally {
-      await rm(homeDir, { recursive: true, force: true });
-    }
-  });
+          const secretToken = "legacy-plaintext-token";
+          const configPath = path.join(homeDir, ".config", "t3cli", "config.json");
+          yield* fs.makeDirectory(path.dirname(configPath), { recursive: true });
+          yield* fs.writeFileString(
+            configPath,
+            `${JSON.stringify({
+              url: "https://home.example",
+              token: secretToken,
+              local: false,
+            })}\n`,
+            { mode: 0o600 },
+          );
+          yield* Effect.gen(function* () {
+            const config = yield* T3Config;
+            yield* config.listEnvironments();
+          }).pipe(Effect.provide(makeConfigLayer(homeDir)));
+          const raw = yield* fs.readFileString(configPath);
+          assert.equal(raw.includes(secretToken), false);
+          assert.equal(raw.includes('"version": 2'), true);
+          assert.equal(raw.includes('"kind": "encrypted"'), true);
+        }),
+      ),
+      Effect.provide(NodeServices.layer),
+      Effect.scoped,
+    ),
+  );
 
-  it("keeps default unchanged when upserting an existing environment without makeDefault", async () => {
-    const homeDir = await mkdtemp(join(tmpdir(), "t3cli-config-test-"));
-    try {
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const config = yield* T3Config;
-          yield* config.upsertEnvironment({
-            name: "home",
-            url: "https://home.example",
-            token: "home-token",
-            local: false,
-          });
-          yield* config.upsertEnvironment({
-            name: "work",
-            url: "https://work.example",
-            token: "work-token",
-            local: false,
-          });
-          yield* config.upsertEnvironment({
-            name: "work",
-            url: "https://work.example",
-            token: "work-token-2",
-            local: false,
-          });
-          const listed = yield* config.listEnvironments();
-          assert.equal(listed.find((environment) => environment.name === "home")?.default, true);
-          assert.equal(listed.find((environment) => environment.name === "work")?.default, false);
-        }).pipe(Effect.provide(makeConfigLayer(homeDir))),
-      );
-    } finally {
-      await rm(homeDir, { recursive: true, force: true });
-    }
-  });
+  it.effect(
+    "keeps default unchanged when upserting an existing environment without makeDefault",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        return yield* fs.makeTempDirectoryScoped({ prefix: "t3cli-config-test-" });
+      }).pipe(
+        Effect.flatMap((homeDir) =>
+          Effect.gen(function* () {
+            const config = yield* T3Config;
+            yield* config.upsertEnvironment({
+              name: "home",
+              url: "https://home.example",
+              token: "home-token",
+              local: false,
+            });
+            yield* config.upsertEnvironment({
+              name: "work",
+              url: "https://work.example",
+              token: "work-token",
+              local: false,
+            });
+            yield* config.upsertEnvironment({
+              name: "work",
+              url: "https://work.example",
+              token: "work-token-2",
+              local: false,
+            });
+            const listed = yield* config.listEnvironments();
+            assert.equal(listed.find((environment) => environment.name === "home")?.default, true);
+            assert.equal(listed.find((environment) => environment.name === "work")?.default, false);
+          }).pipe(Effect.provide(makeConfigLayer(homeDir))),
+        ),
+        Effect.provide(NodeServices.layer),
+        Effect.scoped,
+      ),
+  );
 
-  it("promotes default when upserting with makeDefault", async () => {
-    const homeDir = await mkdtemp(join(tmpdir(), "t3cli-config-test-"));
-    try {
-      await Effect.runPromise(
+  it.effect("promotes default when upserting with makeDefault", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      return yield* fs.makeTempDirectoryScoped({ prefix: "t3cli-config-test-" });
+    }).pipe(
+      Effect.flatMap((homeDir) =>
         Effect.gen(function* () {
           const config = yield* T3Config;
           yield* config.upsertEnvironment({
@@ -207,40 +190,48 @@ describe("config persistence", () => {
           assert.equal(listed.find((environment) => environment.name === "home")?.default, false);
           assert.equal(listed.find((environment) => environment.name === "work")?.default, true);
         }).pipe(Effect.provide(makeConfigLayer(homeDir))),
-      );
-    } finally {
-      await rm(homeDir, { recursive: true, force: true });
-    }
-  });
+      ),
+      Effect.provide(NodeServices.layer),
+      Effect.scoped,
+    ),
+  );
 
-  it("never writes plaintext tokens to config.json", async () => {
-    const homeDir = await mkdtemp(join(tmpdir(), "t3cli-config-test-"));
-    const secretToken = "super-secret-token-value";
-    try {
-      await Effect.runPromise(
+  it.effect("never writes plaintext tokens to config.json", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const homeDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3cli-config-test-" });
+      return { fs, path, homeDir };
+    }).pipe(
+      Effect.flatMap(({ fs, path, homeDir }) =>
         Effect.gen(function* () {
-          const config = yield* T3Config;
-          yield* config.upsertEnvironment({
-            name: "home",
-            url: "https://home.example",
-            token: secretToken,
-            local: false,
-          });
-        }).pipe(Effect.provide(makeConfigLayer(homeDir))),
-      );
-      const configPath = join(homeDir, ".config", "t3cli", "config.json");
-      const raw = await readFile(configPath, "utf8");
-      assert.equal(raw.includes(secretToken), false);
-      assert.equal(raw.includes('"kind": "encrypted"'), true);
-    } finally {
-      await rm(homeDir, { recursive: true, force: true });
-    }
-  });
+          const secretToken = "super-secret-token-value";
+          yield* Effect.gen(function* () {
+            const config = yield* T3Config;
+            yield* config.upsertEnvironment({
+              name: "home",
+              url: "https://home.example",
+              token: secretToken,
+              local: false,
+            });
+          }).pipe(Effect.provide(makeConfigLayer(homeDir)));
+          const configPath = path.join(homeDir, ".config", "t3cli", "config.json");
+          const raw = yield* fs.readFileString(configPath);
+          assert.equal(raw.includes(secretToken), false);
+          assert.equal(raw.includes('"kind": "encrypted"'), true);
+        }),
+      ),
+      Effect.provide(NodeServices.layer),
+      Effect.scoped,
+    ),
+  );
 
-  it("clears default when removing the default environment", async () => {
-    const homeDir = await mkdtemp(join(tmpdir(), "t3cli-config-test-"));
-    try {
-      await Effect.runPromise(
+  it.effect("clears default when removing the default environment", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      return yield* fs.makeTempDirectoryScoped({ prefix: "t3cli-config-test-" });
+    }).pipe(
+      Effect.flatMap((homeDir) =>
         Effect.gen(function* () {
           const config = yield* T3Config;
           yield* config.upsertEnvironment({
@@ -264,16 +255,18 @@ describe("config persistence", () => {
             true,
           );
         }).pipe(Effect.provide(makeConfigLayer(homeDir))),
-      );
-    } finally {
-      await rm(homeDir, { recursive: true, force: true });
-    }
-  });
+      ),
+      Effect.provide(NodeServices.layer),
+      Effect.scoped,
+    ),
+  );
 
-  it("resolves selected environment from config selection service", async () => {
-    const homeDir = await mkdtemp(join(tmpdir(), "t3cli-config-test-"));
-    try {
-      await Effect.runPromise(
+  it.effect("resolves selected environment from config selection service", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      return yield* fs.makeTempDirectoryScoped({ prefix: "t3cli-config-test-" });
+    }).pipe(
+      Effect.flatMap((homeDir) =>
         Effect.gen(function* () {
           const config = yield* T3Config;
           yield* config.upsertEnvironment({
@@ -295,16 +288,18 @@ describe("config persistence", () => {
             assert.equal(resolved.token, "work-token");
           }
         }).pipe(Effect.provide(makeConfigLayer(homeDir, { selection: "work" }))),
-      );
-    } finally {
-      await rm(homeDir, { recursive: true, force: true });
-    }
-  });
+      ),
+      Effect.provide(NodeServices.layer),
+      Effect.scoped,
+    ),
+  );
 
-  it("resolves T3CLI_ENV through the selection layer", async () => {
-    const homeDir = await mkdtemp(join(tmpdir(), "t3cli-config-test-"));
-    try {
-      await Effect.runPromise(
+  it.effect("resolves T3CLI_ENV through the selection layer", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      return yield* fs.makeTempDirectoryScoped({ prefix: "t3cli-config-test-" });
+    }).pipe(
+      Effect.flatMap((homeDir) =>
         Effect.gen(function* () {
           const config = yield* T3Config;
           yield* config.upsertEnvironment({
@@ -332,50 +327,56 @@ describe("config persistence", () => {
             }),
           ),
         ),
-      );
-    } finally {
-      await rm(homeDir, { recursive: true, force: true });
-    }
-  });
+      ),
+      Effect.provide(NodeServices.layer),
+      Effect.scoped,
+    ),
+  );
 
-  it("resolves env override with local=false even when selected stored environment is local", async () => {
-    const homeDir = await mkdtemp(join(tmpdir(), "t3cli-config-test-"));
-    try {
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          const config = yield* T3Config;
-          yield* config.upsertEnvironment({
-            name: "work",
-            url: "http://localhost:8787",
-            token: "work-token",
-            local: true,
-          });
-          const resolved = yield* config.resolve();
-          assert.equal(resolved.source, "env");
-          assert.equal(resolved.local, false);
-          assert.equal(resolved.url, "https://remote.example");
-          assert.equal(resolved.token, "env-token");
-        }).pipe(
-          Effect.provide(
-            makeConfigLayer(homeDir, {
-              selection: "work",
-              env: {
-                T3CODE_URL: "https://remote.example",
-                T3CODE_TOKEN: "env-token",
-              },
-            }),
+  it.effect(
+    "resolves env override with local=false even when selected stored environment is local",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        return yield* fs.makeTempDirectoryScoped({ prefix: "t3cli-config-test-" });
+      }).pipe(
+        Effect.flatMap((homeDir) =>
+          Effect.gen(function* () {
+            const config = yield* T3Config;
+            yield* config.upsertEnvironment({
+              name: "work",
+              url: "http://localhost:8787",
+              token: "work-token",
+              local: true,
+            });
+            const resolved = yield* config.resolve();
+            assert.equal(resolved.source, "env");
+            assert.equal(resolved.local, false);
+            assert.equal(resolved.url, "https://remote.example");
+            assert.equal(resolved.token, "env-token");
+          }).pipe(
+            Effect.provide(
+              makeConfigLayer(homeDir, {
+                selection: "work",
+                env: {
+                  T3CODE_URL: "https://remote.example",
+                  T3CODE_TOKEN: "env-token",
+                },
+              }),
+            ),
           ),
         ),
-      );
-    } finally {
-      await rm(homeDir, { recursive: true, force: true });
-    }
-  });
+        Effect.provide(NodeServices.layer),
+        Effect.scoped,
+      ),
+  );
 
-  it("reads default environment name without decrypting tokens", async () => {
-    const homeDir = await mkdtemp(join(tmpdir(), "t3cli-config-test-"));
-    try {
-      await Effect.runPromise(
+  it.effect("reads default environment name without decrypting tokens", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      return yield* fs.makeTempDirectoryScoped({ prefix: "t3cli-config-test-" });
+    }).pipe(
+      Effect.flatMap((homeDir) =>
         Effect.gen(function* () {
           const config = yield* T3Config;
           yield* config.upsertEnvironment({
@@ -387,53 +388,73 @@ describe("config persistence", () => {
           const defaultName = yield* config.getDefaultEnvironmentName();
           assert.equal(defaultName, "home");
         }).pipe(Effect.provide(makeConfigLayer(homeDir))),
-      );
-    } finally {
-      await rm(homeDir, { recursive: true, force: true });
-    }
-  });
+      ),
+      Effect.provide(NodeServices.layer),
+      Effect.scoped,
+    ),
+  );
 
-  it("hardens existing config file permissions to 0600 on write", async () => {
-    const homeDir = await mkdtemp(join(tmpdir(), "t3cli-config-test-"));
-    const configPath = join(homeDir, ".config", "t3cli", "config.json");
-    try {
-      await mkdir(dirname(configPath), { recursive: true });
-      await writeFile(configPath, `${JSON.stringify({ version: 2, environments: {} })}\n`, {
-        mode: 0o644,
-      });
-      await Effect.runPromise(
+  it.effect("hardens existing config file permissions to 0600 on write", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const homeDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3cli-config-test-" });
+      return { fs, path, homeDir };
+    }).pipe(
+      Effect.flatMap(({ fs, path, homeDir }) =>
         Effect.gen(function* () {
-          const config = yield* T3Config;
-          yield* config.upsertEnvironment({
-            name: "home",
-            url: "https://home.example",
-            token: "home-token",
-            local: false,
-          });
-        }).pipe(Effect.provide(makeConfigLayer(homeDir))),
-      );
-      const configStat = await stat(configPath);
-      assert.equal(configStat.mode & 0o777, 0o600);
-    } finally {
-      await rm(homeDir, { recursive: true, force: true });
-    }
-  });
+          const configPath = path.join(homeDir, ".config", "t3cli", "config.json");
+          yield* fs.makeDirectory(path.dirname(configPath), { recursive: true });
+          yield* fs.writeFileString(
+            configPath,
+            `${JSON.stringify({ version: 2, environments: {} })}\n`,
+            { mode: 0o644 },
+          );
+          yield* Effect.gen(function* () {
+            const config = yield* T3Config;
+            yield* config.upsertEnvironment({
+              name: "home",
+              url: "https://home.example",
+              token: "home-token",
+              local: false,
+            });
+          }).pipe(Effect.provide(makeConfigLayer(homeDir)));
+          const configStat = yield* fs.stat(configPath);
+          assert.equal(configStat.mode & 0o777, 0o600);
+        }),
+      ),
+      Effect.provide(NodeServices.layer),
+      Effect.scoped,
+    ),
+  );
 
   it.effect("fails decrypt when ciphertext AAD does not match", () =>
     Effect.gen(function* () {
-      const token = yield* testCredentialCrypto.encrypt({
-        environmentName: "home",
-        url: "https://home.example",
-        local: false,
-        token: "secret",
-      });
-      const result = yield* decryptEnvironment(testCredentialCrypto, {
-        environmentName: "home",
-        url: "https://tampered.example",
-        local: false,
-        token,
-      }).pipe(Effect.exit);
-      assert.equal(Exit.isFailure(result), true);
-    }),
+      const fs = yield* FileSystem.FileSystem;
+      return yield* fs.makeTempDirectoryScoped({ prefix: "t3cli-config-test-" });
+    }).pipe(
+      Effect.flatMap((homeDir) =>
+        Effect.gen(function* () {
+          const credentialCrypto = yield* makeT3CredentialCrypto().pipe(
+            Effect.provide(Layer.mergeAll(NodeServices.layer, makeEnvironmentLayer(homeDir))),
+          );
+          const token = yield* credentialCrypto.encrypt({
+            environmentName: "home",
+            url: "https://home.example",
+            local: false,
+            token: "secret",
+          });
+          const result = yield* decryptEnvironment(credentialCrypto, {
+            environmentName: "home",
+            url: "https://tampered.example",
+            local: false,
+            token,
+          }).pipe(Effect.exit);
+          assert.equal(Exit.isFailure(result), true);
+        }),
+      ),
+      Effect.provide(NodeServices.layer),
+      Effect.scoped,
+    ),
   );
 });
