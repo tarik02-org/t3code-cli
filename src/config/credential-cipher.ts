@@ -26,13 +26,14 @@ export type AesGcmEncryptResult = {
   readonly tag: Uint8Array;
 };
 
-export class T3CredentialCipher extends Context.Service<T3CredentialCipher, CredentialCipher>()(
-  "t3cli/T3CredentialCipher",
-) {}
-
-export type CredentialCipher = {
-  readonly encrypt: (
-    input: AesGcmEncryptInput,
-  ) => Effect.Effect<AesGcmEncryptResult, CredentialCipherError>;
-  readonly decrypt: (input: AesGcmDecryptInput) => Effect.Effect<Uint8Array, CredentialCipherError>;
-};
+export class T3CredentialCipher extends Context.Service<
+  T3CredentialCipher,
+  {
+    readonly encrypt: (
+      input: AesGcmEncryptInput,
+    ) => Effect.Effect<AesGcmEncryptResult, CredentialCipherError>;
+    readonly decrypt: (
+      input: AesGcmDecryptInput,
+    ) => Effect.Effect<Uint8Array, CredentialCipherError>;
+  }
+>()("t3cli/T3CredentialCipher") {}

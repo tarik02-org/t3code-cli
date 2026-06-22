@@ -4,7 +4,7 @@ import {
   T3CredentialCrypto,
   type CredentialDecryptInput,
   type CredentialEncryptInput,
-} from "./credential-service.ts";
+} from "./credential.ts";
 import type { EncryptedConfig, DecryptedConfig, DecryptedEnvironment } from "./types.ts";
 
 export const encryptEnvironment = Effect.fn("encryptEnvironment")(function* (

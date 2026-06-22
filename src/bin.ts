@@ -7,7 +7,7 @@ import { Command } from "effect/unstable/cli";
 
 import { createCliCommand } from "./cli/app.ts";
 import { T3CliConfigSelectionLive } from "./cli/selection-layer.ts";
-import { T3CredentialCipherNodeLive } from "./config/credential-cipher-node.ts";
+import { layerNode } from "./config/credential-cipher-node.ts";
 import { NodeEnvironmentLive } from "./environment/layer.ts";
 import { T3InputLive } from "./cli/input/layer.ts";
 import { T3OutputLive } from "./cli/output/layer.ts";
@@ -26,7 +26,7 @@ const PlatformLayer = Layer.mergeAll(NodeServices.layer, NodeEnvironmentLive);
 
 const CliAppLayer = BaseAppLayer.pipe(
   Layer.provideMerge(T3CliConfigSelectionLive),
-  Layer.provide(T3CredentialCipherNodeLive),
+  Layer.provide(layerNode),
 );
 
 const CliLayer = Layer.mergeAll(

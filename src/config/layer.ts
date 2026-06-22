@@ -5,9 +5,9 @@ import * as Path from "effect/Path";
 
 import { Environment } from "../environment/service.ts";
 import { decryptEnvironment, encryptEnvironment } from "./codec.ts";
-import { T3CredentialCrypto } from "./credential-service.ts";
+import { T3CredentialCrypto } from "./credential.ts";
+import { ConfigError, configErrorFromUrl } from "./error.ts";
 import { validateEnvironmentName } from "./environment-name.ts";
-import { ConfigError, UrlError } from "./error.ts";
 import { readEncryptedConfigFile, writeEncryptedConfigFile } from "./persist.ts";
 import {
   buildResolvedConfigFromEnv,
@@ -21,23 +21,22 @@ import { T3ConfigSelection } from "./selection.ts";
 import { T3Config, type UpsertEnvironmentInput } from "./service.ts";
 import { normalizeHttpBaseUrl } from "./url.ts";
 
-export const makeT3Config = Effect.fn("makeT3Config")(function* () {
+export const make = Effect.fn("makeT3Config")(function* () {
   const environment = yield* Environment;
   const configSelection = yield* T3ConfigSelection;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const credentialCrypto = yield* T3CredentialCrypto;
-
-  const withConfigServices = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    effect.pipe(
-      Effect.provideService(FileSystem.FileSystem, fs),
-      Effect.provideService(Path.Path, path),
-      Effect.provideService(Environment, environment),
-      Effect.provideService(T3CredentialCrypto, credentialCrypto),
-    );
+  const services = Layer.mergeAll(
+    Layer.succeed(FileSystem.FileSystem, fs),
+    Layer.succeed(Path.Path, path),
+    Layer.succeed(Environment, environment),
+    Layer.succeed(T3CredentialCrypto, credentialCrypto),
+  );
+  const run = <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.provide(effect, services);
 
   const readEncrypted = Effect.fn("T3ConfigLive.readEncrypted")(function* () {
-    return yield* withConfigServices(readEncryptedConfigFile());
+    return yield* run(readEncryptedConfigFile());
   });
 
   const hasEnvironment = Effect.fn("T3ConfigLive.hasEnvironment")(function* (name: string) {
@@ -89,10 +88,10 @@ export const makeT3Config = Effect.fn("makeT3Config")(function* () {
   ) {
     yield* validateEnvironmentName(input.name);
     const normalizedUrl = yield* normalizeHttpBaseUrl(input.url).pipe(
-      Effect.mapError(mapUrlToConfigError),
+      Effect.mapError(configErrorFromUrl),
     );
     const encrypted = yield* readEncrypted();
-    const token = yield* withConfigServices(
+    const token = yield* run(
       encryptEnvironment({
         environmentName: input.name,
         url: normalizedUrl,
@@ -101,7 +100,7 @@ export const makeT3Config = Effect.fn("makeT3Config")(function* () {
       }),
     );
     const defaultName = resolveDefaultForUpsert(encrypted, input.name, input.makeDefault);
-    yield* withConfigServices(
+    yield* run(
       writeEncryptedConfigFile({
         version: 2,
         ...(defaultName !== undefined ? { default: defaultName } : {}),
@@ -125,7 +124,7 @@ export const makeT3Config = Effect.fn("makeT3Config")(function* () {
     if (encrypted.environments[name] === undefined) {
       return yield* Effect.fail(new ConfigError({ message: `environment not found: ${name}` }));
     }
-    yield* withConfigServices(
+    yield* run(
       writeEncryptedConfigFile({
         ...encrypted,
         default: name,
@@ -142,7 +141,7 @@ export const makeT3Config = Effect.fn("makeT3Config")(function* () {
     }
     const { [name]: _removed, ...environments } = encrypted.environments;
     const defaultName = encrypted.default === name ? undefined : encrypted.default;
-    yield* withConfigServices(
+    yield* run(
       writeEncryptedConfigFile({
         version: 2,
         ...(defaultName !== undefined ? { default: defaultName } : {}),
@@ -194,7 +193,7 @@ export const makeT3Config = Effect.fn("makeT3Config")(function* () {
     }
 
     const selectedEnvironment = encrypted.environments[selectedName];
-    const token = yield* withConfigServices(
+    const token = yield* run(
       decryptEnvironment({
         environmentName: selectedName,
         url: selectedEnvironment.url,
@@ -221,8 +220,4 @@ export const makeT3Config = Effect.fn("makeT3Config")(function* () {
   } as const;
 });
 
-export const T3ConfigLive = Layer.effect(T3Config, makeT3Config());
-
-function mapUrlToConfigError(error: UrlError) {
-  return new ConfigError({ message: error.message });
-}
+export const layer = Layer.effect(T3Config, make());

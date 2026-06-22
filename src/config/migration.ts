@@ -4,7 +4,7 @@ import * as Schema from "effect/Schema";
 
 import { encryptEnvironment } from "./codec.ts";
 import { migrateV1EnvironmentName, validateEnvironmentName } from "./environment-name.ts";
-import { ConfigError } from "./error.ts";
+import { ConfigError, configErrorFromUrl } from "./error.ts";
 import {
   StoredConfigV1FileSchema,
   StoredConfigV2FileSchema,
@@ -33,8 +33,7 @@ export const readEncryptedConfigFromValue = Effect.fn("readEncryptedConfigFromVa
     return { config: migrated, migratedFromV1: true as const };
   }).pipe(
     Effect.catchTags({
-      UrlError: (error) =>
-        Effect.fail(new ConfigError({ message: `failed to read config: ${error.message}` })),
+      UrlError: (error) => Effect.fail(configErrorFromUrl(error)),
       SchemaError: (error) =>
         Effect.fail(new ConfigError({ message: "failed to read config", cause: error })),
     }),

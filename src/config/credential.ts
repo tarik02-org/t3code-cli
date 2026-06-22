@@ -1,3 +1,4 @@
+import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Encoding from "effect/Encoding";
@@ -6,20 +7,42 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 
-import {
-  T3CredentialCipher,
-  credentialCipherNonceByteLength,
-} from "./credential-cipher-service.ts";
 import { Environment } from "../environment/service.ts";
+import { T3CredentialCipher, credentialCipherNonceByteLength } from "./credential-cipher.ts";
+import type { EncryptedToken } from "./schema.ts";
 import {
-  T3CredentialCrypto,
-  type CredentialDecryptInput,
-  type CredentialEncryptInput,
-} from "./credential-service.ts";
-import { ConfigError, isPlatformNotFoundError } from "./error.ts";
+  ConfigError,
+  KeyringOperationError,
+  describeCredentialCipherError,
+  describeKeyringModuleLoadError,
+  describeKeyringOperationError,
+  isPlatformNotFoundError,
+} from "./error.ts";
 import { hardenPrivateFileMode } from "./file-mode.ts";
-import { getKeyringStore, KeyringOperationError, keyringErrorMessage } from "./keyring.ts";
+import { getKeyringStore } from "./keyring.ts";
 import { resolveKeyFilePath } from "./paths.ts";
+
+export type CredentialEncryptInput = {
+  readonly environmentName: string;
+  readonly url: string;
+  readonly local: boolean;
+  readonly token: string;
+};
+
+export type CredentialDecryptInput = {
+  readonly environmentName: string;
+  readonly url: string;
+  readonly local: boolean;
+  readonly token: EncryptedToken;
+};
+
+export class T3CredentialCrypto extends Context.Service<
+  T3CredentialCrypto,
+  {
+    readonly encrypt: (input: CredentialEncryptInput) => Effect.Effect<EncryptedToken, ConfigError>;
+    readonly decrypt: (input: CredentialDecryptInput) => Effect.Effect<string, ConfigError>;
+  }
+>()("t3cli/T3CredentialCrypto") {}
 
 const configSchemaVersion = 2;
 const masterKeyByteLength = 32;
@@ -42,16 +65,20 @@ export function shouldFallbackToKeyFile(result: KeyringReadResult) {
   return result.kind === "missing" || result.kind === "unavailable";
 }
 
-export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(function* () {
+export const make = Effect.fn("makeT3CredentialCrypto")(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const environment = yield* Environment;
   const cryptoService = yield* Crypto.Crypto;
   const cipher = yield* T3CredentialCipher;
-  const keyFilePath = yield* resolveKeyFilePath().pipe(
-    Effect.provideService(Path.Path, path),
-    Effect.provideService(Environment, environment),
+  const services = Layer.mergeAll(
+    Layer.succeed(FileSystem.FileSystem, fs),
+    Layer.succeed(Path.Path, path),
+    Layer.succeed(Environment, environment),
+    Layer.succeed(Crypto.Crypto, cryptoService),
   );
+  const run = <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.provide(effect, services);
+  const keyFilePath = yield* run(resolveKeyFilePath());
 
   const readKeyFileMasterKey = Effect.fn("readKeyFileMasterKey")(function* (filePath: string) {
     const raw = yield* fs.readFileString(filePath).pipe(
@@ -109,9 +136,7 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
           ),
       }),
     );
-    yield* hardenPrivateFileMode(filePath, "credential key").pipe(
-      Effect.provideService(FileSystem.FileSystem, fs),
-    );
+    yield* run(hardenPrivateFileMode(filePath, "credential key"));
   });
 
   const getMasterKey = Effect.fn("T3CredentialCryptoLive.getMasterKey")(function* () {
@@ -129,15 +154,11 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
     if (shouldFallbackToKeyFile(keyringResult)) {
       const fileKey = yield* readKeyFileMasterKey(keyFilePath);
       if (fileKey !== undefined) {
-        yield* hardenPrivateFileMode(keyFilePath, "credential key").pipe(
-          Effect.provideService(FileSystem.FileSystem, fs),
-        );
+        yield* run(hardenPrivateFileMode(keyFilePath, "credential key"));
         return fileKey;
       }
     }
-    const generated = yield* secureRandomBytes(masterKeyByteLength).pipe(
-      Effect.provideService(Crypto.Crypto, cryptoService),
-    );
+    const generated = yield* run(secureRandomBytes(masterKeyByteLength));
     const writeResult = yield* writeKeyringMasterKey(generated);
     if (writeResult.kind === "stored") {
       return generated;
@@ -150,9 +171,7 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
     input: CredentialEncryptInput,
   ) {
     const masterKey = yield* getMasterKey();
-    const nonce = yield* secureRandomBytes(credentialCipherNonceByteLength).pipe(
-      Effect.provideService(Crypto.Crypto, cryptoService),
-    );
+    const nonce = yield* run(secureRandomBytes(credentialCipherNonceByteLength));
     const encrypted = yield* cipher
       .encrypt({
         key: masterKey,
@@ -165,8 +184,8 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
           CredentialCipherError: (error) =>
             Effect.fail(
               new ConfigError({
-                message: "failed to encrypt credential token",
-                cause: error.cause,
+                message: describeCredentialCipherError(error),
+                cause: error,
               }),
             ),
         }),
@@ -201,8 +220,8 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
           CredentialCipherError: (error) =>
             Effect.fail(
               new ConfigError({
-                message: "failed to decrypt credential token",
-                cause: error.cause,
+                message: describeCredentialCipherError(error),
+                cause: error,
               }),
             ),
         }),
@@ -213,7 +232,7 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
   return { encrypt, decrypt };
 });
 
-export const T3CredentialCryptoLive = Layer.effect(T3CredentialCrypto, makeT3CredentialCrypto());
+export const layer = Layer.effect(T3CredentialCrypto, make());
 
 function buildCredentialAad(input: {
   readonly environmentName: string;
@@ -269,13 +288,13 @@ function readKeyringMasterKey(): Effect.Effect<KeyringReadResult> {
     const store = yield* getKeyringStore();
     return yield* Effect.try({
       try: () => parseKeyringPassword(store.readPassword(keyringService, keyringAccount)),
-      catch: (cause) => new KeyringOperationError({ cause }),
+      catch: (cause) => new KeyringOperationError({ operation: "read-password", cause }),
     }).pipe(
       Effect.catchTags({
         KeyringOperationError: (error) =>
           Effect.succeed({
             kind: "unavailable",
-            message: keyringErrorMessage(error.cause),
+            message: describeKeyringOperationError(error),
           } satisfies KeyringReadResult),
       }),
     );
@@ -284,12 +303,7 @@ function readKeyringMasterKey(): Effect.Effect<KeyringReadResult> {
       KeyringModuleLoadError: (error) =>
         Effect.succeed({
           kind: "unavailable",
-          message: keyringErrorMessage(error.cause),
-        } satisfies KeyringReadResult),
-      KeyringModuleNotFoundError: (error) =>
-        Effect.succeed({
-          kind: "unavailable",
-          message: keyringErrorMessage(error.cause),
+          message: describeKeyringModuleLoadError(error),
         } satisfies KeyringReadResult),
     }),
   );
@@ -324,13 +338,13 @@ function writeKeyringMasterKey(key: Uint8Array): Effect.Effect<KeyringWriteResul
         store.writePassword(keyringService, keyringAccount, Encoding.encodeBase64(key));
         return { kind: "stored" } as const;
       },
-      catch: (cause) => new KeyringOperationError({ cause }),
+      catch: (cause) => new KeyringOperationError({ operation: "write-password", cause }),
     }).pipe(
       Effect.catchTags({
         KeyringOperationError: (error) =>
           Effect.succeed({
             kind: "unavailable",
-            message: keyringErrorMessage(error.cause),
+            message: describeKeyringOperationError(error),
           } satisfies KeyringWriteResult),
       }),
     );
@@ -339,12 +353,7 @@ function writeKeyringMasterKey(key: Uint8Array): Effect.Effect<KeyringWriteResul
       KeyringModuleLoadError: (error) =>
         Effect.succeed({
           kind: "unavailable",
-          message: keyringErrorMessage(error.cause),
-        } satisfies KeyringWriteResult),
-      KeyringModuleNotFoundError: (error) =>
-        Effect.succeed({
-          kind: "unavailable",
-          message: keyringErrorMessage(error.cause),
+          message: describeKeyringModuleLoadError(error),
         } satisfies KeyringWriteResult),
     }),
   );

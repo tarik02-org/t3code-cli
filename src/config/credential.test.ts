@@ -10,21 +10,19 @@ import { assert, describe, it } from "@effect/vitest";
 import { expect, vi } from "vite-plus/test";
 
 import { Environment } from "../environment/service.ts";
-import {
-  makeT3CredentialCrypto,
-  parseKeyringPassword,
-  shouldFallbackToKeyFile,
-} from "./credential.ts";
-import { T3CredentialCipherWebLive } from "./credential-cipher-web.ts";
+import { make, parseKeyringPassword, shouldFallbackToKeyFile } from "./credential.ts";
+import { layerWeb } from "./credential-cipher-web.ts";
 
 vi.mock("./keyring.ts", async (importOriginal) => {
   const EffectModule = await import("effect/Effect");
+  const { KeyringModuleLoadError } = await import("./error.ts");
   const actual = await importOriginal<typeof import("./keyring.ts")>();
   return {
     ...actual,
     getKeyringStore: () =>
       EffectModule.fail(
-        new actual.KeyringModuleNotFoundError({
+        new KeyringModuleLoadError({
+          reason: "module-not-found",
           cause: new Error("keyring unavailable in test"),
         }),
       ),
@@ -34,7 +32,7 @@ vi.mock("./keyring.ts", async (importOriginal) => {
 function makeCredentialLayer(homeDir: string) {
   return Layer.mergeAll(
     NodeServices.layer,
-    T3CredentialCipherWebLive,
+    layerWeb,
     Layer.succeed(Environment)({
       cwd: homeDir,
       homeDir,
@@ -68,9 +66,7 @@ describe("keyring fallback", () => {
           yield* fs.writeFileString(keyPath, `${Buffer.from(masterKey).toString("base64")}\n`, {
             mode: 0o600,
           });
-          const credentialCrypto = yield* makeT3CredentialCrypto().pipe(
-            Effect.provide(makeCredentialLayer(homeDir)),
-          );
+          const credentialCrypto = yield* make().pipe(Effect.provide(makeCredentialLayer(homeDir)));
           const encrypted = yield* credentialCrypto.encrypt({
             environmentName: "home",
             url: "https://home.example",
@@ -107,9 +103,7 @@ describe("keyring fallback", () => {
           yield* fs.writeFileString(keyPath, `${Buffer.from(masterKey).toString("base64")}\n`, {
             mode: 0o644,
           });
-          const credentialCrypto = yield* makeT3CredentialCrypto().pipe(
-            Effect.provide(makeCredentialLayer(homeDir)),
-          );
+          const credentialCrypto = yield* make().pipe(Effect.provide(makeCredentialLayer(homeDir)));
           yield* credentialCrypto.encrypt({
             environmentName: "home",
             url: "https://home.example",
@@ -135,9 +129,7 @@ describe("keyring fallback", () => {
       Effect.flatMap(({ fs, path, homeDir }) =>
         Effect.gen(function* () {
           const keyPath = path.join(homeDir, ".config", "t3cli", "key");
-          const credentialCrypto = yield* makeT3CredentialCrypto().pipe(
-            Effect.provide(makeCredentialLayer(homeDir)),
-          );
+          const credentialCrypto = yield* make().pipe(Effect.provide(makeCredentialLayer(homeDir)));
           yield* credentialCrypto.encrypt({
             environmentName: "home",
             url: "https://home.example",
