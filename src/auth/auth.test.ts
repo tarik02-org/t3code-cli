@@ -22,10 +22,17 @@ import { StoredConfigV2FileJson } from "../config/schema.ts";
 import { Environment } from "../environment/service.ts";
 import { T3ConfigSelection } from "../config/selection.ts";
 
-vi.mock("../config/keyring.ts", async () => {
+vi.mock("../config/keyring.ts", async (importOriginal) => {
   const EffectModule = await import("effect/Effect");
+  const actual = await importOriginal<typeof import("../config/keyring.ts")>();
   return {
-    getKeyringStore: () => EffectModule.succeed(null),
+    ...actual,
+    getKeyringStore: () =>
+      EffectModule.fail(
+        new actual.KeyringModuleNotFoundError({
+          cause: new Error("keyring unavailable in test"),
+        }),
+      ),
   };
 });
 

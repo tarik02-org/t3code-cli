@@ -17,10 +17,17 @@ import type { ResolvedConfig } from "../config/types.ts";
 import { T3Config } from "../config/service.ts";
 import { BaseAppLayer } from "./layer.ts";
 
-vi.mock("../config/keyring.ts", async () => {
+vi.mock("../config/keyring.ts", async (importOriginal) => {
   const EffectModule = await import("effect/Effect");
+  const actual = await importOriginal<typeof import("../config/keyring.ts")>();
   return {
-    getKeyringStore: () => EffectModule.succeed(null),
+    ...actual,
+    getKeyringStore: () =>
+      EffectModule.fail(
+        new actual.KeyringModuleNotFoundError({
+          cause: new Error("keyring unavailable in test"),
+        }),
+      ),
   };
 });
 

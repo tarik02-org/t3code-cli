@@ -2,14 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Predicate from "effect/Predicate";
 
-type KeyringEntry = {
-  getPassword(): string | null;
-  setPassword(password: string): void;
-};
-
-type KeyringModule = {
-  Entry: new (service: string, account: string) => KeyringEntry;
-};
+type KeyringModule = typeof import("@napi-rs/keyring");
 
 export class KeyringModuleLoadError extends Schema.TaggedErrorClass<KeyringModuleLoadError>()(
   "KeyringModuleLoadError",
@@ -37,26 +30,6 @@ export type KeyringStore = {
   readonly writePassword: (service: string, account: string, password: string) => void;
 };
 
-let cachedKeyringModule: KeyringModule | null | undefined;
-
-function isKeyringModule(value: unknown): value is KeyringModule {
-  return Predicate.hasProperty(value, "Entry") && Predicate.isFunction(value.Entry);
-}
-
-function isMissingKeyringModule(cause: unknown): boolean {
-  return (
-    Predicate.hasProperty(cause, "code") &&
-    Predicate.isString(cause.code) &&
-    (cause.code === "ERR_MODULE_NOT_FOUND" || cause.code === "MODULE_NOT_FOUND")
-  );
-}
-
-function classifyKeyringModuleLoadFailure(cause: unknown) {
-  return isMissingKeyringModule(cause)
-    ? new KeyringModuleNotFoundError({ cause })
-    : new KeyringModuleLoadError({ cause });
-}
-
 export function keyringErrorMessage(cause: unknown): string {
   if (cause instanceof Error) {
     return cause.message;
@@ -65,6 +38,14 @@ export function keyringErrorMessage(cause: unknown): string {
     return cause;
   }
   return "keyring operation failed";
+}
+
+function classifyKeyringModuleLoadFailure(cause: unknown) {
+  return Predicate.hasProperty(cause, "code") &&
+    Predicate.isString(cause.code) &&
+    (cause.code === "ERR_MODULE_NOT_FOUND" || cause.code === "MODULE_NOT_FOUND")
+    ? new KeyringModuleNotFoundError({ cause })
+    : new KeyringModuleLoadError({ cause });
 }
 
 function createKeyringStore(keyring: KeyringModule): KeyringStore {
@@ -78,38 +59,20 @@ function createKeyringStore(keyring: KeyringModule): KeyringStore {
   };
 }
 
-export function loadKeyringModule(): Effect.Effect<
-  KeyringModule | null,
-  KeyringModuleLoadError | KeyringModuleNotFoundError
-> {
-  if (cachedKeyringModule !== undefined) {
-    return Effect.succeed(cachedKeyringModule);
-  }
-  return Effect.tryPromise({
-    try: () => import("@napi-rs/keyring"),
-    catch: classifyKeyringModuleLoadFailure,
-  }).pipe(
-    Effect.map((module) => (isKeyringModule(module) ? module : null)),
-    Effect.tap((module) =>
-      Effect.sync(() => {
-        cachedKeyringModule = module;
-      }),
-    ),
-    Effect.catchTags({
-      KeyringModuleNotFoundError: () =>
-        Effect.sync(() => {
-          cachedKeyringModule = null;
-          return null;
-        }),
-    }),
-  );
-}
+const loadKeyringModuleOnce = Effect.tryPromise({
+  try: () => import("@napi-rs/keyring") as Promise<KeyringModule>,
+  catch: classifyKeyringModuleLoadFailure,
+});
+
+const loadKeyringModuleMemoized = Effect.cached(loadKeyringModuleOnce);
 
 export function getKeyringStore(): Effect.Effect<
-  KeyringStore | null,
+  KeyringStore,
   KeyringModuleLoadError | KeyringModuleNotFoundError
 > {
-  return loadKeyringModule().pipe(
-    Effect.map((module) => (module === null ? null : createKeyringStore(module))),
-  );
+  return Effect.gen(function* () {
+    const load = yield* loadKeyringModuleMemoized;
+    const module = yield* load;
+    return createKeyringStore(module);
+  });
 }

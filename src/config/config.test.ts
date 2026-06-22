@@ -21,10 +21,17 @@ import { T3ConfigSelection } from "./selection.ts";
 import { T3ConfigSelectionLive } from "./selection-layer.ts";
 import { T3Config } from "./service.ts";
 
-vi.mock("./keyring.ts", async () => {
+vi.mock("./keyring.ts", async (importOriginal) => {
   const EffectModule = await import("effect/Effect");
+  const actual = await importOriginal<typeof import("./keyring.ts")>();
   return {
-    getKeyringStore: () => EffectModule.succeed(null),
+    ...actual,
+    getKeyringStore: () =>
+      EffectModule.fail(
+        new actual.KeyringModuleNotFoundError({
+          cause: new Error("keyring unavailable in test"),
+        }),
+      ),
   };
 });
 

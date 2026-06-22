@@ -259,12 +259,6 @@ function decodeBase64Field(value: string, field: string) {
 function readKeyringMasterKey(): Effect.Effect<KeyringReadResult> {
   return Effect.gen(function* () {
     const store = yield* getKeyringStore();
-    if (store === null) {
-      return {
-        kind: "unavailable",
-        message: "OS keyring backend is not available",
-      } satisfies KeyringReadResult;
-    }
     return yield* Effect.try({
       try: () => parseKeyringPassword(store.readPassword(keyringService, keyringAccount)),
       catch: (cause) => new KeyringOperationError({ cause }),
@@ -317,12 +311,6 @@ export function parseKeyringPassword(password: string | null): KeyringReadResult
 function writeKeyringMasterKey(key: Uint8Array): Effect.Effect<KeyringWriteResult> {
   return Effect.gen(function* () {
     const store = yield* getKeyringStore();
-    if (store === null) {
-      return {
-        kind: "unavailable",
-        message: "OS keyring backend is not available",
-      } satisfies KeyringWriteResult;
-    }
     return yield* Effect.try({
       try: () => {
         store.writePassword(keyringService, keyringAccount, Encoding.encodeBase64(key));
