@@ -8,27 +8,18 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import { vi } from "vite-plus/test";
 
 import { Environment } from "../environment/service.ts";
 import { decryptEnvironment, encryptEnvironment } from "./codec.ts";
 import { layer as T3ConfigLive } from "./layer.ts";
 import { layer as T3CredentialCryptoLive } from "./credential.ts";
 import { layerWeb as T3CredentialCipherWebLive } from "./credential-cipher-web.ts";
+import { unavailableKeystoreFactoryLayer } from "./keystore-test.ts";
 import { migrateV1FileToEncrypted } from "./migration.ts";
 import { StoredConfigV1FileJson, StoredConfigV2FileJson } from "./schema.ts";
 import { T3ConfigSelection } from "./selection.ts";
 import { T3ConfigSelectionLive } from "./selection-layer.ts";
 import { T3Config } from "./service.ts";
-
-vi.mock("./keyring.ts", async (importOriginal) => {
-  const EffectModule = await import("effect/Effect");
-  const actual = await importOriginal<typeof import("./keyring.ts")>();
-  return {
-    ...actual,
-    getKeyringStore: () => EffectModule.succeed(undefined),
-  };
-});
 
 function makeEnvironmentLayer(homeDir: string, env: Record<string, string> = {}) {
   return Layer.succeed(Environment)({
@@ -43,7 +34,12 @@ function makeEnvironmentLayer(homeDir: string, env: Record<string, string> = {})
 function makeCredentialCryptoLayer(homeDir: string) {
   return T3CredentialCryptoLive.pipe(
     Layer.provide(
-      Layer.mergeAll(NodeServices.layer, T3CredentialCipherWebLive, makeEnvironmentLayer(homeDir)),
+      Layer.mergeAll(
+        NodeServices.layer,
+        T3CredentialCipherWebLive,
+        unavailableKeystoreFactoryLayer,
+        makeEnvironmentLayer(homeDir),
+      ),
     ),
   );
 }
@@ -66,7 +62,14 @@ function makeConfigLayer(
         });
   return T3ConfigLive.pipe(
     Layer.provide(T3CredentialCryptoLive),
-    Layer.provide(Layer.mergeAll(platformLayer, selectionLayer, T3CredentialCipherWebLive)),
+    Layer.provide(
+      Layer.mergeAll(
+        platformLayer,
+        selectionLayer,
+        T3CredentialCipherWebLive,
+        unavailableKeystoreFactoryLayer,
+      ),
+    ),
   );
 }
 

@@ -15,6 +15,9 @@ export {
 export { T3CredentialCipher } from "./credential-cipher.ts";
 export { layerNode as T3CredentialCipherNodeLive } from "./credential-cipher-node.ts";
 export { layerWeb as T3CredentialCipherWebLive } from "./credential-cipher-web.ts";
+export { T3MasterKeyKeystoreFactory } from "./keystore.ts";
+export type { MasterKeyKeystore, MasterKeyReadResult } from "./keystore.ts";
+export { layerNode as T3MasterKeyKeystoreFactoryNodeLive } from "./keystore-keyring-node.ts";
 export { T3ConfigSelection } from "./selection.ts";
 export { T3ConfigSelectionLive } from "./selection-layer.ts";
 export { resolveConfigFilePath, resolveKeyFilePath, resolveT3cliConfigDir } from "./paths.ts";

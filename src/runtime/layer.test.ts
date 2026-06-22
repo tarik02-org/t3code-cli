@@ -7,24 +7,15 @@ import * as Ref from "effect/Ref";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { Command } from "effect/unstable/cli";
-import { vi } from "vite-plus/test";
 
 import { T3CliConfigSelectionLive } from "../cli/selection-layer.ts";
 import { layerNode as T3CredentialCipherNodeLive } from "../config/credential-cipher-node.ts";
+import { unavailableKeystoreFactoryLayer } from "../config/keystore-test.ts";
 import { cliEnvironmentSetting } from "../cli/environment-flag.ts";
 import { Environment } from "../environment/service.ts";
 import type { ResolvedConfig } from "../config/types.ts";
 import { T3Config } from "../config/service.ts";
 import { BaseAppLayer } from "./layer.ts";
-
-vi.mock("../config/keyring.ts", async (importOriginal) => {
-  const EffectModule = await import("effect/Effect");
-  const actual = await importOriginal<typeof import("../config/keyring.ts")>();
-  return {
-    ...actual,
-    getKeyringStore: () => EffectModule.succeed(undefined),
-  };
-});
 
 function makeCliAppLayer(homeDir: string) {
   const environmentLayer = Layer.succeed(Environment)({
@@ -37,6 +28,7 @@ function makeCliAppLayer(homeDir: string) {
   return BaseAppLayer.pipe(
     Layer.provideMerge(T3CliConfigSelectionLive),
     Layer.provide(T3CredentialCipherNodeLive),
+    Layer.provide(unavailableKeystoreFactoryLayer),
     Layer.provide(Layer.mergeAll(NodeServices.layer, environmentLayer)),
   );
 }

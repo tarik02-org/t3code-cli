@@ -7,25 +7,20 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import { expect, vi } from "vite-plus/test";
+import { expect } from "vite-plus/test";
 
 import { Environment } from "../environment/service.ts";
-import { make, parseKeyringPassword, shouldFallbackToKeyFile } from "./credential.ts";
+import { make } from "./credential.ts";
 import { layerWeb as T3CredentialCipherWebLive } from "./credential-cipher-web.ts";
-
-vi.mock("./keyring.ts", async (importOriginal) => {
-  const EffectModule = await import("effect/Effect");
-  const actual = await importOriginal<typeof import("./keyring.ts")>();
-  return {
-    ...actual,
-    getKeyringStore: () => EffectModule.succeed(undefined),
-  };
-});
+import { parseKeyringPassword } from "./keystore-keyring-node.ts";
+import { shouldUseFileKeystoreForRead } from "./keystore.ts";
+import { unavailableKeystoreFactoryLayer } from "./keystore-test.ts";
 
 function makeCredentialLayer(homeDir: string) {
   return Layer.mergeAll(
     NodeServices.layer,
     T3CredentialCipherWebLive,
+    unavailableKeystoreFactoryLayer,
     Layer.succeed(Environment)({
       cwd: homeDir,
       homeDir,
@@ -40,7 +35,7 @@ describe("keyring fallback", () => {
   it("treats invalid stored keyring values as corrupt", () => {
     const result = parseKeyringPassword("not-a-valid-key");
     assert.equal(result.kind, "corrupt");
-    expect(shouldFallbackToKeyFile(result)).toBe(false);
+    expect(shouldUseFileKeystoreForRead(result)).toBe(false);
   });
 
   it.effect("falls back to key file when keyring backend is unavailable", () =>

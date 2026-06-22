@@ -27,6 +27,14 @@ export class CredentialCipherError extends Schema.TaggedErrorClass<CredentialCip
   },
 ) {}
 
+export class KeystoreUnavailableError extends Schema.TaggedErrorClass<KeystoreUnavailableError>()(
+  "KeystoreUnavailableError",
+  {
+    reason: Schema.Literals(["module-not-found"]),
+    cause: Schema.Defect(),
+  },
+) {}
+
 export type ConfigServiceError = ConfigError | UrlError;
 
 export function configErrorFromUrl(error: UrlError) {

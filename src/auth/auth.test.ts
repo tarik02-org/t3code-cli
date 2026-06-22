@@ -8,7 +8,6 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import { vi } from "vite-plus/test";
 
 import { T3LocalAuth } from "./local.ts";
 import { T3AuthPairing } from "./pairing.ts";
@@ -18,18 +17,10 @@ import { T3AuthTransport } from "./transport.ts";
 import { layer as T3ConfigLive } from "../config/layer.ts";
 import { layer as T3CredentialCryptoLive } from "../config/credential.ts";
 import { layerWeb as T3CredentialCipherWebLive } from "../config/credential-cipher-web.ts";
+import { unavailableKeystoreFactoryLayer } from "../config/keystore-test.ts";
 import { StoredConfigV2FileJson } from "../config/schema.ts";
 import { Environment } from "../environment/service.ts";
 import { T3ConfigSelection } from "../config/selection.ts";
-
-vi.mock("../config/keyring.ts", async (importOriginal) => {
-  const EffectModule = await import("effect/Effect");
-  const actual = await importOriginal<typeof import("../config/keyring.ts")>();
-  return {
-    ...actual,
-    getKeyringStore: () => EffectModule.succeed(undefined),
-  };
-});
 
 function makeAuthLayer(homeDir: string) {
   const environmentLayer = Layer.succeed(Environment)({
@@ -46,6 +37,7 @@ function makeAuthLayer(homeDir: string) {
       Layer.mergeAll(
         platformLayer,
         T3CredentialCipherWebLive,
+        unavailableKeystoreFactoryLayer,
         Layer.succeed(T3ConfigSelection)({
           getSelectedEnvironment: () => Effect.succeed(undefined),
         }),

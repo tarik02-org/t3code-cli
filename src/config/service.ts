@@ -2,13 +2,7 @@ import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 
 import type { ConfigError, ConfigServiceError } from "./error.ts";
-import type {
-  EncryptedConfig,
-  EncryptedToken,
-  EnvironmentSummary,
-  ResolvedConfig,
-  UpsertEnvironmentInput,
-} from "./types.ts";
+import type { EnvironmentSummary, ResolvedConfig, UpsertEnvironmentInput } from "./types.ts";
 
 export class T3Config extends Context.Service<
   T3Config,
