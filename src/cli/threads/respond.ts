@@ -66,7 +66,7 @@ export const respondThreadCommand = Command.make(
         return yield* output.printJson(result);
       }
       return yield* output.printInfo(
-        `user input submitted: ${result.requestId}\nsequence: ${result.dispatch.sequence}`,
+        `user input submitted: ${result.requestId} (sequence ${result.dispatch.sequence})`,
       );
     }),
 ).pipe(Command.withDescription("respond to a pending user-input request"));

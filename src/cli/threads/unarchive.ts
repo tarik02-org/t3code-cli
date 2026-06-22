@@ -40,7 +40,7 @@ export const unarchiveThreadCommand = Command.make(
         return yield* output.printJson(dispatch);
       }
       return yield* output.printInfo(
-        `thread unarchived: ${threadId}\nsequence: ${dispatch.sequence}`,
+        `thread unarchived: ${threadId} (sequence ${dispatch.sequence})`,
       );
     }),
 ).pipe(Command.withDescription("unarchive thread"));

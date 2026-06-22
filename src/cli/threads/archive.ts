@@ -49,7 +49,7 @@ export const archiveThreadCommand = Command.make(
         return yield* output.printJson(dispatch);
       }
       return yield* output.printInfo(
-        `thread archived: ${threadId}\nsequence: ${dispatch.sequence}`,
+        `thread archived: ${threadId} (sequence ${dispatch.sequence})`,
       );
     }),
 ).pipe(Command.withDescription("archive thread"));
