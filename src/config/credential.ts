@@ -10,6 +10,7 @@ import {
   T3CredentialCipher,
   credentialCipherNonceByteLength,
 } from "./credential-cipher-service.ts";
+import { Environment } from "../environment/service.ts";
 import {
   T3CredentialCrypto,
   type CredentialDecryptInput,
@@ -44,9 +45,13 @@ export function shouldFallbackToKeyFile(result: KeyringReadResult) {
 export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const environment = yield* Environment;
   const cryptoService = yield* Crypto.Crypto;
   const cipher = yield* T3CredentialCipher;
-  const keyFilePath = yield* resolveKeyFilePath();
+  const keyFilePath = yield* resolveKeyFilePath().pipe(
+    Effect.provideService(Path.Path, path),
+    Effect.provideService(Environment, environment),
+  );
 
   const readKeyFileMasterKey = Effect.fn("readKeyFileMasterKey")(function* (filePath: string) {
     const raw = yield* fs.readFileString(filePath).pipe(
@@ -130,7 +135,9 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
         return fileKey;
       }
     }
-    const generated = yield* secureRandomBytes(cryptoService, masterKeyByteLength);
+    const generated = yield* secureRandomBytes(masterKeyByteLength).pipe(
+      Effect.provideService(Crypto.Crypto, cryptoService),
+    );
     const writeResult = yield* writeKeyringMasterKey(generated);
     if (writeResult.kind === "stored") {
       return generated;
@@ -143,7 +150,9 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
     input: CredentialEncryptInput,
   ) {
     const masterKey = yield* getMasterKey();
-    const nonce = yield* secureRandomBytes(cryptoService, credentialCipherNonceByteLength);
+    const nonce = yield* secureRandomBytes(credentialCipherNonceByteLength).pipe(
+      Effect.provideService(Crypto.Crypto, cryptoService),
+    );
     const encrypted = yield* cipher
       .encrypt({
         key: masterKey,
@@ -224,8 +233,9 @@ function decodeUtf8(value: Uint8Array) {
   return textDecoder.decode(value);
 }
 
-function secureRandomBytes(cryptoService: Crypto.Crypto, size: number) {
-  return cryptoService.randomBytes(size).pipe(
+const secureRandomBytes = Effect.fn("secureRandomBytes")(function* (size: number) {
+  const cryptoService = yield* Crypto.Crypto;
+  return yield* cryptoService.randomBytes(size).pipe(
     Effect.mapError(
       (error) =>
         new ConfigError({
@@ -234,7 +244,7 @@ function secureRandomBytes(cryptoService: Crypto.Crypto, size: number) {
         }),
     ),
   );
-}
+});
 
 function decodeBase64Bytes(value: string) {
   return Effect.fromResult(Encoding.decodeBase64(value));

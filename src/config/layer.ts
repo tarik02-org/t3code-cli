@@ -8,7 +8,6 @@ import { decryptEnvironment, encryptEnvironment } from "./codec.ts";
 import { T3CredentialCrypto } from "./credential-service.ts";
 import { validateEnvironmentName } from "./environment-name.ts";
 import { ConfigError, UrlError } from "./error.ts";
-import { resolveConfigFilePath } from "./paths.ts";
 import { readEncryptedConfigFile, writeEncryptedConfigFile } from "./persist.ts";
 import {
   buildResolvedConfigFromEnv,
@@ -23,15 +22,22 @@ import { T3Config, type UpsertEnvironmentInput } from "./service.ts";
 import { normalizeHttpBaseUrl } from "./url.ts";
 
 export const makeT3Config = Effect.fn("makeT3Config")(function* () {
+  const environment = yield* Environment;
+  const configSelection = yield* T3ConfigSelection;
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const environment = yield* Environment;
   const credentialCrypto = yield* T3CredentialCrypto;
-  const configSelection = yield* T3ConfigSelection;
-  const configFilePath = yield* resolveConfigFilePath();
+
+  const withConfigServices = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    effect.pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, path),
+      Effect.provideService(Environment, environment),
+      Effect.provideService(T3CredentialCrypto, credentialCrypto),
+    );
 
   const readEncrypted = Effect.fn("T3ConfigLive.readEncrypted")(function* () {
-    return yield* readEncryptedConfigFile(fs, path, configFilePath, credentialCrypto);
+    return yield* withConfigServices(readEncryptedConfigFile());
   });
 
   const hasEnvironment = Effect.fn("T3ConfigLive.hasEnvironment")(function* (name: string) {
@@ -86,25 +92,29 @@ export const makeT3Config = Effect.fn("makeT3Config")(function* () {
       Effect.mapError(mapUrlToConfigError),
     );
     const encrypted = yield* readEncrypted();
-    const token = yield* encryptEnvironment(credentialCrypto, {
-      environmentName: input.name,
-      url: normalizedUrl,
-      local: input.local,
-      token: input.token,
-    });
+    const token = yield* withConfigServices(
+      encryptEnvironment({
+        environmentName: input.name,
+        url: normalizedUrl,
+        local: input.local,
+        token: input.token,
+      }),
+    );
     const defaultName = resolveDefaultForUpsert(encrypted, input.name, input.makeDefault);
-    yield* writeEncryptedConfigFile(fs, path, configFilePath, {
-      version: 2,
-      ...(defaultName !== undefined ? { default: defaultName } : {}),
-      environments: {
-        ...encrypted.environments,
-        [input.name]: {
-          url: normalizedUrl,
-          local: input.local,
-          token,
+    yield* withConfigServices(
+      writeEncryptedConfigFile({
+        version: 2,
+        ...(defaultName !== undefined ? { default: defaultName } : {}),
+        environments: {
+          ...encrypted.environments,
+          [input.name]: {
+            url: normalizedUrl,
+            local: input.local,
+            token,
+          },
         },
-      },
-    });
+      }),
+    );
   });
 
   const setDefaultEnvironment = Effect.fn("T3ConfigLive.setDefaultEnvironment")(function* (
@@ -115,10 +125,12 @@ export const makeT3Config = Effect.fn("makeT3Config")(function* () {
     if (encrypted.environments[name] === undefined) {
       return yield* Effect.fail(new ConfigError({ message: `environment not found: ${name}` }));
     }
-    yield* writeEncryptedConfigFile(fs, path, configFilePath, {
-      ...encrypted,
-      default: name,
-    });
+    yield* withConfigServices(
+      writeEncryptedConfigFile({
+        ...encrypted,
+        default: name,
+      }),
+    );
     return yield* Effect.void;
   });
 
@@ -130,11 +142,13 @@ export const makeT3Config = Effect.fn("makeT3Config")(function* () {
     }
     const { [name]: _removed, ...environments } = encrypted.environments;
     const defaultName = encrypted.default === name ? undefined : encrypted.default;
-    yield* writeEncryptedConfigFile(fs, path, configFilePath, {
-      version: 2,
-      ...(defaultName !== undefined ? { default: defaultName } : {}),
-      environments,
-    });
+    yield* withConfigServices(
+      writeEncryptedConfigFile({
+        version: 2,
+        ...(defaultName !== undefined ? { default: defaultName } : {}),
+        environments,
+      }),
+    );
     return yield* Effect.void;
   });
 
@@ -180,12 +194,14 @@ export const makeT3Config = Effect.fn("makeT3Config")(function* () {
     }
 
     const selectedEnvironment = encrypted.environments[selectedName];
-    const token = yield* decryptEnvironment(credentialCrypto, {
-      environmentName: selectedName,
-      url: selectedEnvironment.url,
-      local: selectedEnvironment.local,
-      token: selectedEnvironment.token,
-    });
+    const token = yield* withConfigServices(
+      decryptEnvironment({
+        environmentName: selectedName,
+        url: selectedEnvironment.url,
+        local: selectedEnvironment.local,
+        token: selectedEnvironment.token,
+      }),
+    );
     return yield* buildResolvedConfigFromStored({
       selectedName,
       token,

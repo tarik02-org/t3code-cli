@@ -11,8 +11,8 @@ import { assert, describe, it } from "@effect/vitest";
 import { vi } from "vite-plus/test";
 
 import { Environment } from "../environment/service.ts";
-import { decryptEnvironment } from "./codec.ts";
-import { makeT3CredentialCrypto, T3CredentialCryptoLive } from "./credential.ts";
+import { decryptEnvironment, encryptEnvironment } from "./codec.ts";
+import { T3CredentialCryptoLive } from "./credential.ts";
 import { T3CredentialCipherWebLive } from "./credential-cipher-web.ts";
 import { migrateV1FileToEncrypted } from "./migration.ts";
 import { T3ConfigLive } from "./layer.ts";
@@ -45,6 +45,14 @@ function makeEnvironmentLayer(homeDir: string, env: Record<string, string> = {})
   });
 }
 
+function makeCredentialCryptoLayer(homeDir: string) {
+  return T3CredentialCryptoLive.pipe(
+    Layer.provide(
+      Layer.mergeAll(NodeServices.layer, T3CredentialCipherWebLive, makeEnvironmentLayer(homeDir)),
+    ),
+  );
+}
+
 function makeConfigLayer(
   homeDir: string,
   input: {
@@ -75,29 +83,20 @@ describe("config persistence", () => {
     }).pipe(
       Effect.flatMap((homeDir) =>
         Effect.gen(function* () {
-          const credentialCrypto = yield* makeT3CredentialCrypto().pipe(
-            Effect.provide(
-              Layer.mergeAll(
-                NodeServices.layer,
-                T3CredentialCipherWebLive,
-                makeEnvironmentLayer(homeDir),
-              ),
-            ),
-          );
-          const migrated = yield* migrateV1FileToEncrypted(credentialCrypto, {
+          const migrated = yield* migrateV1FileToEncrypted({
             url: "https://app.example.com",
             token: "secret-token",
             local: false,
           });
           assert.equal(migrated.default, "app.example.com");
-          const token = yield* decryptEnvironment(credentialCrypto, {
+          const token = yield* decryptEnvironment({
             environmentName: "app.example.com",
             url: "https://app.example.com",
             local: false,
             token: migrated.environments["app.example.com"]!.token,
           });
           assert.equal(token, "secret-token");
-        }),
+        }).pipe(Effect.provide(makeCredentialCryptoLayer(homeDir))),
       ),
       Effect.provide(NodeServices.layer),
       Effect.scoped,
@@ -455,29 +454,20 @@ describe("config persistence", () => {
     }).pipe(
       Effect.flatMap((homeDir) =>
         Effect.gen(function* () {
-          const credentialCrypto = yield* makeT3CredentialCrypto().pipe(
-            Effect.provide(
-              Layer.mergeAll(
-                NodeServices.layer,
-                T3CredentialCipherWebLive,
-                makeEnvironmentLayer(homeDir),
-              ),
-            ),
-          );
-          const token = yield* credentialCrypto.encrypt({
+          const token = yield* encryptEnvironment({
             environmentName: "home",
             url: "https://home.example",
             local: false,
             token: "secret",
           });
-          const result = yield* decryptEnvironment(credentialCrypto, {
+          const result = yield* decryptEnvironment({
             environmentName: "home",
             url: "https://tampered.example",
             local: false,
             token,
           }).pipe(Effect.exit);
           assert.equal(Exit.isFailure(result), true);
-        }),
+        }).pipe(Effect.provide(makeCredentialCryptoLayer(homeDir))),
       ),
       Effect.provide(NodeServices.layer),
       Effect.scoped,
