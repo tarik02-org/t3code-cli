@@ -4,7 +4,6 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 
 import { Environment } from "../environment/service.ts";
-import { decryptEnvironment, encryptEnvironment } from "./codec.ts";
 import { T3CredentialCrypto } from "./credential.ts";
 import { ConfigError, configErrorFromUrl } from "./error.ts";
 import { validateEnvironmentName } from "./environment-name.ts";
@@ -92,14 +91,12 @@ export const make = Effect.fn("makeT3Config")(function* () {
       Effect.mapError(configErrorFromUrl),
     );
     const encrypted = yield* readEncrypted();
-    const token = yield* run(
-      encryptEnvironment({
-        environmentName: input.name,
-        url: normalizedUrl,
-        local: input.local,
-        token: input.token,
-      }),
-    );
+    const token = yield* credentialCrypto.encrypt({
+      environmentName: input.name,
+      url: normalizedUrl,
+      local: input.local,
+      token: input.token,
+    });
     const defaultName = resolveDefaultForUpsert(encrypted, input.name, input.makeDefault);
     yield* run(
       writeEncryptedConfigFile({
@@ -194,14 +191,12 @@ export const make = Effect.fn("makeT3Config")(function* () {
     }
 
     const selectedEnvironment = encrypted.environments[selectedName];
-    const token = yield* run(
-      decryptEnvironment({
-        environmentName: selectedName,
-        url: selectedEnvironment.url,
-        local: selectedEnvironment.local,
-        token: selectedEnvironment.token,
-      }),
-    );
+    const token = yield* credentialCrypto.decrypt({
+      environmentName: selectedName,
+      url: selectedEnvironment.url,
+      local: selectedEnvironment.local,
+      token: selectedEnvironment.token,
+    });
     return yield* buildResolvedConfigFromStored({
       selectedName,
       token,

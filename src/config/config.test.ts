@@ -10,9 +10,8 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 
 import { Environment } from "../environment/service.ts";
-import { decryptEnvironment, encryptEnvironment } from "./codec.ts";
+import { T3CredentialCrypto, layer as T3CredentialCryptoLive } from "./credential.ts";
 import { layer as T3ConfigLive } from "./layer.ts";
-import { layer as T3CredentialCryptoLive } from "./credential.ts";
 import { layerWeb as T3CredentialCipherWebLive } from "./credential-cipher-web.ts";
 import { unavailableKeystoreFactoryLayer } from "./keystore-test.ts";
 import { migrateV1FileToEncrypted } from "./migration.ts";
@@ -87,7 +86,8 @@ describe("config persistence", () => {
             local: false,
           });
           assert.equal(migrated.default, "app.example.com");
-          const token = yield* decryptEnvironment({
+          const crypto = yield* T3CredentialCrypto;
+          const token = yield* crypto.decrypt({
             environmentName: "app.example.com",
             url: "https://app.example.com",
             local: false,
@@ -452,18 +452,21 @@ describe("config persistence", () => {
     }).pipe(
       Effect.flatMap((homeDir) =>
         Effect.gen(function* () {
-          const token = yield* encryptEnvironment({
+          const crypto = yield* T3CredentialCrypto;
+          const token = yield* crypto.encrypt({
             environmentName: "home",
             url: "https://home.example",
             local: false,
             token: "secret",
           });
-          const result = yield* decryptEnvironment({
-            environmentName: "home",
-            url: "https://tampered.example",
-            local: false,
-            token,
-          }).pipe(Effect.exit);
+          const result = yield* crypto
+            .decrypt({
+              environmentName: "home",
+              url: "https://tampered.example",
+              local: false,
+              token,
+            })
+            .pipe(Effect.exit);
           assert.equal(Exit.isFailure(result), true);
         }).pipe(Effect.provide(makeCredentialCryptoLayer(homeDir))),
       ),

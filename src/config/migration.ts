@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
-import { encryptEnvironment } from "./codec.ts";
+import { T3CredentialCrypto } from "./credential.ts";
 import { migrateV1EnvironmentName, validateEnvironmentName } from "./environment-name.ts";
 import { ConfigError, configErrorFromUrl } from "./error.ts";
 import {
@@ -60,7 +60,8 @@ export const migrateV1FileToEncrypted = Effect.fn("migrateV1FileToEncrypted")(fu
     ),
   );
   const normalizedUrl = yield* normalizeHttpBaseUrl(config.url);
-  const token = yield* encryptEnvironment({
+  const crypto = yield* T3CredentialCrypto;
+  const token = yield* crypto.encrypt({
     environmentName: name,
     url: normalizedUrl,
     local: config.local ?? false,
