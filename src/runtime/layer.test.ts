@@ -16,9 +16,12 @@ import type { ResolvedConfig } from "../config/types.ts";
 import { T3Config } from "../config/service.ts";
 import { BaseAppLayer } from "./layer.ts";
 
-vi.mock("../config/keyring.ts", () => ({
-  getKeyringStore: () => null,
-}));
+vi.mock("../config/keyring.ts", async () => {
+  const EffectModule = await import("effect/Effect");
+  return {
+    getKeyringStore: () => EffectModule.succeed(null),
+  };
+});
 
 function makeCliAppLayer(homeDir: string) {
   const environmentLayer = Layer.succeed(Environment)({

@@ -16,9 +16,12 @@ import {
   shouldFallbackToKeyFile,
 } from "./credential.ts";
 
-vi.mock("./keyring.ts", () => ({
-  getKeyringStore: () => null,
-}));
+vi.mock("./keyring.ts", async () => {
+  const EffectModule = await import("effect/Effect");
+  return {
+    getKeyringStore: () => EffectModule.succeed(null),
+  };
+});
 
 function makeCredentialLayer(homeDir: string) {
   return Layer.mergeAll(

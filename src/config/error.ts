@@ -5,6 +5,7 @@ import { PlatformError } from "effect/PlatformError";
 const ConfigErrorCauseSchema = Schema.Union([
   Schema.instanceOf(PlatformError),
   Schema.instanceOf(Schema.SchemaError),
+  Schema.Defect(),
 ]);
 
 export class UrlError extends Schema.TaggedErrorClass<UrlError>()("UrlError", {
@@ -18,4 +19,15 @@ export class ConfigError extends Schema.TaggedErrorClass<ConfigError>()("ConfigE
   cause: Schema.optionalKey(ConfigErrorCauseSchema),
 }) {}
 
+export class CredentialDecryptError extends Schema.TaggedErrorClass<CredentialDecryptError>()(
+  "CredentialDecryptError",
+  {
+    cause: Schema.Defect(),
+  },
+) {}
+
 export type ConfigServiceError = ConfigError | UrlError;
+
+export function isPlatformNotFoundError(error: PlatformError) {
+  return error.reason["_tag"] === "NotFound";
+}

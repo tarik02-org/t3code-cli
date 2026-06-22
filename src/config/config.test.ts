@@ -5,6 +5,7 @@ import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { vi } from "vite-plus/test";
@@ -14,13 +15,17 @@ import { decryptEnvironment } from "./codec.ts";
 import { makeT3CredentialCrypto, T3CredentialCryptoLive } from "./credential.ts";
 import { migrateV1FileToEncrypted } from "./migration.ts";
 import { T3ConfigLive } from "./layer.ts";
+import { StoredConfigV1FileJson, StoredConfigV2FileJson } from "./schema.ts";
 import { T3ConfigSelection } from "./selection.ts";
 import { T3ConfigSelectionLive } from "./selection-layer.ts";
 import { T3Config } from "./service.ts";
 
-vi.mock("./keyring.ts", () => ({
-  getKeyringStore: () => null,
-}));
+vi.mock("./keyring.ts", async () => {
+  const EffectModule = await import("effect/Effect");
+  return {
+    getKeyringStore: () => EffectModule.succeed(null),
+  };
+});
 
 function makeEnvironmentLayer(homeDir: string, env: Record<string, string> = {}) {
   return Layer.succeed(Environment)({
@@ -97,23 +102,23 @@ describe("config persistence", () => {
           const secretToken = "legacy-plaintext-token";
           const configPath = path.join(homeDir, ".config", "t3cli", "config.json");
           yield* fs.makeDirectory(path.dirname(configPath), { recursive: true });
-          yield* fs.writeFileString(
-            configPath,
-            `${JSON.stringify({
-              url: "https://home.example",
-              token: secretToken,
-              local: false,
-            })}\n`,
-            { mode: 0o600 },
-          );
+          const legacyConfig = yield* Schema.encodeEffect(StoredConfigV1FileJson)({
+            url: "https://home.example",
+            token: secretToken,
+            local: false,
+          });
+          yield* fs.writeFileString(configPath, `${legacyConfig}\n`, { mode: 0o600 });
           yield* Effect.gen(function* () {
             const config = yield* T3Config;
             yield* config.listEnvironments();
           }).pipe(Effect.provide(makeConfigLayer(homeDir)));
           const raw = yield* fs.readFileString(configPath);
           assert.equal(raw.includes(secretToken), false);
-          assert.equal(raw.includes('"version": 2'), true);
-          assert.equal(raw.includes('"kind": "encrypted"'), true);
+          const persisted = yield* Schema.decodeUnknownEffect(StoredConfigV2FileJson)(raw);
+          assert.equal(persisted.version, 2);
+          const environment = Object.values(persisted.environments)[0];
+          assert.isDefined(environment);
+          assert.equal(environment.token.kind, "encrypted");
         }),
       ),
       Effect.provide(NodeServices.layer),
@@ -218,7 +223,8 @@ describe("config persistence", () => {
           const configPath = path.join(homeDir, ".config", "t3cli", "config.json");
           const raw = yield* fs.readFileString(configPath);
           assert.equal(raw.includes(secretToken), false);
-          assert.equal(raw.includes('"kind": "encrypted"'), true);
+          const persisted = yield* Schema.decodeUnknownEffect(StoredConfigV2FileJson)(raw);
+          assert.equal(persisted.environments.home?.token.kind, "encrypted");
         }),
       ),
       Effect.provide(NodeServices.layer),
@@ -405,11 +411,11 @@ describe("config persistence", () => {
         Effect.gen(function* () {
           const configPath = path.join(homeDir, ".config", "t3cli", "config.json");
           yield* fs.makeDirectory(path.dirname(configPath), { recursive: true });
-          yield* fs.writeFileString(
-            configPath,
-            `${JSON.stringify({ version: 2, environments: {} })}\n`,
-            { mode: 0o644 },
-          );
+          const emptyConfig = yield* Schema.encodeEffect(StoredConfigV2FileJson)({
+            version: 2,
+            environments: {},
+          });
+          yield* fs.writeFileString(configPath, `${emptyConfig}\n`, { mode: 0o644 });
           yield* Effect.gen(function* () {
             const config = yield* T3Config;
             yield* config.upsertEnvironment({

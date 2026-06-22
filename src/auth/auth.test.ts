@@ -5,6 +5,7 @@ import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { vi } from "vite-plus/test";
@@ -16,12 +17,16 @@ import { T3Auth } from "./service.ts";
 import { T3AuthTransport } from "./transport.ts";
 import { T3CredentialCryptoLive } from "../config/credential.ts";
 import { T3ConfigLive } from "../config/layer.ts";
+import { StoredConfigV2FileJson } from "../config/schema.ts";
 import { Environment } from "../environment/service.ts";
 import { T3ConfigSelection } from "../config/selection.ts";
 
-vi.mock("../config/keyring.ts", () => ({
-  getKeyringStore: () => null,
-}));
+vi.mock("../config/keyring.ts", async () => {
+  const EffectModule = await import("effect/Effect");
+  return {
+    getKeyringStore: () => EffectModule.succeed(null),
+  };
+});
 
 function makeAuthLayer(homeDir: string) {
   const environmentLayer = Layer.succeed(Environment)({
@@ -198,11 +203,23 @@ describe("T3Auth persistence", () => {
           }).pipe(Effect.provide(makeAuthLayer(homeDir)));
 
           const raw = yield* fs.readFileString(configPath);
-          const parsed: {
-            environments: Record<string, { token: { tag: string } }>;
-          } = JSON.parse(raw);
-          parsed.environments.home!.token.tag = "AAAAAAAAAAAAAAAAAAAAAA==";
-          yield* fs.writeFileString(configPath, `${JSON.stringify(parsed, null, 2)}\n`, {
+          const parsed = yield* Schema.decodeUnknownEffect(StoredConfigV2FileJson)(raw);
+          const homeEnvironment = parsed.environments.home;
+          assert.isDefined(homeEnvironment);
+          const corrupted = yield* Schema.encodeEffect(StoredConfigV2FileJson)({
+            ...parsed,
+            environments: {
+              ...parsed.environments,
+              home: {
+                ...homeEnvironment,
+                token: {
+                  ...homeEnvironment.token,
+                  tag: "AAAAAAAAAAAAAAAAAAAAAA==",
+                },
+              },
+            },
+          });
+          yield* fs.writeFileString(configPath, `${corrupted}\n`, {
             mode: 0o600,
           });
 

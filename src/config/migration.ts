@@ -5,7 +5,7 @@ import * as Schema from "effect/Schema";
 import { encryptEnvironment } from "./codec.ts";
 import type { CredentialCrypto } from "./credential-service.ts";
 import { migrateV1EnvironmentName, validateEnvironmentName } from "./environment-name.ts";
-import { ConfigError, UrlError } from "./error.ts";
+import { ConfigError } from "./error.ts";
 import {
   StoredConfigV1FileSchema,
   StoredConfigV2FileSchema,
@@ -30,7 +30,14 @@ export function readEncryptedConfigFromValue(crypto: CredentialCrypto, value: un
     const v1 = yield* Schema.decodeUnknownEffect(StoredConfigV1FileSchema)(value);
     const migrated = yield* migrateV1FileToEncrypted(crypto, v1);
     return { config: migrated, migratedFromV1: true as const };
-  }).pipe(Effect.mapError((error) => mapMigrationError(error)));
+  }).pipe(
+    Effect.catchTags({
+      UrlError: (error) =>
+        Effect.fail(new ConfigError({ message: `failed to read config: ${error.message}` })),
+      SchemaError: (error) =>
+        Effect.fail(new ConfigError({ message: "failed to read config", cause: error })),
+    }),
+  );
 }
 
 export function migrateV1FileToEncrypted(crypto: CredentialCrypto, config: StoredConfigV1File) {
@@ -70,14 +77,4 @@ export function migrateV1FileToEncrypted(crypto: CredentialCrypto, config: Store
       },
     } satisfies EncryptedConfig;
   });
-}
-
-function mapMigrationError(error: ConfigError | Schema.SchemaError | UrlError) {
-  if (error instanceof ConfigError) {
-    return error;
-  }
-  if (error instanceof UrlError) {
-    return new ConfigError({ message: `failed to read config: ${error.message}` });
-  }
-  return new ConfigError({ message: "failed to read config", cause: error });
 }

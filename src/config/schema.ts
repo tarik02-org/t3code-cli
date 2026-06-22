@@ -31,3 +31,7 @@ export type EncryptedToken = Schema.Schema.Type<typeof EncryptedTokenSchema>;
 export type StoredEnvironmentFile = Schema.Schema.Type<typeof StoredEnvironmentFileSchema>;
 export type StoredConfigV2File = Schema.Schema.Type<typeof StoredConfigV2FileSchema>;
 export type StoredConfigV1File = Schema.Schema.Type<typeof StoredConfigV1FileSchema>;
+
+export const StoredConfigV1FileJson = Schema.fromJsonString(StoredConfigV1FileSchema);
+export const StoredConfigV2FileJson = Schema.fromJsonString(StoredConfigV2FileSchema);
+export const UnknownConfigFileJson = Schema.UnknownFromJsonString;

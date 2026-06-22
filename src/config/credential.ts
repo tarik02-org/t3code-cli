@@ -2,7 +2,6 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Filter from "effect/Filter";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 
@@ -12,9 +11,9 @@ import {
   type CredentialDecryptInput,
   type CredentialEncryptInput,
 } from "./credential-service.ts";
-import { ConfigError } from "./error.ts";
+import { ConfigError, CredentialDecryptError, isPlatformNotFoundError } from "./error.ts";
 import { hardenPrivateFileMode } from "./file-mode.ts";
-import { getKeyringStore } from "./keyring.ts";
+import { getKeyringStore, KeyringOperationError, keyringErrorMessage } from "./keyring.ts";
 import { resolveKeyFilePath } from "./paths.ts";
 
 const configSchemaVersion = 2;
@@ -29,6 +28,10 @@ export type KeyringReadResult =
   | { readonly kind: "corrupt"; readonly message: string }
   | { readonly kind: "unavailable"; readonly message: string };
 
+type KeyringWriteResult =
+  | { readonly kind: "stored" }
+  | { readonly kind: "unavailable"; readonly message: string };
+
 export function shouldFallbackToKeyFile(result: KeyringReadResult) {
   return result.kind === "missing" || result.kind === "unavailable";
 }
@@ -41,12 +44,17 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
 
   const readKeyFileMasterKey = Effect.fn("readKeyFileMasterKey")(function* (filePath: string) {
     const raw = yield* fs.readFileString(filePath).pipe(
-      Effect.catchFilter(Filter.reason("PlatformError", "NotFound"), () =>
-        Effect.succeed(undefined),
-      ),
-      Effect.mapError(
-        (error) => new ConfigError({ message: "failed to read credential key file", cause: error }),
-      ),
+      Effect.catchTags({
+        PlatformError: (error) =>
+          isPlatformNotFoundError(error)
+            ? Effect.succeed(undefined)
+            : Effect.fail(
+                new ConfigError({
+                  message: "failed to read credential key file",
+                  cause: error,
+                }),
+              ),
+      }),
     );
     if (raw === undefined) {
       return undefined;
@@ -64,22 +72,22 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
     filePath: string,
     key: Buffer,
   ) {
-    yield* fs
-      .makeDirectory(path.dirname(filePath), { recursive: true, mode: 0o700 })
-      .pipe(
-        Effect.mapError(
-          (error) =>
+    yield* fs.makeDirectory(path.dirname(filePath), { recursive: true, mode: 0o700 }).pipe(
+      Effect.catchTags({
+        PlatformError: (error) =>
+          Effect.fail(
             new ConfigError({ message: "failed to write credential key file", cause: error }),
-        ),
-      );
-    yield* fs
-      .writeFileString(filePath, `${key.toString("base64")}\n`, { mode: 0o600 })
-      .pipe(
-        Effect.mapError(
-          (error) =>
+          ),
+      }),
+    );
+    yield* fs.writeFileString(filePath, `${key.toString("base64")}\n`, { mode: 0o600 }).pipe(
+      Effect.catchTags({
+        PlatformError: (error) =>
+          Effect.fail(
             new ConfigError({ message: "failed to write credential key file", cause: error }),
-        ),
-      );
+          ),
+      }),
+    );
     yield* hardenPrivateFileMode(fs, filePath, "credential key");
   });
 
@@ -103,8 +111,8 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
       }
     }
     const generated = randomBytes(masterKeyByteLength);
-    const storedInKeyring = yield* writeKeyringMasterKey(generated);
-    if (storedInKeyring) {
+    const writeResult = yield* writeKeyringMasterKey(generated);
+    if (writeResult.kind === "stored") {
       return generated;
     }
     yield* writeKeyFileMasterKey(keyFilePath, generated);
@@ -138,8 +146,18 @@ export const makeT3CredentialCrypto = Effect.fn("makeT3CredentialCrypto")(functi
     const masterKey = yield* getMasterKey();
     return yield* Effect.try({
       try: () => decryptToken(masterKey, input),
-      catch: () => new ConfigError({ message: "failed to decrypt credential token" }),
-    });
+      catch: (cause) => new CredentialDecryptError({ cause }),
+    }).pipe(
+      Effect.catchTags({
+        CredentialDecryptError: (error) =>
+          Effect.fail(
+            new ConfigError({
+              message: "failed to decrypt credential token",
+              cause: error.cause,
+            }),
+          ),
+      }),
+    );
   });
 
   return { encrypt, decrypt };
@@ -170,24 +188,41 @@ function decryptToken(masterKey: Buffer, input: CredentialDecryptInput) {
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
 }
 
-function readKeyringMasterKey() {
-  return Effect.sync((): KeyringReadResult => {
-    const keyring = getKeyringStore();
-    if (keyring === null) {
+function readKeyringMasterKey(): Effect.Effect<KeyringReadResult> {
+  return Effect.gen(function* () {
+    const store = yield* getKeyringStore();
+    if (store === null) {
       return {
         kind: "unavailable",
         message: "OS keyring backend is not available",
-      };
+      } satisfies KeyringReadResult;
     }
-    try {
-      return parseKeyringPassword(keyring.readPassword(keyringService, keyringAccount));
-    } catch (error) {
-      return {
-        kind: "unavailable",
-        message: error instanceof Error ? error.message : "failed to read keyring entry",
-      };
-    }
-  });
+    return yield* Effect.try({
+      try: () => parseKeyringPassword(store.readPassword(keyringService, keyringAccount)),
+      catch: (cause) => new KeyringOperationError({ cause }),
+    }).pipe(
+      Effect.catchTags({
+        KeyringOperationError: (error) =>
+          Effect.succeed({
+            kind: "unavailable",
+            message: keyringErrorMessage(error.cause),
+          } satisfies KeyringReadResult),
+      }),
+    );
+  }).pipe(
+    Effect.catchTags({
+      KeyringModuleLoadError: (error) =>
+        Effect.succeed({
+          kind: "unavailable",
+          message: keyringErrorMessage(error.cause),
+        } satisfies KeyringReadResult),
+      KeyringModuleNotFoundError: (error) =>
+        Effect.succeed({
+          kind: "unavailable",
+          message: keyringErrorMessage(error.cause),
+        } satisfies KeyringReadResult),
+    }),
+  );
 }
 
 export function parseKeyringPassword(password: string | null): KeyringReadResult {
@@ -204,17 +239,42 @@ export function parseKeyringPassword(password: string | null): KeyringReadResult
   return { kind: "present", key };
 }
 
-function writeKeyringMasterKey(key: Buffer) {
-  return Effect.sync(() => {
-    const keyring = getKeyringStore();
-    if (keyring === null) {
-      return false;
+function writeKeyringMasterKey(key: Buffer): Effect.Effect<KeyringWriteResult> {
+  return Effect.gen(function* () {
+    const store = yield* getKeyringStore();
+    if (store === null) {
+      return {
+        kind: "unavailable",
+        message: "OS keyring backend is not available",
+      } satisfies KeyringWriteResult;
     }
-    try {
-      keyring.writePassword(keyringService, keyringAccount, key.toString("base64"));
-      return true;
-    } catch {
-      return false;
-    }
-  });
+    return yield* Effect.try({
+      try: () => {
+        store.writePassword(keyringService, keyringAccount, key.toString("base64"));
+        return { kind: "stored" } as const;
+      },
+      catch: (cause) => new KeyringOperationError({ cause }),
+    }).pipe(
+      Effect.catchTags({
+        KeyringOperationError: (error) =>
+          Effect.succeed({
+            kind: "unavailable",
+            message: keyringErrorMessage(error.cause),
+          } satisfies KeyringWriteResult),
+      }),
+    );
+  }).pipe(
+    Effect.catchTags({
+      KeyringModuleLoadError: (error) =>
+        Effect.succeed({
+          kind: "unavailable",
+          message: keyringErrorMessage(error.cause),
+        } satisfies KeyringWriteResult),
+      KeyringModuleNotFoundError: (error) =>
+        Effect.succeed({
+          kind: "unavailable",
+          message: keyringErrorMessage(error.cause),
+        } satisfies KeyringWriteResult),
+    }),
+  );
 }
