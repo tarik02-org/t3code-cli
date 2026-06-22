@@ -18,11 +18,6 @@ export type {
   SendThreadInput,
   StartThreadInput,
   StartThreadPolicy,
-  T3ApplicationService,
-  T3ModelApplicationService,
-  T3ProjectApplicationService,
-  T3TerminalApplicationService,
-  T3ThreadApplicationService,
   UpdateThreadInput,
   WaitEvent,
 } from "./service.ts";

@@ -4,10 +4,11 @@ import { Command, Flag } from "effect/unstable/cli";
 
 import { formatFlag, threadFlag } from "../flags.ts";
 import { MissingRequestError, MissingThreadError } from "../error.ts";
-import { resolveThreadId } from "../../scope/index.ts";
+import { resolveThreadId } from "../scope/index.ts";
 import { T3Application } from "../../application/service.ts";
-import { Environment } from "../../environment/service.ts";
-import { resolveOutputFormat } from "../output-format.ts";
+import { CliRuntime } from "../../cli/runtime/service.ts";
+import { loadT3CliEnv } from "../../config/env/env.ts";
+import { resolveOutputFormat } from "../format/output.ts";
 import { T3Output } from "../output/service.ts";
 
 const approvalDecisionFlag = Flag.choice("decision", ["accept", "decline", "cancel"] as const).pipe(
@@ -30,11 +31,12 @@ export const approveThreadCommand = Command.make(
   ({ thread, request, decision, format }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
       const threadId = resolveThreadId({
         value: Option.getOrUndefined(thread),
-        env: environment.env,
+        scope: t3CliEnv.scope,
       });
       if (threadId === undefined) {
         return yield* Effect.fail(
@@ -49,7 +51,7 @@ export const approveThreadCommand = Command.make(
           new MissingRequestError({ message: "request id is required: pass --request" }),
         );
       }
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       const result = yield* application.approveThread({ threadId, requestId, decision });
       if (resolvedFormat === "json") {
         return yield* output.printJson(result);

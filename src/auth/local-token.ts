@@ -15,7 +15,8 @@ import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import { Environment } from "../environment/service.ts";
+import { loadT3CliEnv } from "../config/env/env.ts";
+import { CliRuntime } from "../cli/runtime/service.ts";
 import { SqlClientFactory } from "../sql/service.ts";
 import {
   AuthLocalDatabaseError,
@@ -38,7 +39,8 @@ export class T3LocalAuthToken extends Context.Service<
 export const makeT3LocalAuthToken = Effect.fn("makeT3LocalAuthToken")(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const environment = yield* Environment;
+  const cliRuntime = yield* CliRuntime;
+  const t3CliEnv = yield* loadT3CliEnv;
   const crypto = yield* Crypto.Crypto;
   const sqlClientFactory = yield* SqlClientFactory;
 
@@ -100,14 +102,15 @@ export const makeT3LocalAuthToken = Effect.fn("makeT3LocalAuthToken")(function* 
 
   function openAuthDatabase(dbPath: string) {
     return sqlClientFactory.sqliteClient({ filename: dbPath }).pipe(
-      Effect.catchTag("SqlError", (error) =>
-        Effect.fail(
-          new AuthLocalDatabaseError({
-            operation: "connect",
-            message: error.message,
-          }),
-        ),
-      ),
+      Effect.catchTags({
+        SqlError: (error) =>
+          Effect.fail(
+            new AuthLocalDatabaseError({
+              operation: "connect",
+              message: error.message,
+            }),
+          ),
+      }),
     );
   }
 
@@ -157,14 +160,15 @@ export const makeT3LocalAuthToken = Effect.fn("makeT3LocalAuthToken")(function* 
       expiresAt: DateTime.formatIso(expiresAt),
     }).pipe(
       provideAuthDatabase(input.dbPath),
-      Effect.catchTag("SqlError", (error) =>
-        Effect.fail(
-          new AuthLocalDatabaseError({
-            operation: Predicate.isTagged(error.reason, "ConnectionError") ? "connect" : "query",
-            message: error.message,
-          }),
-        ),
-      ),
+      Effect.catchTags({
+        SqlError: (error) =>
+          Effect.fail(
+            new AuthLocalDatabaseError({
+              operation: Predicate.isTagged(error.reason, "ConnectionError") ? "connect" : "query",
+              message: error.message,
+            }),
+          ),
+      }),
     );
     return {
       token,
@@ -185,10 +189,11 @@ export const makeT3LocalAuthToken = Effect.fn("makeT3LocalAuthToken")(function* 
       );
     }
 
-    const baseDir = yield* resolveLocalBaseDir({ baseDir: input.baseDir }).pipe(
-      Effect.provideService(Environment, environment),
-      Effect.provideService(Path.Path, path),
-    );
+    const baseDir = yield* resolveLocalBaseDir({
+      baseDir: input.baseDir,
+      cliRuntime,
+      t3CliEnv,
+    }).pipe(Effect.provideService(Path.Path, path));
     const session = yield* issueLocalDatabaseSession({
       dbPath: path.join(baseDir, "userdata", "state.sqlite"),
       secretsDir: path.join(baseDir, "userdata", "secrets"),

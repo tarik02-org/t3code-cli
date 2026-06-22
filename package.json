@@ -36,60 +36,65 @@
   "exports": {
     ".": {
       "types": "./dist/src/index.d.ts",
+      "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./application": {
       "types": "./dist/src/application/index.d.ts",
+      "import": "./dist/application.js",
       "default": "./dist/application.js"
     },
     "./auth": {
       "types": "./dist/src/auth/index.d.ts",
+      "import": "./dist/auth.js",
       "default": "./dist/auth.js"
     },
     "./cli": {
       "types": "./dist/src/cli/index.d.ts",
+      "import": "./dist/cli.js",
       "default": "./dist/cli.js"
     },
     "./config": {
       "types": "./dist/src/config/index.d.ts",
+      "import": "./dist/config.js",
       "default": "./dist/config.js"
     },
     "./connection": {
       "types": "./dist/src/connection/index.d.ts",
+      "import": "./dist/connection.js",
       "default": "./dist/connection.js"
     },
     "./contracts": {
       "types": "./dist/src/contracts/index.d.ts",
+      "import": "./dist/contracts.js",
       "default": "./dist/contracts.js"
-    },
-    "./t3tools": {
-      "types": "./dist/upstream-t3code/packages/contracts/src/index.d.ts",
-      "default": "./dist/t3tools.js"
-    },
-    "./layout": {
-      "types": "./dist/src/layout/index.d.ts",
-      "default": "./dist/layout.js"
     },
     "./node": {
       "types": "./dist/src/node/index.d.ts",
+      "import": "./dist/node.js",
       "default": "./dist/node.js"
     },
     "./orchestration": {
       "types": "./dist/src/orchestration/index.d.ts",
+      "import": "./dist/orchestration.js",
       "default": "./dist/orchestration.js"
     },
     "./rpc": {
       "types": "./dist/src/rpc/index.d.ts",
+      "import": "./dist/rpc.js",
       "default": "./dist/rpc.js"
     },
     "./runtime": {
       "types": "./dist/src/runtime/index.d.ts",
+      "import": "./dist/runtime.js",
       "default": "./dist/runtime.js"
     },
-    "./scope": {
-      "types": "./dist/src/scope/index.d.ts",
-      "default": "./dist/scope.js"
-    }
+    "./t3tools": {
+      "types": "./dist/upstream-t3code/packages/contracts/src/index.d.ts",
+      "import": "./dist/t3tools.js",
+      "default": "./dist/t3tools.js"
+    },
+    "./package.json": "./package.json"
   },
   "scripts": {
     "build": "vp pack && tsc -p tsconfig.dts.json",
@@ -108,6 +113,7 @@
   },
   "dependencies": {
     "@effect/platform-node": "4.0.0-beta.78",
+    "@napi-rs/keyring": "^1.3.0",
     "effect": "4.0.0-beta.78"
   },
   "devDependencies": {

@@ -4,8 +4,9 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 
-import { normalizeHttpBaseUrl } from "../config/url.ts";
-import { Environment } from "../environment/service.ts";
+import { normalizeHttpBaseUrl } from "../config/url/url.ts";
+import { loadT3CliEnv } from "../config/env/env.ts";
+import { CliRuntime } from "../cli/runtime/service.ts";
 import { AuthLocalError } from "./error.ts";
 import { resolveLocalBaseDir } from "./local-base-dir.ts";
 import { decodeAuthLocalRuntimeStateFromJson } from "./schema.ts";
@@ -21,15 +22,17 @@ export class T3LocalAuthOrigin extends Context.Service<
 export const makeT3LocalAuthOrigin = Effect.fn("makeT3LocalAuthOrigin")(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const environment = yield* Environment;
+  const cliRuntime = yield* CliRuntime;
+  const t3CliEnv = yield* loadT3CliEnv;
 
   const resolve = Effect.fn("T3LocalAuthOriginLive.resolve")(function* (
     input?: LocalAuthOriginInput,
   ) {
-    const baseDir = yield* resolveLocalBaseDir({ baseDir: input?.baseDir }).pipe(
-      Effect.provideService(Environment, environment),
-      Effect.provideService(Path.Path, path),
-    );
+    const baseDir = yield* resolveLocalBaseDir({
+      baseDir: input?.baseDir,
+      cliRuntime,
+      t3CliEnv,
+    }).pipe(Effect.provideService(Path.Path, path));
     if (input?.origin !== undefined) {
       return yield* normalizeLocalOrigin(input.origin);
     }

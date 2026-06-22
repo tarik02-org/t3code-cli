@@ -4,6 +4,6 @@ export type {
   StartThreadInput,
   StartThreadPolicy,
   WaitEvent,
+  ApplicationError,
 } from "./application/index.ts";
-export type { ApplicationError } from "./application/index.ts";
 export { AppLayer, AuthAppLayer } from "./runtime/index.ts";
