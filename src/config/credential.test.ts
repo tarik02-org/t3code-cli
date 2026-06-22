@@ -38,6 +38,11 @@ describe("keyring fallback", () => {
     expect(shouldUseFileKeystoreForRead(result)).toBe(false);
   });
 
+  it("treats unavailable keyring reads as file-keystore fallback", () => {
+    const result = { kind: "unavailable" as const, message: "failed" };
+    expect(shouldUseFileKeystoreForRead(result)).toBe(true);
+  });
+
   it.effect("falls back to key file when keyring backend is unavailable", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

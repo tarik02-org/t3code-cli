@@ -18,6 +18,10 @@ export class AuthConfigError extends Schema.TaggedErrorClass<AuthConfigError>()(
   cause: Schema.optionalKey(Schema.Union([ConfigError, UrlError])),
 }) {}
 
+export function authConfigErrorFromConfig(error: ConfigError | UrlError) {
+  return new AuthConfigError({ message: error.message, cause: error });
+}
+
 export class AuthTransportError extends Schema.TaggedErrorClass<AuthTransportError>()(
   "AuthTransportError",
   {

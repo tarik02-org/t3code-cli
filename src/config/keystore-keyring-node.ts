@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 
-import { ConfigError, KeystoreUnavailableError } from "./error.ts";
+import { KeystoreUnavailableError } from "./error.ts";
 import {
   masterKeyByteLength,
   T3MasterKeyKeystoreFactory,
@@ -25,6 +25,10 @@ function isModuleNotFound(cause: unknown) {
   );
 }
 
+function keyringBackendUnavailable(cause: unknown) {
+  return new KeystoreUnavailableError({ reason: "backend-unavailable", cause });
+}
+
 const loadKeyringModuleOnce = Effect.tryPromise({
   try: () => import("@napi-rs/keyring") as Promise<KeyringModule>,
   catch: (cause) => cause,
@@ -35,12 +39,11 @@ const loadKeyringModuleMemoized = Effect.cached(loadKeyringModuleOnce);
 const loadKeyringModule = Effect.gen(function* () {
   const load = yield* loadKeyringModuleMemoized;
   return yield* load.pipe(
-    Effect.mapError((cause) => {
-      if (isModuleNotFound(cause)) {
-        return new KeystoreUnavailableError({ reason: "module-not-found", cause });
-      }
-      return new ConfigError({ message: "failed to load OS keyring backend", cause });
-    }),
+    Effect.mapError((cause) =>
+      isModuleNotFound(cause)
+        ? new KeystoreUnavailableError({ reason: "module-not-found", cause })
+        : keyringBackendUnavailable(cause),
+    ),
   );
 });
 
@@ -69,24 +72,22 @@ function createKeyringKeystore(keyring: KeyringModule): MasterKeyKeystore {
   const entry = new keyring.Entry(keyringService, keyringAccount);
   return {
     read: () =>
-      Effect.try({
-        try: () => parseKeyringPassword(entry.getPassword()),
-        catch: (cause) =>
-          new ConfigError({
+      Effect.sync(() => {
+        try {
+          return parseKeyringPassword(entry.getPassword());
+        } catch {
+          return {
+            kind: "unavailable" as const,
             message: "failed to read credential key from OS keyring",
-            cause,
-          }),
+          };
+        }
       }),
     write: (key) =>
       Effect.try({
         try: () => {
           entry.setPassword(Encoding.encodeBase64(key));
         },
-        catch: (cause) =>
-          new ConfigError({
-            message: "failed to write credential key to OS keyring",
-            cause,
-          }),
+        catch: keyringBackendUnavailable,
       }),
   };
 }

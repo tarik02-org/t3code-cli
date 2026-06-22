@@ -85,7 +85,11 @@ export const make = Effect.fn("makeT3CredentialCrypto")(function* () {
 
   const writeMasterKey = Effect.fn("writeMasterKey")(function* (key: Uint8Array) {
     if (primaryKeystore !== undefined) {
-      yield* primaryKeystore.write(key);
+      yield* primaryKeystore.write(key).pipe(
+        Effect.catchTags({
+          KeystoreUnavailableError: () => fileKeystore.write(key),
+        }),
+      );
       return;
     }
     yield* fileKeystore.write(key);

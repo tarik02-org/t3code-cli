@@ -4,7 +4,7 @@ import * as Schema from "effect/Schema";
 
 import { T3CredentialCrypto } from "./credential.ts";
 import { migrateV1EnvironmentName, validateEnvironmentName } from "./environment-name.ts";
-import { ConfigError, configErrorFromUrl } from "./error.ts";
+import { ConfigError, configErrorFromUrl, configErrorFromSchemaError } from "./error.ts";
 import {
   StoredConfigV1FileSchema,
   StoredConfigV2FileSchema,
@@ -35,7 +35,7 @@ export const readEncryptedConfigFromValue = Effect.fn("readEncryptedConfigFromVa
     Effect.catchTags({
       UrlError: (error) => Effect.fail(configErrorFromUrl(error)),
       SchemaError: (error) =>
-        Effect.fail(new ConfigError({ message: "failed to read config", cause: error })),
+        Effect.fail(configErrorFromSchemaError("failed to read config", error)),
     }),
   );
 });
@@ -59,7 +59,9 @@ export const migrateV1FileToEncrypted = Effect.fn("migrateV1FileToEncrypted")(fu
       validateEnvironmentName(migratedName).pipe(Effect.as(migratedName)),
     ),
   );
-  const normalizedUrl = yield* normalizeHttpBaseUrl(config.url);
+  const normalizedUrl = yield* normalizeHttpBaseUrl(config.url).pipe(
+    Effect.mapError(configErrorFromUrl),
+  );
   const crypto = yield* T3CredentialCrypto;
   const token = yield* crypto.encrypt({
     environmentName: name,

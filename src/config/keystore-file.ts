@@ -3,7 +3,12 @@ import * as Encoding from "effect/Encoding";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
-import { ConfigError, isPlatformNotFoundError } from "./error.ts";
+import {
+  catchPlatformError,
+  catchPlatformErrorUnlessNotFound,
+  ConfigError,
+  mapPlatformErrorToConfigError,
+} from "./error.ts";
 import {
   masterKeyByteLength,
   type MasterKeyKeystore,
@@ -20,19 +25,11 @@ export const makeFileKeystore = Effect.fn("makeFileKeystore")(function* () {
 
   const read = (): Effect.Effect<MasterKeyReadResult, ConfigError> =>
     Effect.gen(function* () {
-      const raw = yield* fs.readFileString(keyFilePath).pipe(
-        Effect.catchTags({
-          PlatformError: (error) =>
-            isPlatformNotFoundError(error)
-              ? Effect.succeed(undefined)
-              : Effect.fail(
-                  new ConfigError({
-                    message: "failed to read credential key file",
-                    cause: error,
-                  }),
-                ),
-        }),
-      );
+      const raw = yield* fs
+        .readFileString(keyFilePath)
+        .pipe(
+          Effect.catchTags(catchPlatformErrorUnlessNotFound("failed to read credential key file")),
+        );
       if (raw === undefined) {
         return { kind: "missing" };
       }
@@ -52,47 +49,31 @@ export const makeFileKeystore = Effect.fn("makeFileKeystore")(function* () {
           new ConfigError({ message: "invalid credential key file: unexpected key length" }),
         );
       }
-      yield* fs.chmod(keyFilePath, privateFileMode).pipe(
-        Effect.mapError(
-          (error) =>
-            new ConfigError({
-              message: "failed to set credential key file permissions",
-              cause: error,
-            }),
-        ),
-      );
+      yield* fs
+        .chmod(keyFilePath, privateFileMode)
+        .pipe(
+          Effect.mapError(
+            mapPlatformErrorToConfigError("failed to set credential key file permissions"),
+          ),
+        );
       return { kind: "present", key };
     });
 
   const write = (key: Uint8Array): Effect.Effect<void, ConfigError> =>
     Effect.gen(function* () {
-      yield* fs.makeDirectory(path.dirname(keyFilePath), { recursive: true, mode: 0o700 }).pipe(
-        Effect.catchTags({
-          PlatformError: (error) =>
-            Effect.fail(
-              new ConfigError({ message: "failed to write credential key file", cause: error }),
-            ),
-        }),
-      );
+      yield* fs
+        .makeDirectory(path.dirname(keyFilePath), { recursive: true, mode: 0o700 })
+        .pipe(Effect.catchTags(catchPlatformError("failed to write credential key file")));
       yield* fs
         .writeFileString(keyFilePath, `${Encoding.encodeBase64(key)}\n`, { mode: privateFileMode })
+        .pipe(Effect.catchTags(catchPlatformError("failed to write credential key file")));
+      yield* fs
+        .chmod(keyFilePath, privateFileMode)
         .pipe(
-          Effect.catchTags({
-            PlatformError: (error) =>
-              Effect.fail(
-                new ConfigError({ message: "failed to write credential key file", cause: error }),
-              ),
-          }),
+          Effect.mapError(
+            mapPlatformErrorToConfigError("failed to set credential key file permissions"),
+          ),
         );
-      yield* fs.chmod(keyFilePath, privateFileMode).pipe(
-        Effect.mapError(
-          (error) =>
-            new ConfigError({
-              message: "failed to set credential key file permissions",
-              cause: error,
-            }),
-        ),
-      );
     });
 
   return { read, write } satisfies MasterKeyKeystore;

@@ -8,11 +8,12 @@ export const masterKeyByteLength = 32;
 export type MasterKeyReadResult =
   | { readonly kind: "missing" }
   | { readonly kind: "present"; readonly key: Uint8Array }
-  | { readonly kind: "corrupt"; readonly message: string };
+  | { readonly kind: "corrupt"; readonly message: string }
+  | { readonly kind: "unavailable"; readonly message: string };
 
 export type MasterKeyKeystore = {
   readonly read: () => Effect.Effect<MasterKeyReadResult, ConfigError>;
-  readonly write: (key: Uint8Array) => Effect.Effect<void, ConfigError>;
+  readonly write: (key: Uint8Array) => Effect.Effect<void, ConfigError | KeystoreUnavailableError>;
 };
 
 export class T3MasterKeyKeystoreFactory extends Context.Service<
@@ -23,5 +24,5 @@ export class T3MasterKeyKeystoreFactory extends Context.Service<
 >()("t3cli/T3MasterKeyKeystoreFactory") {}
 
 export function shouldUseFileKeystoreForRead(result: MasterKeyReadResult) {
-  return result.kind === "missing";
+  return result.kind === "missing" || result.kind === "unavailable";
 }
