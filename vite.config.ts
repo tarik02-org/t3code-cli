@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - Vite config resolves local paths with node:path.
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 

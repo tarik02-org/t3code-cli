@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - Integration tests use real temp directories.
 import "vite-plus/test/config";
 
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
