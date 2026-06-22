@@ -133,6 +133,24 @@ export const make = Effect.fn("makeT3Config")(function* () {
     if (encrypted.environments[name] === undefined) {
       return yield* Effect.fail(new ConfigError({ message: `environment not found: ${name}` }));
     }
+    const selectedEnvironment = encrypted.environments[name];
+    yield* credentialCrypto
+      .decrypt({
+        environmentName: name,
+        url: selectedEnvironment.url,
+        local: selectedEnvironment.local,
+        token: selectedEnvironment.token,
+      })
+      .pipe(
+        Effect.mapError(
+          (error) =>
+            new ConfigError({
+              message: `failed to decrypt credentials for environment '${name}'`,
+              cause: error.cause,
+            }),
+        ),
+        Effect.asVoid,
+      );
     yield* Effect.provide(
       writeEncryptedConfigFile({
         ...encrypted,
@@ -204,12 +222,22 @@ export const make = Effect.fn("makeT3Config")(function* () {
     }
 
     const selectedEnvironment = encrypted.environments[selectedName];
-    const token = yield* credentialCrypto.decrypt({
-      environmentName: selectedName,
-      url: selectedEnvironment.url,
-      local: selectedEnvironment.local,
-      token: selectedEnvironment.token,
-    });
+    const token = yield* credentialCrypto
+      .decrypt({
+        environmentName: selectedName,
+        url: selectedEnvironment.url,
+        local: selectedEnvironment.local,
+        token: selectedEnvironment.token,
+      })
+      .pipe(
+        Effect.mapError(
+          (error) =>
+            new ConfigError({
+              message: `failed to decrypt credentials for environment '${selectedName}'`,
+              cause: error.cause,
+            }),
+        ),
+      );
     return yield* buildResolvedConfigFromStored({
       selectedName,
       token,

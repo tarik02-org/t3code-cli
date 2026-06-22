@@ -85,7 +85,7 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
     if (defaultName === undefined) {
       return yield* Effect.fail(
         new AuthConfigError({
-          message: "no environment selected: pass --name or run: t3cli auth use <name>",
+          message: "no environment selected: pass --name or run: t3cli env use <name>",
         }),
       );
     }
