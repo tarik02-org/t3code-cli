@@ -5,7 +5,7 @@ export type {
   EnvironmentSummary,
   ResolvedConfig,
   UpsertEnvironmentInput,
-} from "./service.ts";
+} from "./types.ts";
 export { layer as T3ConfigLive, make as makeT3Config } from "./layer.ts";
 export {
   T3CredentialCrypto,

@@ -23,11 +23,3 @@ export class T3Config extends Context.Service<
     readonly getDefaultEnvironmentName: () => Effect.Effect<string | undefined, ConfigError>;
   }
 >()("t3cli/T3Config") {}
-
-export type {
-  EncryptedConfig,
-  EncryptedToken,
-  EnvironmentSummary,
-  ResolvedConfig,
-  UpsertEnvironmentInput,
-};

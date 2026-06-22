@@ -18,7 +18,8 @@ import {
   validateCredentialEnvVars,
 } from "./resolve.ts";
 import { T3ConfigSelection } from "./selection.ts";
-import { T3Config, type UpsertEnvironmentInput } from "./service.ts";
+import { T3Config } from "./service.ts";
+import type { UpsertEnvironmentInput } from "./types.ts";
 import { normalizeHttpBaseUrl } from "./url.ts";
 
 export const make = Effect.fn("makeT3Config")(function* () {
