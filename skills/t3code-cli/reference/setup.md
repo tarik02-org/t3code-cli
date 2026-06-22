@@ -16,8 +16,8 @@ One `t3cli` install can store credentials for multiple servers. Environment name
 ```sh
 t3cli auth pair --url <url> --name work
 t3cli auth local --name local
-t3cli auth list --format json
-t3cli auth use work
+t3cli env list --format json
+t3cli env use work
 t3cli --environment local project list
 ```
 
@@ -63,26 +63,26 @@ t3cli auth local --base-dir <path> --origin <url> --role owner
 | `--label`    | `t3cli`       | Client label                              |
 | `--subject`  | `t3cli-local` | Token subject                             |
 
-## auth list
+## env list
 
 ```sh
-t3cli auth list [--format json]
+t3cli env list [--format json]
 ```
 
 Lists stored environments only. JSON fields: `name`, `url`, `local`, `default`, `active`. Tokens are never printed.
 
-## auth use
+## env use
 
 ```sh
-t3cli auth use <name> [--format json]
+t3cli env use <name> [--format json]
 ```
 
-Sets the default environment without contacting the server.
+Sets the default environment without contacting the server. Fails if stored credentials for that environment cannot be decrypted.
 
-## auth unpair
+## env remove
 
 ```sh
-t3cli auth unpair [--name <name>] [--yes] [--format json]
+t3cli env remove [--name <name>] [--yes] [--format json]
 ```
 
 Removes local CLI credentials for the default environment or `--name`. Requires confirmation; non-interactive mode requires `--yes`. Remote tokens may remain valid until natural expiry.

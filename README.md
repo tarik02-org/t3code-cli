@@ -46,18 +46,18 @@ npx skills add tarik02/t3cli
 ```sh
 t3cli auth pair --url <url> [--name <name>] [--replace] [--local]   # Pair with a remote server
 t3cli auth local [--name <name>] [--replace]                        # Local t3code installation
-t3cli auth list [--format json]                                     # List stored environments
-t3cli auth use <name> [--format json]                               # Set default environment
-t3cli auth unpair [--name <name>] [--yes]                           # Remove local credentials
 t3cli auth status [--format json]                                   # Check current auth
+t3cli env list [--format json]                                      # List stored environments
+t3cli env use <name> [--format json]                                # Set default environment
+t3cli env remove [--name <name>] [--yes]                            # Remove local credentials
 t3cli --environment <name> ...                                      # Use a specific environment once
 ```
 
 - Use `auth pair` with a pairing URL from a running t3code server
 - Default environment names: hostname slug from the paired URL, or `local` for `auth local`
-- `auth pair` / `auth local` set the default environment only when creating the first stored environment; use `auth use` to switch afterward
+- `auth pair` / `auth local` set the default environment only when creating the first stored environment; use `env use` to switch afterward
 - `--replace` overwrites an existing environment and makes it the default
-- `auth unpair` removes local CLI credentials only; any remote token can remain valid until natural expiry
+- `env remove` removes local CLI credentials only; any remote token can remain valid until natural expiry
 - Use `auth local` or `auth pair --local` to authenticate against a local t3code installation
 - Local auth enables automatic project resolution from the current directory
 - Set `T3CLI_ENV=<name>` to select an environment when `--environment` is omitted

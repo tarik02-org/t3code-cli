@@ -2,6 +2,8 @@
 
 ```
 t3cli
+├── auth pair|local|status
+├── env list|use|remove
 ├── project list|add|delete
 ├── model list
 ├── list|start|send|show|transcript|wait
@@ -9,7 +11,7 @@ t3cli
 └── thread approve|respond|archive|interrupt|unarchive|update|delete|callback
 ```
 
-Auth commands: [setup.md](setup.md)
+Auth and environment commands: [setup.md](setup.md)
 
 ## Global flags
 
@@ -29,6 +31,22 @@ Auth commands: [setup.md](setup.md)
 | `T3CLI_AGENT`          | Non-human default format | —        |
 
 Also treated as agent env (no live TTY): `CI`, `CODEX_CI`, `CODEX_THREAD_ID`.
+
+## auth
+
+```sh
+t3cli auth pair --url <url> [--name <name>] [--replace] [--local] [--format json]
+t3cli auth local [--name <name>] [--replace] [--format json]
+t3cli auth status [--format json]
+```
+
+## env
+
+```sh
+t3cli env list [--format json]
+t3cli env use <name> [--format json]
+t3cli env remove [--name <name>] [--yes] [--format json]
+```
 
 ## project
 
