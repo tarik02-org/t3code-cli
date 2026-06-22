@@ -10,10 +10,9 @@ import { T3LocalAuthOriginLive } from "../auth/local-origin.ts";
 import { T3LocalAuthTokenLive } from "../auth/local-token.ts";
 import { T3AuthPairingLive } from "../auth/pairing.ts";
 import { T3AuthTransportLive } from "../auth/transport.ts";
-import { layer as T3ConfigLive } from "../config/layer.ts";
-import { layer as T3CredentialCryptoLive } from "../config/credential.ts";
-import { T3ConfigSelectionLive } from "../config/selection-layer.ts";
-import { T3Config } from "../config/service.ts";
+import * as Config from "../config/config.ts";
+import * as Credential from "../config/credential/service.ts";
+import * as Selection from "../config/selection/service.ts";
 import { T3CodeConnectionError } from "../connection/error.ts";
 import { T3CodeConnectionProvider, makeT3CodeConnectionProvider } from "../connection/service.ts";
 import { T3OrchestrationLive } from "../orchestration/layer.ts";
@@ -22,7 +21,7 @@ import { T3RpcOperationsLive } from "../rpc/operation.ts";
 import { NodeSqlClientFactoryLive } from "../sql/node-sqlite-client.ts";
 import { NodeCliPathLayer } from "../cli-path/layer.ts";
 
-export const T3ConfigLayer = T3ConfigLive.pipe(Layer.provide(T3CredentialCryptoLive));
+export const T3ConfigLayer = Config.layer.pipe(Layer.provide(Credential.layer));
 export const T3AuthTransportLayer = T3AuthTransportLive.pipe(
   Layer.provide(NodeHttpClient.layerUndici),
 );
@@ -42,7 +41,7 @@ export const T3AuthLayer = T3AuthLive.pipe(
 const T3ConfigConnectionProviderLayer = Layer.effect(
   T3CodeConnectionProvider,
   Effect.gen(function* () {
-    const config = yield* T3Config;
+    const config = yield* Config.T3Config;
     return makeT3CodeConnectionProvider(
       config.resolve().pipe(
         Effect.map((resolved) => ({
@@ -88,6 +87,6 @@ export const BaseAppLayer = Layer.mergeAll(
 
 export const BaseAuthAppLayer = Layer.mergeAll(T3ConfigLayer, T3AuthLayer);
 
-export const AuthAppLayer = BaseAuthAppLayer.pipe(Layer.provideMerge(T3ConfigSelectionLive));
+export const AuthAppLayer = BaseAuthAppLayer.pipe(Layer.provideMerge(Selection.layer));
 
-export const AppLayer = BaseAppLayer.pipe(Layer.provideMerge(T3ConfigSelectionLive));
+export const AppLayer = BaseAppLayer.pipe(Layer.provideMerge(Selection.layer));

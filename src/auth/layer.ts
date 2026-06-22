@@ -4,15 +4,20 @@ import * as Layer from "effect/Layer";
 import {
   defaultEnvironmentNameForLocal,
   defaultEnvironmentNameFromUrl,
-} from "../config/environment-name.ts";
+} from "../config/environment-name/name.ts";
 import type { EnvironmentSummary, ResolvedConfig } from "../config/types.ts";
-import { T3Config } from "../config/service.ts";
-import { AuthConfigError, authConfigErrorFromConfig } from "./error.ts";
+import type { ConfigError } from "../config/error.ts";
+import type { UrlError } from "../config/url/error.ts";
+import { T3Config } from "../config/config.ts";
+import { AuthConfigError } from "./error.ts";
 import { T3LocalAuth } from "./local.ts";
 import { T3AuthPairing } from "./pairing.ts";
 import { T3Auth } from "./service.ts";
 import { T3AuthTransport } from "./transport.ts";
 import type { AuthConfigInput, AuthEnvironmentListItem, AuthResolvedConfig } from "./type.ts";
+
+const mapConfigError = (error: ConfigError | UrlError) =>
+  new AuthConfigError({ message: error.message, cause: error });
 
 export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
   const config = yield* T3Config;
@@ -21,13 +26,13 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
   const pairing = yield* T3AuthPairing;
 
   const status = Effect.fn("T3AuthLive.status")(function* () {
-    const resolved = yield* config.resolve().pipe(Effect.mapError(authConfigErrorFromConfig));
+    const resolved = yield* config.resolve().pipe(Effect.mapError(mapConfigError));
     const session = yield* transport.getSession(resolved);
     return { config: toAuthResolvedConfig(resolved), session } as const;
   });
 
   const issueWebSocketTicket = Effect.fn("T3AuthLive.issueWebSocketTicket")(function* () {
-    const resolved = yield* config.resolve().pipe(Effect.mapError(authConfigErrorFromConfig));
+    const resolved = yield* config.resolve().pipe(Effect.mapError(mapConfigError));
     return yield* transport.issueWebSocketTicket(resolved);
   });
 
@@ -39,9 +44,7 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
     readonly replace?: boolean;
     readonly allowReplace: boolean;
   }) {
-    const exists = yield* config
-      .hasEnvironment(input.name)
-      .pipe(Effect.mapError(authConfigErrorFromConfig));
+    const exists = yield* config.hasEnvironment(input.name).pipe(Effect.mapError(mapConfigError));
     if (exists && !input.allowReplace) {
       return yield* Effect.fail(
         new AuthConfigError({
@@ -58,7 +61,7 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
         local: input.local,
         ...(makeDefault ? { makeDefault: true } : {}),
       })
-      .pipe(Effect.mapError(authConfigErrorFromConfig));
+      .pipe(Effect.mapError(mapConfigError));
     return input.name;
   });
 
@@ -66,7 +69,7 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
     const [environments, activeName] = yield* Effect.all(
       [config.listEnvironments(), config.resolveActiveEnvironmentName()],
       { concurrency: "unbounded" },
-    ).pipe(Effect.mapError(authConfigErrorFromConfig));
+    ).pipe(Effect.mapError(mapConfigError));
     return environments.map((environment) => toAuthEnvironmentListItem(environment, activeName));
   });
 
@@ -78,7 +81,7 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
     }
     const defaultName = yield* config
       .getDefaultEnvironmentName()
-      .pipe(Effect.mapError(authConfigErrorFromConfig));
+      .pipe(Effect.mapError(mapConfigError));
     if (defaultName === undefined) {
       return yield* Effect.fail(
         new AuthConfigError({
@@ -101,27 +104,24 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
           local: input.local,
           ...(input.makeDefault === true ? { makeDefault: true } : {}),
         })
-        .pipe(Effect.mapError(authConfigErrorFromConfig)),
+        .pipe(Effect.mapError(mapConfigError)),
     persistEnvironment,
     environmentExists: (name: string) =>
-      config.hasEnvironment(name).pipe(Effect.mapError(authConfigErrorFromConfig)),
+      config.hasEnvironment(name).pipe(Effect.mapError(mapConfigError)),
     defaultNameFromUrl: (url: string) =>
-      defaultEnvironmentNameFromUrl(url).pipe(Effect.mapError(authConfigErrorFromConfig)),
+      defaultEnvironmentNameFromUrl(url).pipe(Effect.mapError(mapConfigError)),
     defaultNameForLocal: () => Effect.succeed(defaultEnvironmentNameForLocal()),
     listEnvironments,
     useEnvironment: (name: string) =>
       config
         .setDefaultEnvironment(name)
-        .pipe(
-          Effect.mapError(authConfigErrorFromConfig),
-          Effect.as({ name, default: true as const }),
-        ),
+        .pipe(Effect.mapError(mapConfigError), Effect.as({ name, default: true as const })),
     resolveUnpairTarget,
     unpairEnvironment: (input: { readonly name: string }) =>
       config
         .removeEnvironment(input.name)
         .pipe(
-          Effect.mapError(authConfigErrorFromConfig),
+          Effect.mapError(mapConfigError),
           Effect.as({ name: input.name, removed: true as const }),
         ),
     status,

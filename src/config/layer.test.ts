@@ -3,10 +3,10 @@ import "vite-plus/test/config";
 import * as Effect from "effect/Effect";
 import { assert, describe, it } from "@effect/vitest";
 
-import { T3Config } from "./service.ts";
-import { ConfigPlatformLayer } from "../test/platform.ts";
-import { makeTempHomeScoped } from "../test/helpers/temp-home.ts";
-import { t3ConfigDepsLayer } from "../test/layers/config.ts";
+import { T3Config } from "./config.ts";
+import { ConfigPlatformLayer } from "./platform.test-utils.ts";
+import { makeTempHomeScoped } from "./temp-home.test-utils.ts";
+import { t3ConfigDepsLayer } from "./layer.test-utils.ts";
 
 describe("T3Config", () => {
   it.effect(

@@ -1,7 +1,7 @@
 import { Command } from "effect/unstable/cli";
 
 import { createAuthCommand } from "./auth.ts";
-import { cliEnvironmentSetting } from "./environment-flag.ts";
+import { cliEnvironmentSetting } from "./env/flag.ts";
 import { createTerminalCommandGroup } from "./terminal.ts";
 import { createModelCommand } from "./model.ts";
 import { createProjectCommand } from "./project.ts";

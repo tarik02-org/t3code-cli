@@ -4,7 +4,7 @@ import {
   humanJsonFormatChoices,
   humanJsonNdjsonFormatChoices,
   humanNdjsonFormatChoices,
-} from "./output-format.ts";
+} from "./format/output.ts";
 
 export const projectFlag = Flag.string("project").pipe(
   Flag.withDescription(
@@ -40,8 +40,8 @@ export const replaceFlag = Flag.boolean("replace").pipe(
   Flag.withDefault(false),
 );
 
-export const authNameFlag = Flag.string("name").pipe(
-  Flag.withDescription("Auth environment name"),
+export const envNameFlag = Flag.string("name").pipe(
+  Flag.withDescription("Environment name"),
   Flag.optional,
 );
 

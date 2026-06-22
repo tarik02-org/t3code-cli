@@ -1,4 +1,8 @@
-import type { EncryptedToken, StoredConfigV2File, StoredEnvironmentFile } from "./schema.ts";
+import type {
+  EncryptedToken,
+  StoredConfigV2File,
+  StoredEnvironmentFile,
+} from "./persist/schema.ts";
 
 export type EncryptedEnvironment = StoredEnvironmentFile;
 

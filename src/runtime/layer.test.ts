@@ -6,11 +6,11 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { Command } from "effect/unstable/cli";
 
-import { cliEnvironmentSetting } from "../cli/environment-flag.ts";
+import { cliEnvironmentSetting } from "../cli/env/flag.ts";
 import type { ResolvedConfig } from "../config/types.ts";
-import { T3Config } from "../config/service.ts";
-import { makeTempHomeScoped } from "../test/helpers/temp-home.ts";
-import { cliConfigRoutingLayerTest } from "../test/layers/cli-config-routing.ts";
+import { T3Config } from "../config/config.ts";
+import { makeTempHomeScoped } from "../config/temp-home.test-utils.ts";
+import { cliConfigRoutingLayerTest } from "./layer.test-utils.ts";
 
 describe("CLI config routing", () => {
   it.effect(

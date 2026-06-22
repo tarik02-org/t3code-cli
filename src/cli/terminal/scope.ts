@@ -1,24 +1,29 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
-import { resolveThreadId } from "../../scope/index.ts";
+import type { T3CliEnvScope } from "../../config/env/env.ts";
+import { loadT3CliEnv } from "../../config/env/env.ts";
+import { resolveThreadId } from "../scope/index.ts";
 import { MissingThreadError } from "../error.ts";
 
 export function resolveCommandThreadId(input: {
   readonly thread: Option.Option<string>;
-  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly scope: T3CliEnvScope;
 }): string | undefined {
   return resolveThreadId({
     value: Option.getOrUndefined(input.thread),
-    env: input.env,
+    scope: input.scope,
   });
 }
 
 export const requireCommandThreadId = Effect.fn("requireCommandThreadId")(function* (input: {
   readonly thread: Option.Option<string>;
-  readonly env: Readonly<Record<string, string | undefined>>;
 }) {
-  const threadId = resolveCommandThreadId(input);
+  const t3CliEnv = yield* loadT3CliEnv;
+  const threadId = resolveCommandThreadId({
+    thread: input.thread,
+    scope: t3CliEnv.scope,
+  });
   if (threadId === undefined) {
     return yield* Effect.fail(
       new MissingThreadError({

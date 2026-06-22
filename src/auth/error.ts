@@ -3,7 +3,8 @@ import * as Schema from "effect/Schema";
 import { PlatformError } from "effect/PlatformError";
 import { HttpClientError } from "effect/unstable/http";
 
-import { ConfigError, UrlError } from "../config/error.ts";
+import { ConfigError } from "../config/error.ts";
+import { UrlError } from "../config/url/error.ts";
 
 export class AuthPairingUrlError extends Schema.TaggedErrorClass<AuthPairingUrlError>()(
   "AuthPairingUrlError",
@@ -17,10 +18,6 @@ export class AuthConfigError extends Schema.TaggedErrorClass<AuthConfigError>()(
   message: Schema.String,
   cause: Schema.optionalKey(Schema.Union([ConfigError, UrlError])),
 }) {}
-
-export function authConfigErrorFromConfig(error: ConfigError | UrlError) {
-  return new AuthConfigError({ message: error.message, cause: error });
-}
 
 export class AuthTransportError extends Schema.TaggedErrorClass<AuthTransportError>()(
   "AuthTransportError",

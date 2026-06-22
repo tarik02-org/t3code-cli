@@ -12,15 +12,16 @@ import {
   formatAuthStatusJson,
   formatAuthUnpairHuman,
   formatAuthUseHuman,
-} from "./auth-format.ts";
+} from "./format/auth.ts";
 import { T3Auth } from "../auth/service.ts";
-import { Environment } from "../environment/service.ts";
+import { CliRuntime } from "../cli/runtime/service.ts";
+import { loadT3CliEnv } from "../config/env/env.ts";
 import {
   requireDestructiveConfirmation,
   requireEnvironmentReplaceConfirmation,
-} from "./confirm.ts";
-import { authNameFlag, formatFlag, replaceFlag, yesFlag } from "./flags.ts";
-import { resolveOutputFormat } from "./output-format.ts";
+} from "./interaction/confirm.ts";
+import { envNameFlag, formatFlag, replaceFlag, yesFlag } from "./flags.ts";
+import { resolveOutputFormat } from "./format/output.ts";
 import { T3Output } from "./output/service.ts";
 
 const persistAuthEnvironment = Effect.fn("persistAuthEnvironment")(function* (input: {
@@ -32,7 +33,8 @@ const persistAuthEnvironment = Effect.fn("persistAuthEnvironment")(function* (in
   readonly replace: boolean;
 }) {
   const auth = yield* T3Auth;
-  const environment = yield* Environment;
+  const cliRuntime = yield* CliRuntime;
+  const t3CliEnv = yield* loadT3CliEnv;
   const environmentName = Option.isSome(input.explicitName)
     ? input.explicitName.value
     : input.fallbackName;
@@ -41,7 +43,8 @@ const persistAuthEnvironment = Effect.fn("persistAuthEnvironment")(function* (in
     yield* requireEnvironmentReplaceConfirmation({
       name: environmentName,
       replace: input.replace,
-      environment,
+      cliRuntime,
+      t3CliEnv,
     });
   }
   return yield* auth.persistEnvironment({
@@ -73,16 +76,17 @@ const pairCommand = Command.make(
   {
     url: Flag.string("url"),
     local: Flag.boolean("local"),
-    name: authNameFlag,
+    name: envNameFlag,
     replace: replaceFlag,
     format: formatFlag,
   },
   ({ url, local, name, replace, format }) =>
     Effect.gen(function* () {
       const auth = yield* T3Auth;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       const result = yield* auth.pair(url);
       const fallbackName = yield* auth.defaultNameFromUrl(result.url);
       const environmentName = yield* persistAuthEnvironment({
@@ -110,16 +114,17 @@ const localCommand = Command.make(
     role: Flag.choice("role", ["owner", "client"] as const).pipe(Flag.withDefault("owner")),
     label: Flag.string("label").pipe(Flag.withDefault("t3cli")),
     subject: Flag.string("subject").pipe(Flag.withDefault("t3cli-local")),
-    name: authNameFlag,
+    name: envNameFlag,
     replace: replaceFlag,
     format: formatFlag,
   },
   ({ baseDir, origin, role, label, subject, name, replace, format }) =>
     Effect.gen(function* () {
       const auth = yield* T3Auth;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       const result = yield* auth.local({
         role,
         label,
@@ -153,9 +158,10 @@ const listCommand = Command.make(
   ({ format }) =>
     Effect.gen(function* () {
       const auth = yield* T3Auth;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       const environments = yield* auth.listEnvironments();
       if (resolvedFormat === "json") {
         yield* output.printJson(formatAuthListJson(environments));
@@ -174,9 +180,10 @@ const useCommand = Command.make(
   ({ name, format }) =>
     Effect.gen(function* () {
       const auth = yield* T3Auth;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       const result = yield* auth.useEnvironment(name);
       if (resolvedFormat === "json") {
         yield* output.printJson(result);
@@ -189,23 +196,25 @@ const useCommand = Command.make(
 const unpairCommand = Command.make(
   "unpair",
   {
-    name: authNameFlag,
+    name: envNameFlag,
     yes: yesFlag,
     format: formatFlag,
   },
   ({ name, yes, format }) =>
     Effect.gen(function* () {
       const auth = yield* T3Auth;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       const targetName = yield* auth.resolveUnpairTarget(
         Option.isSome(name) ? { name: name.value } : {},
       );
       yield* requireDestructiveConfirmation({
         message: `Remove local credentials for environment '${targetName}'?`,
         yes,
-        environment,
+        cliRuntime,
+        t3CliEnv,
       });
       const result = yield* auth.unpairEnvironment({ name: targetName });
       if (resolvedFormat === "json") {
@@ -228,9 +237,10 @@ const statusCommand = Command.make(
   ({ format }) =>
     Effect.gen(function* () {
       const auth = yield* T3Auth;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       const result = yield* auth.status();
       if (resolvedFormat === "json") {
         yield* output.printJson(formatAuthStatusJson(result));
