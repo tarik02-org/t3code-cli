@@ -34,10 +34,7 @@ export const make = Effect.fn("makeT3Config")(function* () {
     Layer.succeed(T3CredentialCrypto, credentialCrypto),
   );
   const run = <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.provide(effect, services);
-
-  const readEncrypted = Effect.fn("T3ConfigLive.readEncrypted")(function* () {
-    return yield* run(readEncryptedConfigFile());
-  });
+  const readEncrypted = () => run(readEncryptedConfigFile());
 
   const hasEnvironment = Effect.fn("T3ConfigLive.hasEnvironment")(function* (name: string) {
     const encrypted = yield* readEncrypted();

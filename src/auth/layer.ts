@@ -32,30 +32,6 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
     return yield* transport.issueWebSocketTicket(resolved);
   });
 
-  const writeConfig = Effect.fn("T3AuthLive.writeConfig")(function* (input: AuthConfigInput) {
-    yield* config
-      .upsertEnvironment({
-        name: input.name,
-        url: input.url,
-        token: input.token,
-        local: input.local,
-        ...(input.makeDefault === true ? { makeDefault: true } : {}),
-      })
-      .pipe(Effect.mapError(mapConfigError));
-  });
-
-  const environmentExists = Effect.fn("T3AuthLive.environmentExists")(function* (name: string) {
-    return yield* config.hasEnvironment(name).pipe(Effect.mapError(mapConfigError));
-  });
-
-  const defaultNameFromUrl = Effect.fn("T3AuthLive.defaultNameFromUrl")(function* (url: string) {
-    return yield* defaultEnvironmentNameFromUrl(url).pipe(Effect.mapError(mapConfigError));
-  });
-
-  const defaultNameForLocal = Effect.fn("T3AuthLive.defaultNameForLocal")(() =>
-    Effect.succeed(defaultEnvironmentNameForLocal()),
-  );
-
   const persistEnvironment = Effect.fn("T3AuthLive.persistEnvironment")(function* (input: {
     readonly name: string;
     readonly url: string;
@@ -73,13 +49,15 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
       );
     }
     const makeDefault = exists && input.replace === true;
-    yield* writeConfig({
-      name: input.name,
-      url: input.url,
-      token: input.token,
-      local: input.local,
-      ...(makeDefault ? { makeDefault: true } : {}),
-    });
+    yield* config
+      .upsertEnvironment({
+        name: input.name,
+        url: input.url,
+        token: input.token,
+        local: input.local,
+        ...(makeDefault ? { makeDefault: true } : {}),
+      })
+      .pipe(Effect.mapError(mapConfigError));
     return input.name;
   });
 
@@ -89,11 +67,6 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
       { concurrency: "unbounded" },
     ).pipe(Effect.mapError(mapConfigError));
     return environments.map((environment) => toAuthEnvironmentListItem(environment, activeName));
-  });
-
-  const useEnvironment = Effect.fn("T3AuthLive.useEnvironment")(function* (name: string) {
-    yield* config.setDefaultEnvironment(name).pipe(Effect.mapError(mapConfigError));
-    return { name, default: true as const };
   });
 
   const resolveUnpairTarget = Effect.fn("T3AuthLive.resolveUnpairTarget")(function* (input: {
@@ -115,25 +88,38 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
     return defaultName;
   });
 
-  const unpairEnvironment = Effect.fn("T3AuthLive.unpairEnvironment")(function* (input: {
-    readonly name: string;
-  }) {
-    yield* config.removeEnvironment(input.name).pipe(Effect.mapError(mapConfigError));
-    return { name: input.name, removed: true as const };
-  });
-
   return {
     pair: pairing.pair,
     local: localAuth.local,
-    writeConfig,
+    writeConfig: (input: AuthConfigInput) =>
+      config
+        .upsertEnvironment({
+          name: input.name,
+          url: input.url,
+          token: input.token,
+          local: input.local,
+          ...(input.makeDefault === true ? { makeDefault: true } : {}),
+        })
+        .pipe(Effect.mapError(mapConfigError)),
     persistEnvironment,
-    environmentExists,
-    defaultNameFromUrl,
-    defaultNameForLocal,
+    environmentExists: (name: string) =>
+      config.hasEnvironment(name).pipe(Effect.mapError(mapConfigError)),
+    defaultNameFromUrl: (url: string) =>
+      defaultEnvironmentNameFromUrl(url).pipe(Effect.mapError(mapConfigError)),
+    defaultNameForLocal: () => Effect.succeed(defaultEnvironmentNameForLocal()),
     listEnvironments,
-    useEnvironment,
+    useEnvironment: (name: string) =>
+      config
+        .setDefaultEnvironment(name)
+        .pipe(Effect.mapError(mapConfigError), Effect.as({ name, default: true as const })),
     resolveUnpairTarget,
-    unpairEnvironment,
+    unpairEnvironment: (input: { readonly name: string }) =>
+      config
+        .removeEnvironment(input.name)
+        .pipe(
+          Effect.mapError(mapConfigError),
+          Effect.as({ name: input.name, removed: true as const }),
+        ),
     status,
     issueWebSocketTicket,
   };

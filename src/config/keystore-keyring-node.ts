@@ -32,7 +32,7 @@ const loadKeyringModuleOnce = Effect.tryPromise({
 
 const loadKeyringModuleMemoized = Effect.cached(loadKeyringModuleOnce);
 
-const loadKeyringModule = Effect.fn("loadKeyringModule")(function* () {
+const loadKeyringModule = Effect.gen(function* () {
   const load = yield* loadKeyringModuleMemoized;
   return yield* load.pipe(
     Effect.mapError((cause) => {
@@ -92,10 +92,11 @@ function createKeyringKeystore(keyring: KeyringModule): MasterKeyKeystore {
 }
 
 const make = (): T3MasterKeyKeystoreFactory["Service"] => ({
-  make: Effect.fn("makeKeyringKeystore")(function* () {
-    const keyring = yield* loadKeyringModule();
-    return createKeyringKeystore(keyring);
-  }),
+  make: () =>
+    Effect.gen(function* () {
+      const keyring = yield* loadKeyringModule;
+      return createKeyringKeystore(keyring);
+    }),
 });
 
 export const layerNode = Layer.succeed(T3MasterKeyKeystoreFactory, make());
