@@ -9,7 +9,7 @@ import { resolveProjectScope } from "../domain/helpers.ts";
 import { type ListThreadsInclude, type StartThreadInput } from "./service.ts";
 import type { CallbackThreadInput, SendThreadInput } from "./service.ts";
 import type { T3ThreadApplicationService } from "./service.ts";
-import type { OrchestrationThreadShell } from "#t3tools/contracts";
+import type { OrchestrationThreadShell } from "@t3tools/contracts";
 import { mergeModelOptions } from "./model-selection.ts";
 import { derivePendingApprovals, derivePendingUserInputs } from "../domain/thread-activities.ts";
 import {
@@ -17,8 +17,8 @@ import {
   threadStatus,
   type ThreadLifecycleStatus,
 } from "../domain/thread-lifecycle.ts";
-import type { OrchestrationThread } from "#t3tools/contracts";
-import type { ProviderApprovalDecision, ProviderUserInputAnswers } from "#t3tools/contracts";
+import type { OrchestrationThread } from "@t3tools/contracts";
+import type { ProviderApprovalDecision, ProviderUserInputAnswers } from "@t3tools/contracts";
 import {
   makeThreadApprovalRespondCommand,
   makeThreadArchiveCommand,

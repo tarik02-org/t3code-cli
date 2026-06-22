@@ -5,7 +5,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { fromPartial } from "@total-typescript/shoehorn";
 
-import type { OrchestrationShellSnapshot } from "#t3tools/contracts";
+import type { OrchestrationShellSnapshot } from "@t3tools/contracts";
 
 import { resolveProjectScope } from "./helpers.ts";
 

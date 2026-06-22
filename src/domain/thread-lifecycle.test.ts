@@ -3,7 +3,7 @@ import "vite-plus/test/config";
 import { describe, expect, it } from "vite-plus/test";
 import { fromPartial } from "@total-typescript/shoehorn";
 
-import type { OrchestrationThread } from "#t3tools/contracts";
+import type { OrchestrationThread } from "@t3tools/contracts";
 
 import { isThreadActive, isThreadCompleteEnough } from "./thread-lifecycle.ts";
 

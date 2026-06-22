@@ -1,6 +1,6 @@
 import type { ThreadShow } from "../../application/threads.ts";
 import type { WaitEvent } from "../../application/service.ts";
-import type { OrchestrationThread, OrchestrationThreadShell } from "#t3tools/contracts";
+import type { OrchestrationThread, OrchestrationThreadShell } from "@t3tools/contracts";
 import { latestAssistantMessage, threadStatus } from "../../domain/thread-lifecycle.ts";
 
 export function formatThreadShowJson(thread: ThreadShow) {

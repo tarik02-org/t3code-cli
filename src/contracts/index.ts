@@ -5,4 +5,4 @@ export type {
   OrchestrationThread,
   OrchestrationThreadShell,
   ServerProvider,
-} from "#t3tools/contracts";
+} from "@t3tools/contracts";

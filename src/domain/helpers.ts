@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
-import type { OrchestrationProjectShell, OrchestrationShellSnapshot } from "#t3tools/contracts";
+import type { OrchestrationProjectShell, OrchestrationShellSnapshot } from "@t3tools/contracts";
 
 export type ResolvedProjectScope = {
   readonly project: OrchestrationProjectShell;

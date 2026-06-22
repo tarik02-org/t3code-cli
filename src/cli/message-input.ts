@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { ProviderUserInputAnswers } from "#t3tools/contracts";
+import { ProviderUserInputAnswers } from "@t3tools/contracts";
 
 import { MessageInputError } from "./error.ts";
 import type { InputError } from "./input/error.ts";

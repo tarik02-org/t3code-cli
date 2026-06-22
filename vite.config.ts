@@ -1,12 +1,6 @@
-// @effect-diagnostics nodeBuiltinImport:off - Vite config resolves local paths with node:path.
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 import "vite-plus/test/config";
 import { defineConfig } from "vite-plus";
 import packageJson from "./package.json" with { type: "json" };
-
-const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
 function shouldBundlePackDependency(id: string): boolean {
   if (id === "@napi-rs/keyring" || id.startsWith("@napi-rs/keyring-")) {
@@ -16,14 +10,6 @@ function shouldBundlePackDependency(id: string): boolean {
 }
 
 export default defineConfig({
-  resolve: {
-    alias: {
-      "#t3tools/contracts": path.resolve(
-        rootDir,
-        "upstream-t3code/packages/contracts/src/index.ts",
-      ),
-    },
-  },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],

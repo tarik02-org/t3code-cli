@@ -1,4 +1,4 @@
-import type { OrchestrationProjectShell } from "#t3tools/contracts";
+import type { OrchestrationProjectShell } from "@t3tools/contracts";
 
 export function formatProjectsHuman(projects: ReadonlyArray<OrchestrationProjectShell>) {
   return projects

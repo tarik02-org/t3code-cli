@@ -15,7 +15,7 @@ import type {
   TerminalMetadataStreamEvent,
   TerminalSessionSnapshot,
   TerminalSummary,
-} from "#t3tools/contracts";
+} from "@t3tools/contracts";
 
 import type { ApplicationError } from "./error.ts";
 import type { ThreadShow } from "./threads.ts";

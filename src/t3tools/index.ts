@@ -1,1 +1,1 @@
-export * from "#t3tools/contracts";
+export * from "@t3tools/contracts";

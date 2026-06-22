@@ -1,6 +1,6 @@
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
-import type { ModelSelection } from "#t3tools/contracts";
+import type { ModelSelection } from "@t3tools/contracts";
 
 import { ModelSelectionError, ThreadEventError } from "../domain/error.ts";
 import { T3Orchestration } from "../orchestration/service.ts";

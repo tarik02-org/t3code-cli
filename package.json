@@ -27,12 +27,6 @@
   ],
   "type": "module",
   "types": "./dist/src/index.d.ts",
-  "imports": {
-    "#t3tools/contracts": {
-      "types": "./dist/upstream-t3code/packages/contracts/src/index.d.ts",
-      "default": "./dist/upstream-t3code/packages/contracts/src/index.d.ts"
-    }
-  },
   "exports": {
     ".": {
       "types": "./dist/src/index.d.ts",
@@ -90,7 +84,7 @@
       "default": "./dist/runtime.js"
     },
     "./t3tools": {
-      "types": "./dist/upstream-t3code/packages/contracts/src/index.d.ts",
+      "types": "./dist/src/t3tools/index.d.ts",
       "import": "./dist/t3tools.js",
       "default": "./dist/t3tools.js"
     },

@@ -10,7 +10,7 @@ import type {
   OrchestrationThread,
   OrchestrationThreadStreamItem,
   ServerProviders,
-} from "#t3tools/contracts";
+} from "@t3tools/contracts";
 
 import type { RpcError } from "../rpc/error.ts";
 

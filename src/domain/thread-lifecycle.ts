@@ -5,7 +5,7 @@ import {
   type OrchestrationSession,
   type OrchestrationThread,
   type OrchestrationThreadShell,
-} from "#t3tools/contracts";
+} from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
 type SessionStatusForDelete = OrchestrationSession["status"] | "closed";
