@@ -1,18 +1,13 @@
 import * as Crypto from "effect/Crypto";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import {
-  type DispatchResult,
   MAX_SCRIPT_ID_LENGTH,
   SCRIPT_RUN_COMMAND_PATTERN,
   type OrchestrationProjectShell,
   type OrchestrationShellSnapshot,
   type ProjectScript,
-  type ProjectScriptIcon,
-  type TerminalSessionSnapshot,
 } from "#t3tools/contracts";
 
 import {
@@ -23,89 +18,22 @@ import {
 } from "../domain/error.ts";
 import { findProjectById, resolveProjectScope } from "../domain/helpers.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
-import type { ApplicationError } from "./error.ts";
 import { makeProjectMetaUpdateCommand } from "./project-commands.ts";
 import { waitForShellSequence } from "./shell-sequence.ts";
-import { T3TerminalApplication } from "./service.ts";
+import {
+  T3TerminalApplication,
+  type AddProjectActionInput,
+  type ProjectActionSelector,
+  type T3ActionApplicationService,
+  type UpdateProjectActionInput,
+} from "./service.ts";
 
 const DEFAULT_ACTION_ICON = "play";
 const isScriptRunCommand = Schema.is(SCRIPT_RUN_COMMAND_PATTERN);
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 type MutablePartial<T> = { -readonly [K in keyof T]?: T[K] };
 
-export type ProjectActionSelector =
-  | { readonly id: string; readonly name?: never }
-  | { readonly id?: never; readonly name: string };
-
-export type AddProjectActionInput = {
-  readonly projectRef: string;
-  readonly id?: string;
-  readonly name: string;
-  readonly command: string;
-  readonly icon?: ProjectScriptIcon;
-  readonly setup?: boolean;
-  readonly previewUrl?: string;
-  readonly autoOpenPreview?: boolean;
-};
-
-export type UpdateProjectActionInput = {
-  readonly projectRef: string;
-  readonly selector: ProjectActionSelector;
-  readonly name?: string;
-  readonly command?: string;
-  readonly icon?: ProjectScriptIcon;
-  readonly setup?: boolean;
-  readonly previewUrl?: string | null;
-  readonly autoOpenPreview?: boolean | null;
-};
-
-export type ProjectActionMutationResult = {
-  readonly dispatch: DispatchResult;
-  readonly project: OrchestrationProjectShell;
-  readonly action: ProjectScript;
-};
-
-export type ProjectActionDeleteResult = {
-  readonly dispatch: DispatchResult;
-  readonly project: OrchestrationProjectShell;
-  readonly action: ProjectScript;
-};
-
-export type ProjectActionRunResult = {
-  readonly project: OrchestrationProjectShell;
-  readonly action: ProjectScript;
-  readonly terminal: TerminalSessionSnapshot;
-};
-
-export class T3ActionApplication extends Context.Service<
-  T3ActionApplication,
-  {
-    readonly listActions: (projectRef: string) => Effect.Effect<
-      {
-        readonly project: OrchestrationProjectShell;
-        readonly actions: ReadonlyArray<ProjectScript>;
-      },
-      ApplicationError
-    >;
-    readonly addAction: (
-      input: AddProjectActionInput,
-    ) => Effect.Effect<ProjectActionMutationResult, ApplicationError>;
-    readonly updateAction: (
-      input: UpdateProjectActionInput,
-    ) => Effect.Effect<ProjectActionMutationResult, ApplicationError>;
-    readonly deleteAction: (input: {
-      readonly projectRef: string;
-      readonly selector: ProjectActionSelector;
-    }) => Effect.Effect<ProjectActionDeleteResult, ApplicationError>;
-    readonly runAction: (input: {
-      readonly threadId: string;
-      readonly selector: ProjectActionSelector;
-      readonly terminalId?: string;
-    }) => Effect.Effect<ProjectActionRunResult, ApplicationError>;
-  }
->()("t3cli/T3ActionApplication") {}
-
-export const make = Effect.fn("makeActionApplication")(function* () {
+export const makeActionApplication = Effect.fn("makeActionApplication")(function* () {
   const orchestration = yield* T3Orchestration;
   const terminalApplication = yield* T3TerminalApplication;
   const crypto = yield* Crypto.Crypto;
@@ -153,7 +81,7 @@ export const make = Effect.fn("makeActionApplication")(function* () {
     return { dispatch, project };
   });
 
-  const listActions: T3ActionApplication["Service"]["listActions"] = Effect.fn(
+  const listActions: T3ActionApplicationService["listActions"] = Effect.fn(
     "T3ActionApplication.listActions",
   )(function* (projectRef: string) {
     const snapshot = yield* orchestration.getShellSnapshot();
@@ -161,7 +89,7 @@ export const make = Effect.fn("makeActionApplication")(function* () {
     return { project, actions: project.scripts };
   });
 
-  const addAction: T3ActionApplication["Service"]["addAction"] = Effect.fn(
+  const addAction: T3ActionApplicationService["addAction"] = Effect.fn(
     "T3ActionApplication.addAction",
   )(function* (input: AddProjectActionInput) {
     const snapshot = yield* orchestration.getShellSnapshot();
@@ -202,7 +130,7 @@ export const make = Effect.fn("makeActionApplication")(function* () {
     return { ...result, action: persisted };
   });
 
-  const updateAction: T3ActionApplication["Service"]["updateAction"] = Effect.fn(
+  const updateAction: T3ActionApplicationService["updateAction"] = Effect.fn(
     "T3ActionApplication.updateAction",
   )(function* (input: UpdateProjectActionInput) {
     const snapshot = yield* orchestration.getShellSnapshot();
@@ -226,7 +154,7 @@ export const make = Effect.fn("makeActionApplication")(function* () {
     return { ...result, action: persisted };
   });
 
-  const deleteAction: T3ActionApplication["Service"]["deleteAction"] = Effect.fn(
+  const deleteAction: T3ActionApplicationService["deleteAction"] = Effect.fn(
     "T3ActionApplication.deleteAction",
   )(function* (input: { readonly projectRef: string; readonly selector: ProjectActionSelector }) {
     const snapshot = yield* orchestration.getShellSnapshot();
@@ -241,7 +169,7 @@ export const make = Effect.fn("makeActionApplication")(function* () {
     return { ...result, action };
   });
 
-  const runAction: T3ActionApplication["Service"]["runAction"] = Effect.fn(
+  const runAction: T3ActionApplicationService["runAction"] = Effect.fn(
     "T3ActionApplication.runAction",
   )(function* (input: {
     readonly threadId: string;
@@ -291,10 +219,8 @@ export const make = Effect.fn("makeActionApplication")(function* () {
     listActions,
     runAction,
     updateAction,
-  } satisfies T3ActionApplication["Service"];
+  } satisfies T3ActionApplicationService;
 });
-
-export const layer = Layer.effect(T3ActionApplication, make());
 
 export function nextProjectScriptId(name: string, existingIds: Iterable<string>): string {
   const taken = new Set(Array.from(existingIds));

@@ -18,7 +18,7 @@ import type {
 
 import { ProjectActionLookupError, ProjectActionValidationError } from "../domain/error.ts";
 import { T3Orchestration, type Orchestration } from "../orchestration/service.ts";
-import { make, nextProjectScriptId } from "./actions.ts";
+import { makeActionApplication, nextProjectScriptId } from "./actions.ts";
 import { T3TerminalApplication, type CreateTerminalInput } from "./service.ts";
 
 function makeProject(scripts: ReadonlyArray<ProjectScript>): OrchestrationProjectShell {
@@ -104,7 +104,7 @@ describe("project actions", () => {
     t.effect("adds an action and clears existing setup actions", () =>
       Effect.gen(function* () {
         let dispatched: ClientOrchestrationCommand | undefined;
-        const app = yield* make().pipe(
+        const app = yield* makeActionApplication().pipe(
           Effect.provide(
             makeTestLayer({
               project: makeProject([
@@ -153,7 +153,7 @@ describe("project actions", () => {
     t.effect("adds a non-setup action without changing the existing setup action", () =>
       Effect.gen(function* () {
         let dispatched: ClientOrchestrationCommand | undefined;
-        const app = yield* make().pipe(
+        const app = yield* makeActionApplication().pipe(
           Effect.provide(
             makeTestLayer({
               project: makeProject([
@@ -196,7 +196,7 @@ describe("project actions", () => {
 
     t.effect("rejects explicit ids that cannot be used as script run commands", () =>
       Effect.gen(function* () {
-        const app = yield* make().pipe(
+        const app = yield* makeActionApplication().pipe(
           Effect.provide(
             makeTestLayer({
               project: makeProject([]),
@@ -227,7 +227,7 @@ describe("project actions", () => {
 
     t.effect("updates by exact case-insensitive trimmed name and clears preview data", () =>
       Effect.gen(function* () {
-        const app = yield* make().pipe(
+        const app = yield* makeActionApplication().pipe(
           Effect.provide(
             makeTestLayer({
               project: makeProject([
@@ -259,7 +259,7 @@ describe("project actions", () => {
 
     t.effect("fails clearly when name selector is ambiguous", () =>
       Effect.gen(function* () {
-        const app = yield* make().pipe(
+        const app = yield* makeActionApplication().pipe(
           Effect.provide(
             makeTestLayer({
               project: makeProject([
@@ -295,7 +295,7 @@ describe("project actions", () => {
     t.effect("runs an action in a thread terminal with project env", () =>
       Effect.gen(function* () {
         let created: CreateTerminalInput | undefined;
-        const app = yield* make().pipe(
+        const app = yield* makeActionApplication().pipe(
           Effect.provide(
             makeTestLayer({
               project: makeProject([makeAction({ id: "test", name: "Test" })]),
