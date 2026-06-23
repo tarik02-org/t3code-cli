@@ -27,6 +27,7 @@ import {
 } from "./service.ts";
 
 const DEFAULT_ACTION_ICON = "play";
+const SCRIPT_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 type MutablePartial<T> = { -readonly [K in keyof T]?: T[K] };
 
@@ -95,7 +96,7 @@ export const makeActionApplication = Effect.fn("makeActionApplication")(function
     const command = yield* requireTrimmedNonEmpty(input.command, "action command", project.id);
     const id =
       input.id !== undefined
-        ? yield* requireTrimmedNonEmpty(input.id, "action id", project.id)
+        ? yield* requireProjectScriptId(input.id, project.id)
         : nextProjectScriptId(
             name,
             project.scripts.map((script) => script.id),
@@ -114,7 +115,10 @@ export const makeActionApplication = Effect.fn("makeActionApplication")(function
       runOnWorktreeCreate: input.setup === true,
       ...preview,
     };
-    const nextScripts = enforceSingleSetup([...project.scripts, action], action.id);
+    const nextScripts = enforceSingleSetup(
+      [...project.scripts, action],
+      action.runOnWorktreeCreate ? action.id : null,
+    );
     const result = yield* dispatchScriptsUpdate(project.id, nextScripts);
     const persisted = yield* resolveActionBySelectorEffect(
       result.project.scripts,
@@ -332,6 +336,21 @@ function validateUnusedId(project: OrchestrationProjectShell, id: string) {
     );
   }
   return Effect.void;
+}
+
+function requireProjectScriptId(value: string, projectId: string) {
+  return Effect.gen(function* () {
+    const id = yield* requireTrimmedNonEmpty(value, "action id", projectId);
+    if (id.length > MAX_SCRIPT_ID_LENGTH || !SCRIPT_ID_PATTERN.test(id)) {
+      return yield* Effect.fail(
+        new ProjectActionValidationError({
+          message: `action id must match ${SCRIPT_ID_PATTERN} and be at most ${MAX_SCRIPT_ID_LENGTH} characters`,
+          projectId,
+        }),
+      );
+    }
+    return id;
+  });
 }
 
 function requireTrimmedNonEmpty(value: string, field: string, projectId: string) {
