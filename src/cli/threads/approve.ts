@@ -57,7 +57,7 @@ export const approveThreadCommand = Command.make(
         return yield* output.printJson(result);
       }
       return yield* output.printInfo(
-        `approval submitted: ${result.requestId}\nsequence: ${result.dispatch.sequence}`,
+        `approval submitted: ${result.requestId} (sequence ${result.dispatch.sequence})`,
       );
     }),
 ).pipe(Command.withDescription("respond to a pending approval request"));

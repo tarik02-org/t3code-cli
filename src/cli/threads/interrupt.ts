@@ -49,7 +49,7 @@ export const interruptThreadCommand = Command.make(
         return yield* output.printJson({ threadId, dispatch });
       }
       return yield* output.printInfo(
-        `thread interrupted: ${threadId}\nsequence: ${dispatch.sequence}`,
+        `thread interrupted: ${threadId} (sequence ${dispatch.sequence})`,
       );
     }),
 ).pipe(Command.withDescription("interrupt running thread turn"));

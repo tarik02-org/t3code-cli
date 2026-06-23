@@ -4,19 +4,25 @@ import type {
   LocalAuthResult,
   PairResult,
 } from "../../auth/type.ts";
+import { formatRecord, formatTable } from "./human.ts";
 
 export function formatAuthPaired(result: PairResult & { readonly name: string }) {
-  return `paired: ${result.url}\nname: ${result.name}\nrole: ${result.role}\nexpires: ${result.expiresAt}`;
+  return `paired\n${formatRecord([
+    { field: "url", value: result.url },
+    { field: "name", value: result.name },
+    { field: "role", value: result.role },
+    { field: "expires", value: result.expiresAt },
+  ])}`;
 }
 
 export function formatAuthLocalHuman(result: LocalAuthResult & { readonly name: string }) {
-  return [
-    `paired: ${result.url}`,
-    `name: ${result.name}`,
-    `role: ${result.role}`,
-    `expires: ${result.expiresAt}`,
-    `baseDir: ${result.baseDir}`,
-  ].join("\n");
+  return `paired\n${formatRecord([
+    { field: "url", value: result.url },
+    { field: "name", value: result.name },
+    { field: "role", value: result.role },
+    { field: "expires", value: result.expiresAt },
+    { field: "base dir", value: result.baseDir },
+  ])}`;
 }
 
 export function formatAuthLocalJson(result: LocalAuthResult & { readonly name: string }) {
@@ -24,15 +30,19 @@ export function formatAuthLocalJson(result: LocalAuthResult & { readonly name: s
 }
 
 export function formatAuthStatusHuman(input: AuthStatusResult) {
-  return [
-    ...(input.config.environment !== undefined ? [`environment: ${input.config.environment}`] : []),
-    `url: ${input.config.url}`,
-    `local: ${input.config.local ? "yes" : "no"}`,
-    `source: ${input.config.source}`,
-    `authenticated: ${input.session.authenticated ? "yes" : "no"}`,
-    ...(input.session.role !== undefined ? [`role: ${input.session.role}`] : []),
-    ...(input.session.expiresAt !== undefined ? [`expires: ${input.session.expiresAt}`] : []),
-  ].join("\n");
+  return formatRecord([
+    ...(input.config.environment !== undefined
+      ? [{ field: "environment", value: input.config.environment }]
+      : []),
+    { field: "url", value: input.config.url },
+    { field: "local", value: input.config.local ? "yes" : "no" },
+    { field: "source", value: input.config.source },
+    { field: "authenticated", value: input.session.authenticated ? "yes" : "no" },
+    ...(input.session.role !== undefined ? [{ field: "role", value: input.session.role }] : []),
+    ...(input.session.expiresAt !== undefined
+      ? [{ field: "expires", value: input.session.expiresAt }]
+      : []),
+  ]);
 }
 
 export function formatAuthStatusJson(input: AuthStatusResult) {
@@ -49,16 +59,24 @@ export function formatAuthListHuman(environments: readonly AuthEnvironmentListIt
   if (environments.length === 0) {
     return "no environments";
   }
-  return environments
-    .map((environment) => {
-      const markers = [
-        environment.default ? "default" : undefined,
-        environment.active ? "active" : undefined,
-      ].filter((marker) => marker !== undefined);
-      const suffix = markers.length > 0 ? ` (${markers.join(", ")})` : "";
-      return `${environment.name}: ${environment.url} [local=${environment.local ? "yes" : "no"}]${suffix}`;
-    })
-    .join("\n");
+  return formatTable(
+    [
+      { header: "name", value: (environment) => environment.name, maxWidth: 24 },
+      { header: "url", value: (environment) => environment.url, maxWidth: 72 },
+      { header: "local", value: (environment) => (environment.local ? "yes" : "no"), maxWidth: 6 },
+      {
+        header: "default",
+        value: (environment) => (environment.default ? "yes" : "no"),
+        maxWidth: 7,
+      },
+      {
+        header: "active",
+        value: (environment) => (environment.active ? "yes" : "no"),
+        maxWidth: 6,
+      },
+    ],
+    environments,
+  );
 }
 
 export function formatAuthListJson(environments: readonly AuthEnvironmentListItem[]) {

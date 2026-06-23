@@ -26,7 +26,9 @@ describe("formatThreadsHuman", () => {
     ];
 
     const output = formatThreadsHuman(threads);
-    assert.include(output, "- Active thread\n");
-    assert.include(output, "- Archived thread (archived)\n");
+    assert.include(output, "title            id          status   updated                   flags");
+    assert.include(output, "Active thread    active-1");
+    assert.include(output, "Archived thread  archived-1");
+    assert.include(output, "archived");
   });
 });

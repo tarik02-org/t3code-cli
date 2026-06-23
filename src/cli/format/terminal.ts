@@ -1,5 +1,7 @@
 import type { TerminalSessionSnapshot, TerminalSummary } from "#t3tools/contracts";
 
+import { formatTable } from "./human.ts";
+
 type TerminalRow = {
   readonly id: string;
   readonly status: string;
@@ -36,80 +38,17 @@ export function formatTerminalDestroyedHuman(input: {
 }
 
 function formatTerminalTable(rows: ReadonlyArray<TerminalRow>) {
-  const headers = {
-    id: "id",
-    status: "status",
-    label: "label",
-    cwd: "cwd",
-    updated: "updated",
-    process: "process",
-  };
-
-  const widths = {
-    id: columnWidth(
-      headers.id,
-      rows.map((row) => row.id),
-      44,
-    ),
-    status: columnWidth(
-      headers.status,
-      rows.map((row) => row.status),
-      8,
-    ),
-    label: columnWidth(
-      headers.label,
-      rows.map((row) => row.label),
-      24,
-    ),
-    cwd: columnWidth(
-      headers.cwd,
-      rows.map((row) => row.cwd),
-      40,
-    ),
-    updated: columnWidth(
-      headers.updated,
-      rows.map((row) => row.updated),
-      24,
-    ),
-    process: columnWidth(
-      headers.process,
-      rows.map((row) => row.process),
-      20,
-    ),
-  };
-
-  const header = [
-    pad(headers.id, widths.id),
-    pad(headers.status, widths.status),
-    pad(headers.label, widths.label),
-    pad(headers.cwd, widths.cwd),
-    pad(headers.updated, widths.updated),
-    pad(headers.process, widths.process),
-  ].join("  ");
-
-  const divider = [
-    "-".repeat(widths.id),
-    "-".repeat(widths.status),
-    "-".repeat(widths.label),
-    "-".repeat(widths.cwd),
-    "-".repeat(widths.updated),
-    "-".repeat(widths.process),
-  ].join("  ");
-
-  const body = rows
-    .map((row) =>
-      [
-        pad(row.id, widths.id),
-        pad(row.status, widths.status),
-        pad(row.label, widths.label),
-        pad(row.cwd, widths.cwd),
-        pad(row.updated, widths.updated),
-        pad(row.process, widths.process),
-      ].join("  "),
-    )
-    .join("\n");
-
-  return `${header}\n${divider}\n${body}`;
+  return formatTable(
+    [
+      { header: "id", value: (row) => row.id, maxWidth: 44 },
+      { header: "status", value: (row) => row.status, maxWidth: 8 },
+      { header: "label", value: (row) => row.label, maxWidth: 24 },
+      { header: "cwd", value: (row) => row.cwd, maxWidth: 40 },
+      { header: "updated", value: (row) => row.updated, maxWidth: 24 },
+      { header: "process", value: (row) => row.process, maxWidth: 20 },
+    ],
+    rows,
+  );
 }
 
 function toSummaryRow(terminal: TerminalSummary): TerminalRow {
@@ -145,23 +84,4 @@ function formatProcessInfo(input: {
     typeof input.exitSignal === "number" ? `sig ${input.exitSignal}` : null,
   ].filter((part): part is string => part !== null);
   return parts.length > 0 ? parts.join(", ") : "-";
-}
-
-function columnWidth(header: string, values: ReadonlyArray<string>, maxWidth: number) {
-  const widest = values.reduce((width, value) => Math.max(width, value.length), header.length);
-  return Math.min(widest, maxWidth);
-}
-
-function pad(value: string, width: number) {
-  return truncate(value, width).padEnd(width, " ");
-}
-
-function truncate(value: string, width: number) {
-  if (value.length <= width) {
-    return value;
-  }
-  if (width <= 3) {
-    return value.slice(0, width);
-  }
-  return `${value.slice(0, width - 3)}...`;
 }

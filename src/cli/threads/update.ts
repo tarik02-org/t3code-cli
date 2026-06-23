@@ -148,6 +148,6 @@ export const updateThreadCommand = Command.make(
       if (resolvedFormat === "json") {
         return yield* output.printJson(dispatch);
       }
-      return yield* output.printInfo(`thread updated: ${threadId}\nsequence: ${dispatch.sequence}`);
+      return yield* output.printInfo(`thread updated: ${threadId} (sequence ${dispatch.sequence})`);
     }),
 ).pipe(Command.withDescription("update thread metadata"));
