@@ -2,7 +2,7 @@ import type {
   OrchestrationProjectShell,
   ProjectScript,
   TerminalSessionSnapshot,
-} from "#t3tools/contracts";
+} from "@t3tools/contracts";
 
 import { formatRecord, formatTable } from "./format/human.ts";
 

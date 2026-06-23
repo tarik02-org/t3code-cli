@@ -14,7 +14,7 @@ import type {
   OrchestrationProjectShell,
   OrchestrationShellSnapshot,
   ProjectScript,
-} from "#t3tools/contracts";
+} from "@t3tools/contracts";
 
 import { ProjectActionLookupError, ProjectActionValidationError } from "../domain/error.ts";
 import { T3Orchestration, type Orchestration } from "../orchestration/service.ts";
