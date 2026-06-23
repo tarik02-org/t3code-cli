@@ -124,6 +124,7 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
         terminalId,
         cwd,
         worktreePath: thread.worktreePath ?? null,
+        ...(input.env !== undefined ? { env: input.env } : {}),
       }),
     );
 

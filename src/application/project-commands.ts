@@ -41,3 +41,23 @@ export const makeProjectDeleteCommand = Effect.fn("makeProjectDeleteCommand")(fu
     ...(input.force === true ? { force: true } : {}),
   } satisfies Extract<ClientOrchestrationCommand, { readonly type: "project.delete" }>;
 });
+
+export const makeProjectMetaUpdateCommand = Effect.fn("makeProjectMetaUpdateCommand")(
+  function* (input: {
+    readonly projectId: string;
+    readonly scripts: Extract<
+      ClientOrchestrationCommand,
+      { readonly type: "project.meta.update" }
+    >["scripts"];
+  }) {
+    const crypto = yield* Crypto.Crypto;
+    return {
+      type: "project.meta.update",
+      commandId: CommandId.make(
+        `t3cli:project-meta-update:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+      ),
+      projectId: ProjectId.make(input.projectId),
+      scripts: input.scripts,
+    } satisfies Extract<ClientOrchestrationCommand, { readonly type: "project.meta.update" }>;
+  },
+);
