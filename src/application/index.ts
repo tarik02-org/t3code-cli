@@ -5,6 +5,7 @@ export {
   T3TerminalApplication,
   T3ThreadApplication,
 } from "./service.ts";
+export { T3ActionApplication, layer as T3ActionApplicationLayer } from "./actions.ts";
 export {
   makeT3Application,
   T3ApplicationLive,

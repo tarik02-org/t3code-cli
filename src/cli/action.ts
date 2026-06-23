@@ -2,7 +2,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
 
-import { T3Application, type ProjectActionSelector } from "../application/service.ts";
+import type { ProjectActionSelector } from "../application/actions.ts";
+import { T3Application } from "../application/service.ts";
 import { loadT3CliEnv } from "../config/env/env.ts";
 import {
   formatActionAddedHuman,
