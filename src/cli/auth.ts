@@ -10,6 +10,7 @@ import {
   formatAuthStatusJson,
 } from "./format/auth.ts";
 import { T3Auth } from "../auth/service.ts";
+import { extraArgsConfig } from "./extra-args.ts";
 import { CliRuntime } from "../cli/runtime/service.ts";
 import { loadT3CliEnv } from "../config/env/env.ts";
 import { requireEnvironmentReplaceConfirmation } from "./interaction/confirm.ts";
@@ -65,6 +66,7 @@ const pairCommand = Command.make(
     name: envNameFlag,
     replace: replaceFlag,
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ url, local, name, replace, format }) =>
     Effect.gen(function* () {
@@ -103,6 +105,7 @@ const localCommand = Command.make(
     name: envNameFlag,
     replace: replaceFlag,
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ baseDir, origin, role, label, subject, name, replace, format }) =>
     Effect.gen(function* () {
@@ -140,6 +143,7 @@ const statusCommand = Command.make(
   "status",
   {
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ format }) =>
     Effect.gen(function* () {

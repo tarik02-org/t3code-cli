@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
+import { extraArgsConfig } from "../extra-args.ts";
 import { formatTerminalWrittenHuman } from "../format/terminal.ts";
 import { T3Application } from "../../application/service.ts";
 import { CliRuntime } from "../../cli/runtime/service.ts";
@@ -26,6 +27,7 @@ export const writeTerminalCommand = Command.make(
     base64: Flag.string("base64").pipe(Flag.optional),
     quiet: Flag.boolean("quiet"),
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ thread, terminalId, data, stdin, hex, base64, quiet, format }) =>
     Effect.gen(function* () {

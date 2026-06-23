@@ -16,6 +16,7 @@ import {
   InvalidFlagCombinationError,
   MissingUpdateFieldsError,
 } from "./error.ts";
+import { extraArgsConfig } from "./extra-args.ts";
 import { formatFlag, projectFlag, threadFlag, yesFlag } from "./flags.ts";
 import { resolveOutputFormat } from "./format/output.ts";
 import { requireDestructiveConfirmation } from "./interaction/confirm.ts";
@@ -60,6 +61,7 @@ const listActionsCommand = Command.make(
   {
     project: projectFlag,
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ project, format }) =>
     Effect.gen(function* () {
@@ -89,6 +91,7 @@ const runActionCommand = Command.make(
     terminal: Flag.string("terminal").pipe(Flag.optional),
     attach: Flag.boolean("attach"),
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ thread, id, name, terminal, attach, format }) =>
     Effect.gen(function* () {
@@ -134,6 +137,7 @@ const addActionCommand = Command.make(
     previewUrl: previewUrlFlag,
     autoOpenPreview: Flag.boolean("auto-open-preview"),
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ project, name, command, id, icon, setup, previewUrl, autoOpenPreview, format }) =>
     Effect.gen(function* () {
@@ -188,6 +192,7 @@ const updateActionCommand = Command.make(
     noAutoOpenPreview: noAutoOpenPreviewFlag,
     clearAutoOpenPreview: clearAutoOpenPreviewFlag,
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({
     project,
@@ -254,6 +259,7 @@ const deleteActionCommand = Command.make(
     name: nameFlag,
     yes: yesFlag,
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ project, id, name, yes, format }) =>
     Effect.gen(function* () {
