@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
-import { ModelSelection, ProviderInstanceId } from "#t3tools/contracts";
-import type { OrchestrationProjectShell } from "#t3tools/contracts";
+import { ModelSelection, ProviderInstanceId } from "@t3tools/contracts";
+import type { OrchestrationProjectShell } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
 import { ModelSelectionError } from "../domain/error.ts";

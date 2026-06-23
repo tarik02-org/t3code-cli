@@ -2,7 +2,7 @@ import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
-import { CommandId, ProjectId, type ClientOrchestrationCommand } from "#t3tools/contracts";
+import { CommandId, ProjectId, type ClientOrchestrationCommand } from "@t3tools/contracts";
 
 export const makeProjectCreateCommand = Effect.fn("makeProjectCreateCommand")(function* (input: {
   readonly path: string;

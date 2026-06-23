@@ -10,7 +10,7 @@ import type {
   OrchestrationShellSnapshot,
   OrchestrationThread,
   OrchestrationThreadShell,
-} from "#t3tools/contracts";
+} from "@t3tools/contracts";
 
 import * as CliRuntime from "../cli/runtime/service.ts";
 import { t3CliEnvConfigLayer } from "../config/env/env.test-utils.ts";

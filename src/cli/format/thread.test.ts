@@ -2,7 +2,7 @@ import "vite-plus/test/config";
 
 import { assert, describe, it } from "@effect/vitest";
 import { fromPartial } from "@total-typescript/shoehorn";
-import type { OrchestrationThreadShell } from "#t3tools/contracts";
+import type { OrchestrationThreadShell } from "@t3tools/contracts";
 
 import { formatThreadsHuman } from "./thread.ts";
 

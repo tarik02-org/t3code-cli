@@ -8,7 +8,7 @@ import {
   type OrchestrationProjectShell,
   type OrchestrationShellSnapshot,
   type ProjectScript,
-} from "#t3tools/contracts";
+} from "@t3tools/contracts";
 
 import {
   ProjectActionLookupError,

@@ -1,4 +1,4 @@
-import type { TerminalSessionSnapshot, TerminalSummary } from "#t3tools/contracts";
+import type { TerminalSessionSnapshot, TerminalSummary } from "@t3tools/contracts";
 
 import { formatTable } from "./human.ts";
 
