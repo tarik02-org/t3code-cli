@@ -1,5 +1,6 @@
 import { Command } from "effect/unstable/cli";
 
+import { createActionCommand } from "./action.ts";
 import { createAuthCommand } from "./auth.ts";
 import { createEnvCommand } from "./env.ts";
 import { cliEnvironmentSetting } from "./env/flag.ts";
@@ -19,6 +20,7 @@ export function createCliCommand() {
     Command.withDescription("non-interactive cli for running t3code server"),
     Command.withGlobalFlags([cliEnvironmentSetting]),
     Command.withSubcommands([
+      createActionCommand(),
       createAuthCommand(),
       createEnvCommand(),
       listThreadsCommand,

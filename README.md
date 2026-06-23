@@ -124,6 +124,22 @@ t3cli thread delete [--thread <id>] [--yes] # Delete thread
 t3cli thread callback --from <id>           # Notify another thread on completion
 ```
 
+## Action Commands
+
+Project-defined toolbar actions are exposed as `t3cli action`.
+
+```sh
+t3cli action list [--project <ref>] [--format auto|human|json]
+t3cli action run --thread <id> (--id <id> | --name <name>) [--terminal <id>] [--attach] [--format auto|human|json]
+t3cli action add [--project <ref>] --name <name> --command <command> [--id <id>] [--icon play|test|lint|configure|build|debug] [--setup] [--preview-url <url>] [--auto-open-preview] [--format auto|human|json]
+t3cli action update [--project <ref>] (--id <id> | --name <name>) [--set-name <name>] [--command <command>] [--icon play|test|lint|configure|build|debug] [--setup | --no-setup] [--preview-url <url> | --clear-preview-url] [--auto-open-preview | --no-auto-open-preview | --clear-auto-open-preview] [--format auto|human|json]
+t3cli action delete [--project <ref>] (--id <id> | --name <name>) [--yes] [--format auto|human|json]
+```
+
+`action list`, `add`, `update`, and `delete` use normal project resolution: `--project`, `T3CODE_PROJECT_ROOT`, `T3CODE_PROJECT_ID`, or cwd with local auth. `action run` infers the project from `--thread`.
+
+Selectors require exactly one of `--id` or `--name`. Name matching is exact after trimming and case folding, and must match a single action. `action add` generates an id from `--name` when omitted. `--setup` marks the action to run on worktree creation and clears setup from other actions. Preview fields are stored on the action; `action run` only starts the terminal command and does not open previews.
+
 ## Terminal Commands
 
 ```sh
