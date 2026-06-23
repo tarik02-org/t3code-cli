@@ -5,10 +5,11 @@ import type { TerminalMetadataStreamEvent, TerminalSummary } from "#t3tools/cont
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
 import { T3Application } from "../../application/service.ts";
-import { Environment } from "../../environment/service.ts";
 import { extraArgsConfig } from "../extra-args.ts";
+import { CliRuntime } from "../../cli/runtime/service.ts";
+import { loadT3CliEnv } from "../../config/env/env.ts";
 import { formatFlag, threadFlag } from "../flags.ts";
-import { resolveOutputFormat } from "../output-format.ts";
+import { resolveOutputFormat } from "../format/output.ts";
 import { T3Output } from "../output/service.ts";
 import { TerminalCliError } from "./error.ts";
 import { requireCommandThreadId } from "./scope.ts";
@@ -56,13 +57,11 @@ export const waitTerminalCommand = Command.make(
   ({ thread, terminalId, target, format }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
-      const threadId = yield* requireCommandThreadId({
-        thread,
-        env: environment.env,
-      });
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const threadId = yield* requireCommandThreadId({ thread });
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
 
       const resolution = yield* application.watchTerminalMetadata().pipe(
         Stream.map((event) => resolveMetadataWait(event, target, threadId, terminalId)),

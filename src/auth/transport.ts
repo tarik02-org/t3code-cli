@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http";
 
-import { toHttpEndpointUrl } from "../config/url.ts";
+import { toHttpEndpointUrl } from "../config/url/url.ts";
 import { AuthTransportError } from "./error.ts";
 import {
   type AuthBearerBootstrapResult,

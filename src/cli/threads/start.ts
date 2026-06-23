@@ -8,12 +8,13 @@ import { modelFlags, projectFlag, threadFormatFlag, worktreeFlag } from "../flag
 import { readInitialMessage } from "../message-input.ts";
 import { buildModelOptions } from "../model-options.ts";
 import { requireCommandProjectRef } from "../require.ts";
-import { resolveWorktreePath } from "../../scope/index.ts";
-import { formatThreadStartedHuman } from "../thread-format.ts";
+import { resolveWorktreePath } from "../scope/index.ts";
+import { formatThreadStartedHuman } from "../format/thread.ts";
 import { T3Application } from "../../application/service.ts";
-import { Environment } from "../../environment/service.ts";
+import { CliRuntime } from "../../cli/runtime/service.ts";
+import { loadT3CliEnv } from "../../config/env/env.ts";
 import { T3Input } from "../input/service.ts";
-import { canRenderLiveTerminal, resolveOutputFormat } from "../output-format.ts";
+import { canRenderLiveTerminal, resolveOutputFormat } from "../format/output.ts";
 import { T3Output } from "../output/service.ts";
 import { printWaitEventsHuman, printWaitEventsNdjson } from "../wait-events.ts";
 
@@ -66,16 +67,13 @@ export const startThreadCommand = Command.make(
         thinking,
       });
       const application = yield* T3Application;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
-      const projectRef = yield* requireCommandProjectRef({
-        project,
-        env: environment.env,
-        cwd: environment.cwd,
-      });
+      const projectRef = yield* requireCommandProjectRef({ project });
       const worktreePath = resolveWorktreePath({
         value: Option.getOrUndefined(worktree),
-        env: environment.env,
+        scope: t3CliEnv.scope,
       });
       const input = {
         message: text,
@@ -88,7 +86,12 @@ export const startThreadCommand = Command.make(
         ...(modelValue !== undefined && modelValue.length > 0 ? { model: modelValue } : {}),
         ...(options.length > 0 ? { options } : {}),
       };
-      const resolvedFormat = resolveOutputFormat(format, environment, wait ? "ndjson" : "json");
+      const resolvedFormat = resolveOutputFormat(
+        format,
+        cliRuntime,
+        t3CliEnv,
+        wait ? "ndjson" : "json",
+      );
 
       if (resolvedFormat === "ndjson") {
         const started = yield* application.startThread(input, {
@@ -119,7 +122,7 @@ export const startThreadCommand = Command.make(
         }
         yield* printWaitEventsHuman(output, application.watchThread(started.threadId), {
           threadId: started.threadId,
-          live: canRenderLiveTerminal(environment),
+          live: canRenderLiveTerminal(cliRuntime, t3CliEnv),
         });
         return;
       }

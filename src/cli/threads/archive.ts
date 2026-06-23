@@ -5,11 +5,12 @@ import { Command } from "effect/unstable/cli";
 import { extraArgsConfig } from "../extra-args.ts";
 import { formatFlag, selfActionForceFlag, threadFlag } from "../flags.ts";
 import { MissingThreadError } from "../error.ts";
-import { requireSelfActionConfirmation } from "../self-action.ts";
-import { resolveThreadId } from "../../scope/index.ts";
+import { requireSelfActionConfirmation } from "../interaction/self-action.ts";
+import { resolveThreadId } from "../scope/index.ts";
 import { T3Application } from "../../application/service.ts";
-import { Environment } from "../../environment/service.ts";
-import { resolveOutputFormat } from "../output-format.ts";
+import { CliRuntime } from "../../cli/runtime/service.ts";
+import { loadT3CliEnv } from "../../config/env/env.ts";
+import { resolveOutputFormat } from "../format/output.ts";
 import { T3Output } from "../output/service.ts";
 
 export const archiveThreadCommand = Command.make(
@@ -23,11 +24,12 @@ export const archiveThreadCommand = Command.make(
   ({ thread, force, format }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
       const threadId = resolveThreadId({
         value: Option.getOrUndefined(thread),
-        env: environment.env,
+        scope: t3CliEnv.scope,
       });
       if (threadId === undefined) {
         return yield* Effect.fail(
@@ -39,16 +41,17 @@ export const archiveThreadCommand = Command.make(
       yield* requireSelfActionConfirmation({
         threadId,
         force,
-        environment,
+        cliRuntime,
+        t3CliEnv,
         action: "archive",
       });
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       const dispatch = yield* application.archiveThread(threadId);
       if (resolvedFormat === "json") {
         return yield* output.printJson(dispatch);
       }
       return yield* output.printInfo(
-        `thread archived: ${threadId}\nsequence: ${dispatch.sequence}`,
+        `thread archived: ${threadId} (sequence ${dispatch.sequence})`,
       );
     }),
 ).pipe(Command.withDescription("archive thread"));

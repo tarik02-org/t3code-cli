@@ -1,4 +1,5 @@
 import type { AuthBearerBootstrapResult } from "./schema.ts";
+import type { AuthSessionState } from "./schema.ts";
 
 export type AuthSessionRole = AuthBearerBootstrapResult["role"];
 
@@ -8,9 +9,44 @@ export type PairingUrl = {
 };
 
 export type AuthConfigInput = {
+  readonly name: string;
   readonly url: string;
   readonly token: string;
-  readonly local?: boolean;
+  readonly local: boolean;
+  readonly makeDefault?: boolean;
+};
+
+export type PersistEnvironmentInput = {
+  readonly name: string;
+  readonly url: string;
+  readonly token: string;
+  readonly local: boolean;
+  readonly replace?: boolean;
+  readonly allowReplace: boolean;
+};
+
+export type AuthResolvedConfig = {
+  readonly url: string;
+  readonly token: string;
+  readonly source: "env" | "config";
+  readonly local: boolean;
+  readonly environment?: string;
+};
+
+export type AuthEnvironmentSummary = {
+  readonly name: string;
+  readonly url: string;
+  readonly local: boolean;
+  readonly default: boolean;
+};
+
+export type AuthStatusResult = {
+  readonly config: AuthResolvedConfig;
+  readonly session: AuthSessionState;
+};
+
+export type AuthEnvironmentListItem = AuthEnvironmentSummary & {
+  readonly active: boolean;
 };
 
 export type PairResult = {
@@ -50,4 +86,14 @@ export type LocalAuthResult = {
   readonly expiresAt: string;
   readonly source: "local";
   readonly baseDir: string;
+};
+
+export type AuthUseResult = {
+  readonly name: string;
+  readonly default: true;
+};
+
+export type AuthUnpairResult = {
+  readonly name: string;
+  readonly removed: true;
 };

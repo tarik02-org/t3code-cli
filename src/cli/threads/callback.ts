@@ -7,8 +7,8 @@ import { Command, Flag } from "effect/unstable/cli";
 import { extraArgsConfig } from "../extra-args.ts";
 import { threadFlag } from "../flags.ts";
 import { MissingThreadError } from "../error.ts";
-import { resolveThreadId } from "../../scope/index.ts";
-import { Environment } from "../../environment/service.ts";
+import { resolveThreadId } from "../scope/index.ts";
+import { loadT3CliEnv } from "../../config/env/env.ts";
 import { T3Application } from "../../application/service.ts";
 import { T3Output } from "../output/service.ts";
 import { CliPath } from "../../cli-path/service.ts";
@@ -28,7 +28,7 @@ export const callbackThreadCommand = Command.make(
   ({ from, thread, prompt, background }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
-      const environment = yield* Environment;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
       const cliPath = yield* CliPath;
       const spawner = yield* ChildProcessSpawner;
@@ -37,7 +37,7 @@ export const callbackThreadCommand = Command.make(
 
       const targetThreadId = resolveThreadId({
         value: Option.getOrUndefined(thread),
-        env: environment.env,
+        scope: t3CliEnv.scope,
       });
       if (targetThreadId === undefined) {
         return yield* Effect.fail(

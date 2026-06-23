@@ -1,4 +1,5 @@
 export {
+  T3ActionApplication,
   T3Application,
   T3ModelApplication,
   T3ProjectApplication,
@@ -7,6 +8,7 @@ export {
 } from "./service.ts";
 export {
   makeT3Application,
+  T3ActionApplicationLive,
   T3ApplicationLive,
   T3ApplicationSlicesLive,
   T3ModelApplicationLive,
@@ -15,14 +17,16 @@ export {
   T3ThreadApplicationLive,
 } from "./layer.ts";
 export type {
+  AddProjectActionInput,
+  ProjectActionDeleteResult,
+  ProjectActionMutationResult,
+  ProjectActionRunResult,
+  ProjectActionSelector,
   SendThreadInput,
   StartThreadInput,
   StartThreadPolicy,
-  T3ApplicationService,
-  T3ModelApplicationService,
-  T3ProjectApplicationService,
-  T3TerminalApplicationService,
-  T3ThreadApplicationService,
+  T3ActionApplicationService,
+  UpdateProjectActionInput,
   UpdateThreadInput,
   WaitEvent,
 } from "./service.ts";

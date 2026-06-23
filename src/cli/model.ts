@@ -5,9 +5,10 @@ import { Command, Flag } from "effect/unstable/cli";
 import { extraArgsConfig } from "./extra-args.ts";
 import { formatFlag } from "./flags.ts";
 import { T3Application } from "../application/service.ts";
-import { Environment } from "../environment/service.ts";
-import { formatModelsHuman } from "./model-format.ts";
-import { resolveOutputFormat } from "./output-format.ts";
+import { CliRuntime } from "../cli/runtime/service.ts";
+import { loadT3CliEnv } from "../config/env/env.ts";
+import { formatModelsHuman } from "./format/model.ts";
+import { resolveOutputFormat } from "./format/output.ts";
 import { T3Output } from "./output/service.ts";
 
 export function createModelCommand() {
@@ -28,10 +29,11 @@ const listCommand = Command.make(
   ({ all, provider, format }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
       const providerValue = Option.getOrUndefined(provider);
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       const providers = yield* application.listModels({
         all,
         ...(providerValue !== undefined && providerValue.length > 0

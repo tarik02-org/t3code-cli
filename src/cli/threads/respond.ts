@@ -6,11 +6,12 @@ import { extraArgsConfig } from "../extra-args.ts";
 import { formatFlag, threadFlag } from "../flags.ts";
 import { MissingRequestError, MissingThreadError } from "../error.ts";
 import { readJsonAnswers } from "../message-input.ts";
-import { resolveThreadId } from "../../scope/index.ts";
+import { resolveThreadId } from "../scope/index.ts";
 import { T3Application } from "../../application/service.ts";
-import { Environment } from "../../environment/service.ts";
+import { CliRuntime } from "../../cli/runtime/service.ts";
+import { loadT3CliEnv } from "../../config/env/env.ts";
 import { T3Input } from "../input/service.ts";
-import { resolveOutputFormat } from "../output-format.ts";
+import { resolveOutputFormat } from "../format/output.ts";
 import { T3Output } from "../output/service.ts";
 
 const requestFlag = Flag.string("request").pipe(
@@ -37,11 +38,12 @@ export const respondThreadCommand = Command.make(
         readStdin: inputService.readStdin,
       });
       const application = yield* T3Application;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
       const threadId = resolveThreadId({
         value: Option.getOrUndefined(thread),
-        env: environment.env,
+        scope: t3CliEnv.scope,
       });
       if (threadId === undefined) {
         return yield* Effect.fail(
@@ -56,7 +58,7 @@ export const respondThreadCommand = Command.make(
           new MissingRequestError({ message: "request id is required: pass --request" }),
         );
       }
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       const result = yield* application.respondToThread({
         threadId,
         requestId,
@@ -66,7 +68,7 @@ export const respondThreadCommand = Command.make(
         return yield* output.printJson(result);
       }
       return yield* output.printInfo(
-        `user input submitted: ${result.requestId}\nsequence: ${result.dispatch.sequence}`,
+        `user input submitted: ${result.requestId} (sequence ${result.dispatch.sequence})`,
       );
     }),
 ).pipe(Command.withDescription("respond to a pending user-input request"));

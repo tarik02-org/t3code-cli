@@ -15,7 +15,7 @@ import { RpcClientError } from "effect/unstable/rpc";
 
 import { AuthTransportError } from "../auth/error.ts";
 import { T3CodeConnectionError } from "../connection/error.ts";
-import { UrlError } from "../config/error.ts";
+import { UrlError } from "../config/url/error.ts";
 
 const RpcErrorCauseSchema = Schema.Union([
   RpcClientError.RpcClientError,
