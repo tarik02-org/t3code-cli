@@ -16,7 +16,7 @@ import type {
   ProjectScript,
 } from "#t3tools/contracts";
 
-import { ProjectActionLookupError } from "../domain/error.ts";
+import { ProjectActionLookupError, ProjectActionValidationError } from "../domain/error.ts";
 import { T3Orchestration, type Orchestration } from "../orchestration/service.ts";
 import { makeActionApplication, nextProjectScriptId } from "./actions.ts";
 import { T3TerminalApplication, type CreateTerminalInput } from "./service.ts";
@@ -146,6 +146,81 @@ describe("project actions", () => {
               ["run-tests", true],
             ],
           );
+        }
+      }),
+    );
+
+    t.effect("adds a non-setup action without changing the existing setup action", () =>
+      Effect.gen(function* () {
+        let dispatched: ClientOrchestrationCommand | undefined;
+        const app = yield* makeActionApplication().pipe(
+          Effect.provide(
+            makeTestLayer({
+              project: makeProject([
+                makeAction({
+                  id: "setup",
+                  name: "Setup",
+                  command: "npm install",
+                  icon: "configure",
+                  runOnWorktreeCreate: true,
+                }),
+              ]),
+              onDispatch: (command) => {
+                dispatched = command;
+              },
+            }),
+          ),
+        );
+
+        const result = yield* app.addAction({
+          projectRef: "proj-1",
+          name: "Run Tests",
+          command: "npm test",
+          icon: "test",
+        });
+
+        assert.equal(result.action.runOnWorktreeCreate, false);
+        assert.equal(dispatched?.type, "project.meta.update");
+        if (dispatched?.type === "project.meta.update") {
+          assert.isDefined(dispatched.scripts);
+          assert.deepEqual(
+            dispatched.scripts.map((script) => [script.id, script.runOnWorktreeCreate]),
+            [
+              ["setup", true],
+              ["run-tests", false],
+            ],
+          );
+        }
+      }),
+    );
+
+    t.effect("rejects explicit ids that cannot be used as script run commands", () =>
+      Effect.gen(function* () {
+        const app = yield* makeActionApplication().pipe(
+          Effect.provide(
+            makeTestLayer({
+              project: makeProject([]),
+            }),
+          ),
+        );
+
+        const exit = yield* app
+          .addAction({
+            projectRef: "proj-1",
+            id: "Bad Id",
+            name: "Run Tests",
+            command: "npm test",
+            icon: "test",
+          })
+          .pipe(Effect.exit);
+
+        assert.isTrue(Exit.isFailure(exit));
+        if (Exit.isFailure(exit)) {
+          const error = Cause.findErrorOption(exit.cause);
+          assert.isTrue(Option.isSome(error));
+          if (Option.isSome(error)) {
+            assert.instanceOf(error.value, ProjectActionValidationError);
+          }
         }
       }),
     );

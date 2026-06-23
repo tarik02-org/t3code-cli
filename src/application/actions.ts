@@ -1,8 +1,10 @@
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import {
   MAX_SCRIPT_ID_LENGTH,
+  SCRIPT_RUN_COMMAND_PATTERN,
   type OrchestrationProjectShell,
   type OrchestrationShellSnapshot,
   type ProjectScript,
@@ -27,7 +29,7 @@ import {
 } from "./service.ts";
 
 const DEFAULT_ACTION_ICON = "play";
-const SCRIPT_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+const isScriptRunCommand = Schema.is(SCRIPT_RUN_COMMAND_PATTERN);
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 type MutablePartial<T> = { -readonly [K in keyof T]?: T[K] };
 
@@ -341,10 +343,10 @@ function validateUnusedId(project: OrchestrationProjectShell, id: string) {
 function requireProjectScriptId(value: string, projectId: string) {
   return Effect.gen(function* () {
     const id = yield* requireTrimmedNonEmpty(value, "action id", projectId);
-    if (id.length > MAX_SCRIPT_ID_LENGTH || !SCRIPT_ID_PATTERN.test(id)) {
+    if (!isScriptRunCommand(`script.${id}.run`)) {
       return yield* Effect.fail(
         new ProjectActionValidationError({
-          message: `action id must match ${SCRIPT_ID_PATTERN} and be at most ${MAX_SCRIPT_ID_LENGTH} characters`,
+          message: `action id must be lowercase alphanumeric or hyphenated and at most ${MAX_SCRIPT_ID_LENGTH} characters`,
           projectId,
         }),
       );
