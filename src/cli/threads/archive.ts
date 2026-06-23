@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Command } from "effect/unstable/cli";
 
+import { extraArgsConfig } from "../extra-args.ts";
 import { formatFlag, selfActionForceFlag, threadFlag } from "../flags.ts";
 import { MissingThreadError } from "../error.ts";
 import { requireSelfActionConfirmation } from "../interaction/self-action.ts";
@@ -18,6 +19,7 @@ export const archiveThreadCommand = Command.make(
     thread: threadFlag,
     force: selfActionForceFlag,
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ thread, force, format }) =>
     Effect.gen(function* () {
@@ -49,7 +51,7 @@ export const archiveThreadCommand = Command.make(
         return yield* output.printJson(dispatch);
       }
       return yield* output.printInfo(
-        `thread archived: ${threadId}\nsequence: ${dispatch.sequence}`,
+        `thread archived: ${threadId} (sequence ${dispatch.sequence})`,
       );
     }),
 ).pipe(Command.withDescription("archive thread"));

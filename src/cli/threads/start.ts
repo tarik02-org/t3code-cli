@@ -3,6 +3,7 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
+import { extraArgsConfig } from "../extra-args.ts";
 import { modelFlags, projectFlag, threadFormatFlag, worktreeFlag } from "../flags.ts";
 import { readInitialMessage } from "../message-input.ts";
 import { buildModelOptions } from "../model-options.ts";
@@ -30,6 +31,7 @@ export const startThreadCommand = Command.make(
     ...modelFlags,
     wait: Flag.boolean("wait"),
     format: threadFormatFlag,
+    ...extraArgsConfig,
   },
   ({
     project,

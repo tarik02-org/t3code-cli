@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
 
+import { extraArgsConfig } from "../extra-args.ts";
 import { formatFlag, threadFlag } from "../flags.ts";
 import { MissingRequestError, MissingThreadError } from "../error.ts";
 import { resolveThreadId } from "../scope/index.ts";
@@ -27,6 +28,7 @@ export const approveThreadCommand = Command.make(
     request: requestFlag,
     decision: approvalDecisionFlag,
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ thread, request, decision, format }) =>
     Effect.gen(function* () {
@@ -57,7 +59,7 @@ export const approveThreadCommand = Command.make(
         return yield* output.printJson(result);
       }
       return yield* output.printInfo(
-        `approval submitted: ${result.requestId}\nsequence: ${result.dispatch.sequence}`,
+        `approval submitted: ${result.requestId} (sequence ${result.dispatch.sequence})`,
       );
     }),
 ).pipe(Command.withDescription("respond to a pending approval request"));

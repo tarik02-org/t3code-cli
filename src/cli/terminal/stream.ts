@@ -4,6 +4,7 @@ import * as Stream from "effect/Stream";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
 import { T3Application } from "../../application/service.ts";
+import { extraArgsConfig } from "../extra-args.ts";
 import { InvalidLimitError } from "../error.ts";
 import { threadFlag } from "../flags.ts";
 import { T3Output } from "../output/service.ts";
@@ -19,6 +20,7 @@ export const streamTerminalCommand = Command.make(
     terminalId: Argument.string("terminal-id"),
     fromSequence: Flag.integer("from-sequence").pipe(Flag.optional),
     format: Flag.choice("format", ndjsonOnlyFormatChoices).pipe(Flag.withDefault("ndjson")),
+    ...extraArgsConfig,
   },
   ({ thread, terminalId, fromSequence }) =>
     Effect.gen(function* () {

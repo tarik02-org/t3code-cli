@@ -12,6 +12,7 @@ import { T3Auth } from "../auth/service.ts";
 import { CliRuntime } from "../cli/runtime/service.ts";
 import { loadT3CliEnv } from "../config/env/env.ts";
 import { requireDestructiveConfirmation } from "./interaction/confirm.ts";
+import { extraArgsConfig } from "./extra-args.ts";
 import { envNameFlag, formatFlag, yesFlag } from "./flags.ts";
 import { resolveOutputFormat } from "./format/output.ts";
 import { T3Output } from "./output/service.ts";
@@ -27,6 +28,7 @@ const listCommand = Command.make(
   "list",
   {
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ format }) =>
     Effect.gen(function* () {
@@ -49,6 +51,7 @@ const useCommand = Command.make(
   {
     name: Argument.string("name"),
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ name, format }) =>
     Effect.gen(function* () {
@@ -72,6 +75,7 @@ const removeCommand = Command.make(
     name: envNameFlag,
     yes: yesFlag,
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ name, yes, format }) =>
     Effect.gen(function* () {

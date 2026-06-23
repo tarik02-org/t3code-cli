@@ -4,6 +4,7 @@ import * as ChildProcess from "effect/unstable/process/ChildProcess";
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
 import { Command, Flag } from "effect/unstable/cli";
 
+import { extraArgsConfig } from "../extra-args.ts";
 import { threadFlag } from "../flags.ts";
 import { MissingThreadError } from "../error.ts";
 import { resolveThreadId } from "../scope/index.ts";
@@ -22,6 +23,7 @@ export const callbackThreadCommand = Command.make(
       Flag.withDescription("Fork and detach as background process"),
       Flag.optional,
     ),
+    ...extraArgsConfig,
   },
   ({ from, thread, prompt, background }) =>
     Effect.gen(function* () {

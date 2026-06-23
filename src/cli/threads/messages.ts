@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Command, Flag } from "effect/unstable/cli";
 
+import { extraArgsConfig } from "../extra-args.ts";
 import { formatFlag, threadFlag } from "../flags.ts";
 import { InvalidLimitError } from "../error.ts";
 import { MissingThreadError } from "../error.ts";
@@ -20,6 +21,7 @@ export const getThreadTranscriptCommand = Command.make(
     limit: Flag.integer("limit").pipe(Flag.withDefault(20)),
     full: Flag.boolean("full"),
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ thread, limit, full, format }) =>
     Effect.gen(function* () {

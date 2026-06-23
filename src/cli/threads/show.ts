@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Command } from "effect/unstable/cli";
 
+import { extraArgsConfig } from "../extra-args.ts";
 import { formatFlag, threadFlag } from "../flags.ts";
 import { MissingThreadError } from "../error.ts";
 import { resolveThreadId } from "../scope/index.ts";
@@ -17,6 +18,7 @@ export const showThreadCommand = Command.make(
   {
     thread: threadFlag,
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ thread, format }) =>
     Effect.gen(function* () {
