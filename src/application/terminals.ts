@@ -2,7 +2,7 @@ import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import { WS_METHODS, type TerminalSummary } from "#t3tools/contracts";
+import { WS_METHODS, type TerminalSummary } from "@t3tools/contracts";
 
 import { ProjectLookupError, TerminalLookupError, ThreadLookupError } from "../domain/error.ts";
 import { findProjectById } from "../domain/helpers.ts";
@@ -124,6 +124,7 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
         terminalId,
         cwd,
         worktreePath: thread.worktreePath ?? null,
+        ...(input.env !== undefined ? { env: input.env } : {}),
       }),
     );
 

@@ -4,7 +4,7 @@ import {
   humanJsonFormatChoices,
   humanJsonNdjsonFormatChoices,
   humanNdjsonFormatChoices,
-} from "./output-format.ts";
+} from "./format/output.ts";
 
 export const projectFlag = Flag.string("project").pipe(
   Flag.withDescription(
@@ -33,6 +33,16 @@ export const projectPathFlag = Flag.string("path").pipe(
 export const yesFlag = Flag.boolean("yes").pipe(
   Flag.withDescription("Skip interactive confirmation"),
   Flag.withDefault(false),
+);
+
+export const replaceFlag = Flag.boolean("replace").pipe(
+  Flag.withDescription("Replace an existing environment with the same name"),
+  Flag.withDefault(false),
+);
+
+export const envNameFlag = Flag.string("name").pipe(
+  Flag.withDescription("Environment name"),
+  Flag.optional,
 );
 
 export const forceFlag = Flag.boolean("force").pipe(

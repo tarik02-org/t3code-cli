@@ -6,7 +6,7 @@ import type {
   TerminalAttachStreamEvent,
   TerminalSessionSnapshot,
   TerminalSummary,
-} from "#t3tools/contracts";
+} from "@t3tools/contracts";
 
 import type { TerminalAttachTarget, TerminalRef } from "../../application/service.ts";
 import { T3Application } from "../../application/service.ts";

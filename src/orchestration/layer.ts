@@ -10,7 +10,7 @@ import {
   type ClientOrchestrationCommand,
   type OrchestrationShellStreamItem,
   type OrchestrationThreadStreamItem,
-} from "#t3tools/contracts";
+} from "@t3tools/contracts";
 
 import { RpcError } from "../rpc/error.ts";
 import { T3RpcOperations } from "../rpc/operation.ts";

@@ -2,14 +2,14 @@ import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
-import { Environment } from "../environment/service.ts";
+import { CliRuntime } from "../cli/runtime/service.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import { ProjectLookupError, ThreadLookupError, ThreadSessionError } from "../domain/error.ts";
 import { resolveProjectScope } from "../domain/helpers.ts";
 import { type ListThreadsInclude, type StartThreadInput } from "./service.ts";
 import type { CallbackThreadInput, SendThreadInput } from "./service.ts";
 import type { T3ThreadApplicationService } from "./service.ts";
-import type { OrchestrationThreadShell } from "#t3tools/contracts";
+import type { OrchestrationThreadShell } from "@t3tools/contracts";
 import { mergeModelOptions } from "./model-selection.ts";
 import { derivePendingApprovals, derivePendingUserInputs } from "../domain/thread-activities.ts";
 import {
@@ -17,8 +17,8 @@ import {
   threadStatus,
   type ThreadLifecycleStatus,
 } from "../domain/thread-lifecycle.ts";
-import type { OrchestrationThread } from "#t3tools/contracts";
-import type { ProviderApprovalDecision, ProviderUserInputAnswers } from "#t3tools/contracts";
+import type { OrchestrationThread } from "@t3tools/contracts";
+import type { ProviderApprovalDecision, ProviderUserInputAnswers } from "@t3tools/contracts";
 import {
   makeThreadApprovalRespondCommand,
   makeThreadArchiveCommand,
@@ -41,7 +41,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
   const orchestration = yield* T3Orchestration;
   const crypto = yield* Crypto.Crypto;
   const path = yield* Path.Path;
-  const environment = yield* Environment;
+  const cliRuntime = yield* CliRuntime;
   const awaitShellSequence = (sequence: number) =>
     waitForShellSequence({ sequence }).pipe(Effect.provideService(T3Orchestration, orchestration));
   const awaitThreadCompletion = (threadId: string) =>
@@ -149,7 +149,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
       return yield* Effect.fail(
         new ProjectLookupError({
           message: "project is required",
-          ref: environment.cwd,
+          ref: cliRuntime.cwd,
         }),
       );
     }

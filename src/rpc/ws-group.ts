@@ -6,10 +6,7 @@ import {
   ServerConfig,
   ServerProviders,
   ServerSettingsError,
-  TerminalCwdError,
-  TerminalHistoryError,
-  TerminalNotRunningError,
-  TerminalSessionLookupError,
+  type TerminalError,
   WS_METHODS,
   WsSubscribeTerminalEventsRpc,
   WsSubscribeTerminalMetadataRpc,
@@ -22,7 +19,7 @@ import {
   WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,
   WsOrchestrationSubscribeThreadRpc,
-} from "#t3tools/contracts";
+} from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
@@ -60,8 +57,5 @@ export type CliRpcRequestError =
   | KeybindingsConfigError
   | OrchestrationDispatchCommandError
   | OrchestrationGetSnapshotError
-  | TerminalCwdError
-  | TerminalHistoryError
-  | TerminalNotRunningError
-  | TerminalSessionLookupError
+  | TerminalError
   | ServerSettingsError;

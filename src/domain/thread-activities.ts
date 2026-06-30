@@ -2,7 +2,7 @@ import {
   ApprovalRequestId,
   type OrchestrationThreadActivity,
   type UserInputQuestion,
-} from "#t3tools/contracts";
+} from "@t3tools/contracts";
 
 export type PendingApproval = {
   readonly requestId: ApprovalRequestId;

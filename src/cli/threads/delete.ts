@@ -2,15 +2,17 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Command } from "effect/unstable/cli";
 
-import { requireDestructiveConfirmation } from "../confirm.ts";
+import { extraArgsConfig } from "../extra-args.ts";
+import { requireDestructiveConfirmation } from "../interaction/confirm.ts";
 import { formatFlag, selfActionForceFlag, threadFlag, yesFlag } from "../flags.ts";
-import { formatThreadDeletedHuman } from "../thread-format.ts";
+import { formatThreadDeletedHuman } from "../format/thread.ts";
 import { MissingThreadError } from "../error.ts";
-import { requireSelfActionConfirmation } from "../self-action.ts";
-import { resolveThreadId } from "../../scope/index.ts";
+import { requireSelfActionConfirmation } from "../interaction/self-action.ts";
+import { resolveThreadId } from "../scope/index.ts";
 import { T3Application } from "../../application/service.ts";
-import { Environment } from "../../environment/service.ts";
-import { resolveOutputFormat } from "../output-format.ts";
+import { CliRuntime } from "../../cli/runtime/service.ts";
+import { loadT3CliEnv } from "../../config/env/env.ts";
+import { resolveOutputFormat } from "../format/output.ts";
 import { T3Output } from "../output/service.ts";
 
 export const deleteThreadCommand = Command.make(
@@ -20,15 +22,17 @@ export const deleteThreadCommand = Command.make(
     force: selfActionForceFlag,
     yes: yesFlag,
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ thread, force, yes, format }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
       const threadId = resolveThreadId({
         value: Option.getOrUndefined(thread),
-        env: environment.env,
+        scope: t3CliEnv.scope,
       });
       if (threadId === undefined) {
         return yield* Effect.fail(
@@ -40,15 +44,17 @@ export const deleteThreadCommand = Command.make(
       yield* requireSelfActionConfirmation({
         threadId,
         force,
-        environment,
+        cliRuntime,
+        t3CliEnv,
         action: "delete",
       });
       yield* requireDestructiveConfirmation({
         message: `Delete thread ${threadId}?`,
         yes,
-        environment,
+        cliRuntime,
+        t3CliEnv,
       });
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       const result = yield* application.deleteThread(threadId);
       if (resolvedFormat === "json") {
         return yield* output.printJson({

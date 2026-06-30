@@ -12,7 +12,7 @@ import {
   type OrchestrationProjectShell,
   type ProviderApprovalDecision,
   type ProviderUserInputAnswers,
-} from "#t3tools/contracts";
+} from "@t3tools/contracts";
 import type { ServerConfigForCli } from "../orchestration/service.ts";
 import { resolveModelSelection } from "./model-selection.ts";
 import type { SendThreadInput, StartThreadInput } from "./service.ts";

@@ -2,7 +2,8 @@ import * as Cause from "effect/Cause";
 import * as Schema from "effect/Schema";
 import { PlatformError } from "effect/PlatformError";
 
-import { ConfigError, UrlError } from "../config/error.ts";
+import { ConfigError } from "../config/error.ts";
+import { UrlError } from "../config/url/error.ts";
 
 export class AuthPairingUrlError extends Schema.TaggedErrorClass<AuthPairingUrlError>()(
   "AuthPairingUrlError",

@@ -1,12 +1,12 @@
-import { rpcSessionFactoryLayer } from "@t3tools/client-runtime/rpc";
 import * as Layer from "effect/Layer";
 
 import { T3PreparedConnectionProviderLive } from "./prepared.ts";
 import { T3RpcLive } from "../rpc/layer.ts";
+import { T3RpcSessionFactoryLive } from "../rpc/session.ts";
 
 export function makeT3CodeRpcLayer() {
   return T3RpcLive.pipe(
-    Layer.provide(Layer.mergeAll(T3PreparedConnectionProviderLive, rpcSessionFactoryLayer)),
+    Layer.provide(Layer.mergeAll(T3PreparedConnectionProviderLive, T3RpcSessionFactoryLive)),
   );
 }
 

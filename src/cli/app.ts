@@ -1,6 +1,9 @@
 import { Command } from "effect/unstable/cli";
 
+import { createActionCommand } from "./action.ts";
 import { createAuthCommand } from "./auth.ts";
+import { createEnvCommand } from "./env.ts";
+import { cliEnvironmentSetting } from "./env/flag.ts";
 import { createTerminalCommandGroup } from "./terminal.ts";
 import { createModelCommand } from "./model.ts";
 import { createProjectCommand } from "./project.ts";
@@ -15,8 +18,11 @@ import { waitForThreadCommand } from "./threads/wait.ts";
 export function createCliCommand() {
   return Command.make("t3cli").pipe(
     Command.withDescription("non-interactive cli for running t3code server"),
+    Command.withGlobalFlags([cliEnvironmentSetting]),
     Command.withSubcommands([
+      createActionCommand(),
       createAuthCommand(),
+      createEnvCommand(),
       listThreadsCommand,
       createModelCommand(),
       createProjectCommand(),

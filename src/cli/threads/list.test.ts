@@ -11,8 +11,9 @@ import { Command } from "effect/unstable/cli";
 import { fromPartial } from "@total-typescript/shoehorn";
 
 import { T3Application } from "../../application/service.ts";
-import { T3Config } from "../../config/service.ts";
-import { NodeEnvironmentLive } from "../../environment/layer.ts";
+import { T3Config } from "../../config/config.ts";
+import * as CliRuntime from "../../cli/runtime/service.ts";
+import { t3CliEnvConfigLayer } from "../../config/env/env.test-utils.ts";
 import { InvalidFlagCombinationError } from "../error.ts";
 import { T3Output } from "../output/service.ts";
 import { listThreadsCommand } from "./list.ts";
@@ -44,7 +45,8 @@ const testLayer = Layer.mergeAll(
     printInfo: () => Effect.void,
   }),
   NodeServices.layer,
-  NodeEnvironmentLive,
+  CliRuntime.layer,
+  t3CliEnvConfigLayer("/tmp/t3cli-test"),
 );
 
 describe("listThreadsCommand", () => {

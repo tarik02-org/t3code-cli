@@ -12,7 +12,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpClient } from "effect/unstable/http";
 
-import { toWebSocketEndpointUrl } from "../config/url.ts";
+import { toWebSocketEndpointUrl } from "../config/url/url.ts";
 import { T3CodeConnectionError } from "./error.ts";
 import { T3CodeConnectionProvider } from "./service.ts";
 import type { T3CodeConnection } from "./type.ts";

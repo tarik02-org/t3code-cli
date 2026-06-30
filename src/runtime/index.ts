@@ -1,6 +1,8 @@
 export {
   AppLayer,
   AuthAppLayer,
+  BaseAppLayer,
+  BaseAuthAppLayer,
   T3AuthLayer,
   T3AuthPairingLayer,
   T3AuthTransportLayer,
@@ -9,4 +11,3 @@ export {
   T3LocalAuthTokenLayer,
   T3OrchestrationLayer,
 } from "./layer.ts";
-export { NodeEnvironmentLive } from "../environment/layer.ts";

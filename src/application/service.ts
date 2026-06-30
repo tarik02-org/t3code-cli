@@ -9,13 +9,15 @@ import type {
   OrchestrationShellSnapshot,
   OrchestrationThread,
   OrchestrationThreadShell,
+  ProjectScript,
+  ProjectScriptIcon,
   ProviderUserInputAnswers,
   ServerProvider,
   TerminalAttachStreamEvent,
   TerminalMetadataStreamEvent,
   TerminalSessionSnapshot,
   TerminalSummary,
-} from "#t3tools/contracts";
+} from "@t3tools/contracts";
 
 import type { ApplicationError } from "./error.ts";
 import type { ThreadShow } from "./threads.ts";
@@ -34,6 +36,7 @@ export type CreateTerminalInput = {
   readonly threadId: string;
   readonly terminalId?: string;
   readonly command?: string;
+  readonly env?: Readonly<Record<string, string>>;
 };
 
 export type TerminalRef = {
@@ -79,6 +82,80 @@ export type WaitEvent =
   | { readonly type: "message"; readonly message: OrchestrationMessage }
   | { readonly type: "status"; readonly status: string; readonly threadId: string }
   | { readonly type: "done"; readonly thread: OrchestrationThread };
+
+export type ProjectActionSelector =
+  | { readonly id: string; readonly name?: never }
+  | { readonly id?: never; readonly name: string };
+
+export type AddProjectActionInput = {
+  readonly projectRef: string;
+  readonly id?: string;
+  readonly name: string;
+  readonly command: string;
+  readonly icon?: ProjectScriptIcon;
+  readonly setup?: boolean;
+  readonly previewUrl?: string;
+  readonly autoOpenPreview?: boolean;
+};
+
+export type UpdateProjectActionInput = {
+  readonly projectRef: string;
+  readonly selector: ProjectActionSelector;
+  readonly name?: string;
+  readonly command?: string;
+  readonly icon?: ProjectScriptIcon;
+  readonly setup?: boolean;
+  readonly previewUrl?: string | null;
+  readonly autoOpenPreview?: boolean | null;
+};
+
+export type ProjectActionMutationResult = {
+  readonly dispatch: DispatchResult;
+  readonly project: OrchestrationProjectShell;
+  readonly action: ProjectScript;
+};
+
+export type ProjectActionDeleteResult = {
+  readonly dispatch: DispatchResult;
+  readonly project: OrchestrationProjectShell;
+  readonly action: ProjectScript;
+};
+
+export type ProjectActionRunResult = {
+  readonly project: OrchestrationProjectShell;
+  readonly action: ProjectScript;
+  readonly terminal: TerminalSessionSnapshot;
+};
+
+export type T3ActionApplicationService = {
+  readonly listActions: (projectRef: string) => Effect.Effect<
+    {
+      readonly project: OrchestrationProjectShell;
+      readonly actions: ReadonlyArray<ProjectScript>;
+    },
+    ApplicationError
+  >;
+  readonly addAction: (
+    input: AddProjectActionInput,
+  ) => Effect.Effect<ProjectActionMutationResult, ApplicationError>;
+  readonly updateAction: (
+    input: UpdateProjectActionInput,
+  ) => Effect.Effect<ProjectActionMutationResult, ApplicationError>;
+  readonly deleteAction: (input: {
+    readonly projectRef: string;
+    readonly selector: ProjectActionSelector;
+  }) => Effect.Effect<ProjectActionDeleteResult, ApplicationError>;
+  readonly runAction: (input: {
+    readonly threadId: string;
+    readonly selector: ProjectActionSelector;
+    readonly terminalId?: string;
+  }) => Effect.Effect<ProjectActionRunResult, ApplicationError>;
+};
+
+export class T3ActionApplication extends Context.Service<
+  T3ActionApplication,
+  T3ActionApplicationService
+>()("t3cli/T3ActionApplication") {}
 
 export type T3ModelApplicationService = {
   readonly listModels: (input: {
@@ -239,6 +316,7 @@ export class T3TerminalApplication extends Context.Service<
 >()("t3cli/T3TerminalApplication") {}
 
 export type T3ApplicationService = T3ModelApplicationService &
+  T3ActionApplicationService &
   T3ProjectApplicationService &
   T3ThreadApplicationService &
   T3TerminalApplicationService;

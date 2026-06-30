@@ -10,9 +10,10 @@ import type {
   OrchestrationShellSnapshot,
   OrchestrationThread,
   OrchestrationThreadShell,
-} from "#t3tools/contracts";
+} from "@t3tools/contracts";
 
-import { NodeEnvironmentLive } from "../environment/layer.ts";
+import * as CliRuntime from "../cli/runtime/service.ts";
+import { t3CliEnvConfigLayer } from "../config/env/env.test-utils.ts";
 import { T3Orchestration, type Orchestration } from "../orchestration/service.ts";
 import { makeThreadApplication } from "./threads.ts";
 
@@ -58,7 +59,12 @@ function makeOrchestrationLayer(input: {
 }
 
 const testLayer = (orchestration: Layer.Layer<T3Orchestration>) =>
-  Layer.mergeAll(orchestration, NodeServices.layer, NodeEnvironmentLive);
+  Layer.mergeAll(
+    orchestration,
+    NodeServices.layer,
+    CliRuntime.layer,
+    t3CliEnvConfigLayer("/tmp/t3cli-test"),
+  );
 
 describe("interruptThread", () => {
   it.layer(NodeServices.layer)("interruptThread", (t) => {

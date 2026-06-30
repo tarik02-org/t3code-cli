@@ -2,16 +2,18 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
+import { extraArgsConfig } from "../extra-args.ts";
 import { modelFlags, selfActionForceFlag, threadFlag, threadFormatFlag } from "../flags.ts";
 import { readInitialMessage } from "../message-input.ts";
 import { buildModelOptions } from "../model-options.ts";
 import { MissingThreadError } from "../error.ts";
-import { requireSelfActionConfirmation } from "../self-action.ts";
-import { resolveThreadId } from "../../scope/index.ts";
+import { requireSelfActionConfirmation } from "../interaction/self-action.ts";
+import { resolveThreadId } from "../scope/index.ts";
 import { T3Application } from "../../application/service.ts";
-import { Environment } from "../../environment/service.ts";
+import { CliRuntime } from "../../cli/runtime/service.ts";
+import { loadT3CliEnv } from "../../config/env/env.ts";
 import { T3Input } from "../input/service.ts";
-import { canRenderLiveTerminal, resolveOutputFormat } from "../output-format.ts";
+import { canRenderLiveTerminal, resolveOutputFormat } from "../format/output.ts";
 import { T3Output } from "../output/service.ts";
 import { printWaitEventsHuman, printWaitEventsNdjson } from "../wait-events.ts";
 
@@ -25,6 +27,7 @@ export const sendThreadCommand = Command.make(
     ...modelFlags,
     wait: Flag.boolean("wait"),
     format: threadFormatFlag,
+    ...extraArgsConfig,
   },
   ({
     thread,
@@ -54,11 +57,12 @@ export const sendThreadCommand = Command.make(
         thinking,
       });
       const application = yield* T3Application;
-      const environment = yield* Environment;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
       const threadId = resolveThreadId({
         value: Option.getOrUndefined(thread),
-        env: environment.env,
+        scope: t3CliEnv.scope,
       });
       if (threadId === undefined) {
         return yield* Effect.fail(
@@ -70,7 +74,8 @@ export const sendThreadCommand = Command.make(
       yield* requireSelfActionConfirmation({
         threadId,
         force,
-        environment,
+        cliRuntime,
+        t3CliEnv,
         action: "send a message to",
       });
       const input = {
@@ -78,7 +83,12 @@ export const sendThreadCommand = Command.make(
         threadId,
         ...(options.length > 0 ? { options } : {}),
       };
-      const resolvedFormat = resolveOutputFormat(format, environment, wait ? "ndjson" : "json");
+      const resolvedFormat = resolveOutputFormat(
+        format,
+        cliRuntime,
+        t3CliEnv,
+        wait ? "ndjson" : "json",
+      );
 
       if (resolvedFormat === "ndjson") {
         const sent = yield* application.sendThread(input, { until: wait ? "dispatch" : "visible" });
@@ -101,7 +111,7 @@ export const sendThreadCommand = Command.make(
         }
         yield* printWaitEventsHuman(output, application.watchThread(sent.threadId), {
           threadId: sent.threadId,
-          live: canRenderLiveTerminal(environment),
+          live: canRenderLiveTerminal(cliRuntime, t3CliEnv),
         });
         return yield* Effect.void;
       }

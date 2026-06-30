@@ -2,13 +2,15 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
-import { formatTerminalWrittenHuman } from "../terminal-format.ts";
+import { extraArgsConfig } from "../extra-args.ts";
+import { formatTerminalWrittenHuman } from "../format/terminal.ts";
 import { T3Application } from "../../application/service.ts";
-import { Environment } from "../../environment/service.ts";
+import { CliRuntime } from "../../cli/runtime/service.ts";
+import { loadT3CliEnv } from "../../config/env/env.ts";
 import { InvalidFlagCombinationError } from "../error.ts";
 import { T3Input } from "../input/service.ts";
 import { formatFlag, threadFlag } from "../flags.ts";
-import { resolveOutputFormat } from "../output-format.ts";
+import { resolveOutputFormat } from "../format/output.ts";
 import { T3Output } from "../output/service.ts";
 import { decodeBase64Payload, decodeHexPayload } from "./encoding.ts";
 import { TerminalCliError } from "./error.ts";
@@ -25,17 +27,16 @@ export const writeTerminalCommand = Command.make(
     base64: Flag.string("base64").pipe(Flag.optional),
     quiet: Flag.boolean("quiet"),
     format: formatFlag,
+    ...extraArgsConfig,
   },
   ({ thread, terminalId, data, stdin, hex, base64, quiet, format }) =>
     Effect.gen(function* () {
       const output = yield* T3Output;
       const inputService = yield* T3Input;
       const application = yield* T3Application;
-      const environment = yield* Environment;
-      const threadId = yield* requireCommandThreadId({
-        thread,
-        env: environment.env,
-      });
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
+      const threadId = yield* requireCommandThreadId({ thread });
       const argumentData = Option.getOrUndefined(data);
       const hexData = Option.getOrUndefined(hex);
       const base64Data = Option.getOrUndefined(base64);
@@ -83,7 +84,7 @@ export const writeTerminalCommand = Command.make(
         return;
       }
       const bytes = Buffer.byteLength(payload, "latin1");
-      const resolvedFormat = resolveOutputFormat(format, environment, "json");
+      const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       if (resolvedFormat === "json") {
         yield* output.printJson({
           threadId,

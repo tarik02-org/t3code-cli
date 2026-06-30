@@ -1,21 +1,15 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 import "vite-plus/test/config";
 import { defineConfig } from "vite-plus";
 import packageJson from "./package.json" with { type: "json" };
 
-const rootDir = path.dirname(fileURLToPath(import.meta.url));
+function shouldBundlePackDependency(id: string): boolean {
+  if (id === "@napi-rs/keyring" || id.startsWith("@napi-rs/keyring-")) {
+    return false;
+  }
+  return true;
+}
 
 export default defineConfig({
-  resolve: {
-    alias: {
-      "#t3tools/contracts": path.resolve(
-        rootDir,
-        "upstream-t3code/packages/contracts/src/index.ts",
-      ),
-    },
-  },
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
@@ -34,16 +28,14 @@ export default defineConfig({
       cli: "src/cli/index.ts",
       connection: "src/connection/index.ts",
       contracts: "src/contracts/index.ts",
-      layout: "src/layout/index.ts",
       node: "src/node/index.ts",
       orchestration: "src/orchestration/index.ts",
       rpc: "src/rpc/index.ts",
-      scope: "src/scope/index.ts",
       runtime: "src/runtime/index.ts",
       t3tools: "src/t3tools/index.ts",
     },
     deps: {
-      alwaysBundle: /^.+$/,
+      alwaysBundle: shouldBundlePackDependency,
       onlyBundle: false,
     },
     dts: false,
