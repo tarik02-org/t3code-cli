@@ -42,6 +42,10 @@ export function watchThread(input: { readonly threadId: string }) {
               return Stream.fromIterable(events);
             }
 
+            if (item.kind === "synchronized") {
+              return Stream.empty;
+            }
+
             if (current === undefined || currentMessages === undefined) {
               return Stream.fail(
                 new ThreadSessionError({

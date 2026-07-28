@@ -25,7 +25,8 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
         client[ORCHESTRATION_WS_METHODS.subscribeShell]({}),
       )
       .pipe(
-        Stream.map((item: OrchestrationShellStreamItem) =>
+        Stream.filter((item: OrchestrationShellStreamItem) => item.kind !== "synchronized"),
+        Stream.map((item) =>
           item.kind === "snapshot" ? item.snapshot.snapshotSequence : item.sequence,
         ),
       );
