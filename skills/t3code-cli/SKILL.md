@@ -122,14 +122,21 @@ t3cli thread archive --thread <id> --format json
 t3cli thread unarchive --thread <id> --format json
 ```
 
-**Terminal (agent-friendly PTY control)**
+**Terminal lifecycle**
+
+- Create a t3code terminal only when the user needs the process visible in t3code.
+- Keep commands entered into a user-visible terminal short and readable. Prefer existing project scripts or CLI subcommands.
+- List terminals before creating one, then track every terminal id you create. Do not repurpose an existing terminal unless the user explicitly asks.
+- Keep a terminal only while the user needs it. Destroy terminals you created when their process stops, they are superseded, or the user no longer needs them.
+- Before finishing the task, destroy every unused terminal you created. Never implicitly destroy a terminal you did not create, even when it appears unused.
+
+**Terminal commands**
 
 ```sh
 export T3CODE_THREAD_ID="$THREAD_ID"
 
 t3cli terminal list --format json
 t3cli terminal create --attach --format json
-t3cli terminal create "npm test" --format json
 t3cli terminal read <terminal-id> --history --follow --format ndjson --from-sequence 0
 t3cli terminal stream <terminal-id> --from-sequence 0
 t3cli terminal write <terminal-id> --hex 0a --format json
