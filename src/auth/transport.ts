@@ -51,7 +51,11 @@ const makeT3AuthTransport = Effect.fn("makeT3AuthTransport")(function* () {
         httpBaseUrl: input.baseUrl,
         credential: input.credential,
       }),
-    ).pipe(Effect.mapError(toTransportError("auth request failed")));
+    ).pipe(
+      Effect.mapError(
+        (error) => new AuthTransportError({ message: "auth request failed", cause: error }),
+      ),
+    );
     const now = yield* DateTime.now;
     return {
       authenticated: true,
@@ -70,7 +74,11 @@ const makeT3AuthTransport = Effect.fn("makeT3AuthTransport")(function* () {
         httpBaseUrl: connection.url,
         bearerToken: connection.token,
       }),
-    ).pipe(Effect.mapError(toTransportError("auth request failed")));
+    ).pipe(
+      Effect.mapError(
+        (error) => new AuthTransportError({ message: "auth request failed", cause: error }),
+      ),
+    );
     return {
       authenticated: result.authenticated,
       ...(result.scopes !== undefined ? { role: inferRole(result.scopes.join(" ")) } : {}),
@@ -88,7 +96,11 @@ const makeT3AuthTransport = Effect.fn("makeT3AuthTransport")(function* () {
           httpBaseUrl: connection.url,
           bearerToken: connection.token,
         }),
-      ).pipe(Effect.mapError(toTransportError("auth request failed")));
+      ).pipe(
+        Effect.mapError(
+          (error) => new AuthTransportError({ message: "auth request failed", cause: error }),
+        ),
+      );
       return {
         ticket: result.ticket,
         expiresAt: DateTime.formatIso(result.expiresAt),
@@ -107,8 +119,4 @@ export const T3AuthTransportLive = Layer.effect(T3AuthTransport, makeT3AuthTrans
 
 function inferRole(scope: string): AuthBearerBootstrapResult["role"] {
   return scope.split(/\s+/u).includes("access:write") ? "owner" : "client";
-}
-
-function toTransportError(message: string) {
-  return (error: unknown) => new AuthTransportError({ message, cause: error });
 }

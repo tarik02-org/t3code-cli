@@ -1,7 +1,4 @@
-import {
-  resolveRemoteWebSocketConnectionUrl,
-  type RemoteEnvironmentAuthError,
-} from "@t3tools/client-runtime/authorization";
+import { resolveRemoteWebSocketConnectionUrl } from "@t3tools/client-runtime/authorization";
 import {
   BearerConnectionTarget,
   type PreparedConnection,
@@ -38,8 +35,12 @@ export const makePreparedConnection = Effect.fn("makePreparedConnection")(functi
     ),
   );
   const descriptor = yield* fetchRemoteEnvironmentDescriptor({ httpBaseUrl }).pipe(
-    Effect.mapError((error) =>
-      mapRemoteConnectionError("failed to fetch environment descriptor", error),
+    Effect.mapError(
+      (error) =>
+        new T3CodeConnectionError({
+          message: "failed to fetch environment descriptor",
+          cause: error,
+        }),
     ),
   );
   const socketUrl = yield* resolveRemoteWebSocketConnectionUrl({
@@ -47,7 +48,13 @@ export const makePreparedConnection = Effect.fn("makePreparedConnection")(functi
     wsBaseUrl,
     bearerToken: connection.auth.token,
   }).pipe(
-    Effect.mapError((error) => mapRemoteConnectionError("failed to authorize websocket", error)),
+    Effect.mapError(
+      (error) =>
+        new T3CodeConnectionError({
+          message: "failed to authorize websocket",
+          cause: error,
+        }),
+    ),
   );
 
   return {
@@ -82,10 +89,3 @@ export const T3PreparedConnectionProviderLive = Layer.effect(
     return T3PreparedConnectionProvider.of({ get });
   }),
 );
-
-function mapRemoteConnectionError(
-  message: string,
-  error: RemoteEnvironmentAuthError,
-): T3CodeConnectionError {
-  return new T3CodeConnectionError({ message, cause: error });
-}

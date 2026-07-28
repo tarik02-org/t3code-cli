@@ -4,6 +4,7 @@ import { PlatformError } from "effect/PlatformError";
 
 import { ConfigError } from "../config/error.ts";
 import { UrlError } from "../config/url/error.ts";
+import { RemoteEnvironmentAuthErrorSchema } from "./remote-error.ts";
 
 export class AuthPairingUrlError extends Schema.TaggedErrorClass<AuthPairingUrlError>()(
   "AuthPairingUrlError",
@@ -22,7 +23,7 @@ export class AuthTransportError extends Schema.TaggedErrorClass<AuthTransportErr
   "AuthTransportError",
   {
     message: Schema.String,
-    cause: Schema.optionalKey(Schema.Unknown),
+    cause: RemoteEnvironmentAuthErrorSchema,
   },
 ) {}
 

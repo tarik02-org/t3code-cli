@@ -1,15 +1,16 @@
-import * as Schema from "effect/Schema";
+import {
+  ConnectionBlockedError,
+  ConnectionTransientError,
+} from "@t3tools/client-runtime/connection";
 import {
   EnvironmentAuthorizationError,
   KeybindingsConfigError,
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
   ServerSettingsError,
-  TerminalCwdError,
-  TerminalHistoryError,
-  TerminalNotRunningError,
-  TerminalSessionLookupError,
+  TerminalError,
 } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 import { HttpClientError } from "effect/unstable/http";
 import { RpcClientError } from "effect/unstable/rpc";
 
@@ -24,10 +25,9 @@ const RpcErrorCauseSchema = Schema.Union([
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
   ServerSettingsError,
-  TerminalCwdError,
-  TerminalHistoryError,
-  TerminalNotRunningError,
-  TerminalSessionLookupError,
+  TerminalError,
+  ConnectionBlockedError,
+  ConnectionTransientError,
   AuthTransportError,
   T3CodeConnectionError,
   HttpClientError.HttpClientErrorSchema,
@@ -40,7 +40,7 @@ export type RpcKnownCause = Schema.Schema.Type<typeof RpcErrorCauseSchema>;
 export class RpcError extends Schema.TaggedErrorClass<RpcError>()("RpcError", {
   message: Schema.String,
   method: Schema.optionalKey(Schema.String),
-  cause: Schema.optionalKey(Schema.Unknown),
+  cause: Schema.optionalKey(RpcErrorCauseSchema),
 }) {}
 
 export type OrchestrationError = RpcError;
