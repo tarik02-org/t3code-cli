@@ -1,3 +1,11 @@
+import type {
+  EnvironmentAuthorizationError,
+  KeybindingsConfigError,
+  OrchestrationDispatchCommandError,
+  OrchestrationGetSnapshotError,
+  ServerSettingsError,
+  TerminalError,
+} from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,9 +16,15 @@ import { RpcClientError } from "effect/unstable/rpc";
 
 import { RpcError } from "./error.ts";
 import { T3Rpc, type WsClient } from "./service.ts";
-import type { CliRpcRequestError } from "./ws-group.ts";
 
-export type CliRpcOperationError = CliRpcRequestError | RpcClientError.RpcClientError;
+export type CliRpcOperationError =
+  | EnvironmentAuthorizationError
+  | KeybindingsConfigError
+  | OrchestrationDispatchCommandError
+  | OrchestrationGetSnapshotError
+  | RpcClientError.RpcClientError
+  | ServerSettingsError
+  | TerminalError;
 
 export const rpcRetrySchedule = Schedule.exponential("100 millis").pipe(
   Schedule.take(4),

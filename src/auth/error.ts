@@ -1,10 +1,10 @@
 import * as Cause from "effect/Cause";
 import * as Schema from "effect/Schema";
 import { PlatformError } from "effect/PlatformError";
-import { HttpClientError } from "effect/unstable/http";
 
 import { ConfigError } from "../config/error.ts";
 import { UrlError } from "../config/url/error.ts";
+import { RemoteEnvironmentAuthErrorSchema } from "./remote-error.ts";
 
 export class AuthPairingUrlError extends Schema.TaggedErrorClass<AuthPairingUrlError>()(
   "AuthPairingUrlError",
@@ -23,13 +23,7 @@ export class AuthTransportError extends Schema.TaggedErrorClass<AuthTransportErr
   "AuthTransportError",
   {
     message: Schema.String,
-    cause: Schema.optionalKey(
-      Schema.Union([
-        HttpClientError.HttpClientErrorSchema,
-        Schema.instanceOf(Schema.SchemaError),
-        UrlError,
-      ]),
-    ),
+    cause: RemoteEnvironmentAuthErrorSchema,
   },
 ) {}
 

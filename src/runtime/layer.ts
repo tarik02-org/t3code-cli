@@ -14,10 +14,12 @@ import * as Config from "../config/config.ts";
 import * as Credential from "../config/credential/service.ts";
 import * as Selection from "../config/selection/service.ts";
 import { T3CodeConnectionError } from "../connection/error.ts";
+import { T3PreparedConnectionProviderLive } from "../connection/prepared.ts";
 import { T3CodeConnectionProvider, makeT3CodeConnectionProvider } from "../connection/service.ts";
 import { T3OrchestrationLive } from "../orchestration/layer.ts";
 import { T3RpcLive } from "../rpc/layer.ts";
 import { T3RpcOperationsLive } from "../rpc/operation.ts";
+import { T3RpcSessionFactoryLive } from "../rpc/session.ts";
 import { NodeSqlClientFactoryLive } from "../sql/node-sqlite-client.ts";
 import { NodeCliPathLayer } from "../cli-path/layer.ts";
 
@@ -63,9 +65,10 @@ const T3ConfigConnectionProviderLayer = Layer.effect(
 const T3RpcLayer = T3RpcLive.pipe(
   Layer.provide(
     Layer.mergeAll(
-      T3ConfigConnectionProviderLayer,
-      T3AuthTransportLayer,
-      NodeSocket.layerWebSocketConstructor,
+      T3PreparedConnectionProviderLive.pipe(
+        Layer.provide(Layer.mergeAll(T3ConfigConnectionProviderLayer, NodeHttpClient.layerUndici)),
+      ),
+      T3RpcSessionFactoryLive.pipe(Layer.provide(NodeSocket.layerWebSocketConstructor)),
     ),
   ),
 );

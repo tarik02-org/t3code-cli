@@ -1,13 +1,21 @@
 packages:
   - .
+  - upstream-t3code/packages/client-runtime
   - upstream-t3code/packages/contracts
+  - upstream-t3code/packages/shared
 
 catalog:
+  "@effect/platform-node": 4.0.0-beta.78
   "@effect/vitest": 4.0.0-beta.78
+  "@noble/curves": 2.2.0
+  "@noble/hashes": 2.2.0
+  "@types/node": ^26.1.2
   effect: 4.0.0-beta.78
-  vite-plus: 0.1.24
-  vite: npm:@voidzero-dev/vite-plus-core@0.1.24
+  jose: 6.2.4
+  vite-plus: 0.2.6
+  vite: npm:@voidzero-dev/vite-plus-core@0.2.6
   vitest: npm:@voidzero-dev/vite-plus-test@0.1.24
+  yaml: ^2.9.0
 
 patchedDependencies:
   "@effect/vitest@4.0.0-beta.78": patches/@effect__vitest@4.0.0-beta.78.patch
