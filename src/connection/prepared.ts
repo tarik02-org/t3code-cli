@@ -1,6 +1,8 @@
 import { resolveRemoteWebSocketConnectionUrl } from "@t3tools/client-runtime/authorization";
 import {
   BearerConnectionTarget,
+  type ConnectionAttemptError,
+  mapRemoteEnvironmentError,
   type PreparedConnection,
 } from "@t3tools/client-runtime/connection";
 import { fetchRemoteEnvironmentDescriptor } from "@t3tools/client-runtime/environment";
@@ -17,11 +19,11 @@ import type { T3CodeConnection } from "./type.ts";
 export class T3PreparedConnectionProvider extends Context.Service<
   T3PreparedConnectionProvider,
   {
-    readonly get: Effect.Effect<PreparedConnection, T3CodeConnectionError>;
+    readonly get: Effect.Effect<PreparedConnection, ConnectionAttemptError | T3CodeConnectionError>;
   }
 >()("t3cli/T3PreparedConnectionProvider") {}
 
-export const makePreparedConnection = Effect.fn("makePreparedConnection")(function* (
+const makePreparedConnection = Effect.fn("makePreparedConnection")(function* (
   connection: T3CodeConnection,
 ) {
   const httpBaseUrl = connection.origin.url;
@@ -35,27 +37,13 @@ export const makePreparedConnection = Effect.fn("makePreparedConnection")(functi
     ),
   );
   const descriptor = yield* fetchRemoteEnvironmentDescriptor({ httpBaseUrl }).pipe(
-    Effect.mapError(
-      (error) =>
-        new T3CodeConnectionError({
-          message: "failed to fetch environment descriptor",
-          cause: error,
-        }),
-    ),
+    Effect.mapError(mapRemoteEnvironmentError),
   );
   const socketUrl = yield* resolveRemoteWebSocketConnectionUrl({
     httpBaseUrl,
     wsBaseUrl,
     bearerToken: connection.auth.token,
-  }).pipe(
-    Effect.mapError(
-      (error) =>
-        new T3CodeConnectionError({
-          message: "failed to authorize websocket",
-          cause: error,
-        }),
-    ),
-  );
+  }).pipe(Effect.mapError(mapRemoteEnvironmentError));
 
   return {
     environmentId: descriptor.environmentId,
@@ -63,7 +51,7 @@ export const makePreparedConnection = Effect.fn("makePreparedConnection")(functi
     httpBaseUrl,
     socketUrl,
     httpAuthorization: {
-      _tag: "Bearer" as const,
+      _tag: "Bearer",
       token: connection.auth.token,
     },
     target: new BearerConnectionTarget({
@@ -74,9 +62,8 @@ export const makePreparedConnection = Effect.fn("makePreparedConnection")(functi
   } satisfies PreparedConnection;
 });
 
-export const T3PreparedConnectionProviderLive = Layer.effect(
-  T3PreparedConnectionProvider,
-  Effect.gen(function* () {
+const makeT3PreparedConnectionProvider = Effect.fn("makeT3PreparedConnectionProvider")(
+  function* () {
     const connectionProvider = yield* T3CodeConnectionProvider;
     const httpClient = yield* HttpClient.HttpClient;
     const get = connectionProvider.get.pipe(
@@ -87,5 +74,10 @@ export const T3PreparedConnectionProviderLive = Layer.effect(
       ),
     );
     return T3PreparedConnectionProvider.of({ get });
-  }),
+  },
+);
+
+export const T3PreparedConnectionProviderLive = Layer.effect(
+  T3PreparedConnectionProvider,
+  makeT3PreparedConnectionProvider(),
 );

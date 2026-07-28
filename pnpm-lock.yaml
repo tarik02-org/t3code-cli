@@ -6,33 +6,9 @@ settings:
 
 catalogs:
   default:
-    '@effect/platform-node':
-      specifier: 4.0.0-beta.78
-      version: 4.0.0-beta.78
     '@effect/vitest':
       specifier: 4.0.0-beta.78
       version: 4.0.0-beta.78
-    '@noble/curves':
-      specifier: 2.2.0
-      version: 2.2.0
-    '@noble/hashes':
-      specifier: 2.2.0
-      version: 2.2.0
-    '@types/node':
-      specifier: ^26.1.2
-      version: 26.1.2
-    effect:
-      specifier: 4.0.0-beta.78
-      version: 4.0.0-beta.78
-    jose:
-      specifier: 6.2.4
-      version: 6.2.4
-    vite-plus:
-      specifier: 0.2.6
-      version: 0.2.6
-    yaml:
-      specifier: ^2.9.0
-      version: 2.9.0
 
 patchedDependencies:
   '@effect/vitest@4.0.0-beta.78':
@@ -70,16 +46,13 @@ importers:
         version: 2.31.1(@types/node@26.1.2)
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-beta.78(patch_hash=74fd480109c3bd975255bf5573a64718451bcae02b523c432bc18e9aa27b52fd)(effect@4.0.0-beta.78)(vitest@4.1.10)
+        version: 4.0.0-beta.78(patch_hash=74fd480109c3bd975255bf5573a64718451bcae02b523c432bc18e9aa27b52fd)(effect@4.0.0-beta.78)(vitest@4.1.10(@types/node@26.1.2)(@vitest/browser-preview@4.1.10)(vite@8.0.14(@types/node@26.1.2)(yaml@2.9.0)))
       '@t3tools/client-runtime':
         specifier: workspace:*
         version: link:upstream-t3code/packages/client-runtime
       '@t3tools/contracts':
         specifier: workspace:*
         version: link:upstream-t3code/packages/contracts
-      '@t3tools/shared':
-        specifier: workspace:*
-        version: link:upstream-t3code/packages/shared
       '@total-typescript/shoehorn':
         specifier: ^0.1.2
         version: 0.1.2
@@ -2358,6 +2331,11 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+
+  '@effect/vitest@4.0.0-beta.78(patch_hash=74fd480109c3bd975255bf5573a64718451bcae02b523c432bc18e9aa27b52fd)(effect@4.0.0-beta.78)(vitest@4.1.10(@types/node@26.1.2)(@vitest/browser-preview@4.1.10)(vite@8.0.14(@types/node@26.1.2)(yaml@2.9.0)))':
+    dependencies:
+      effect: 4.0.0-beta.78
+      vitest: 4.1.10(@types/node@26.1.2)(@vitest/browser-preview@4.1.10)(vite@8.0.14(@types/node@26.1.2)(yaml@2.9.0))
 
   '@effect/vitest@4.0.0-beta.78(patch_hash=74fd480109c3bd975255bf5573a64718451bcae02b523c432bc18e9aa27b52fd)(effect@4.0.0-beta.78)(vitest@4.1.10)':
     dependencies:

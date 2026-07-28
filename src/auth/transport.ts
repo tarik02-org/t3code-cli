@@ -39,19 +39,16 @@ export class T3AuthTransport extends Context.Service<
 
 const makeT3AuthTransport = Effect.fn("makeT3AuthTransport")(function* () {
   const httpClient = yield* HttpClient.HttpClient;
-  const provideHttpClient = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    effect.pipe(Effect.provideService(HttpClient.HttpClient, httpClient));
 
   const bootstrapBearer = Effect.fn("AuthTransport.bootstrapBearer")(function* (input: {
     readonly baseUrl: string;
     readonly credential: string;
   }) {
-    const result = yield* provideHttpClient(
-      bootstrapRemoteBearerSession({
-        httpBaseUrl: input.baseUrl,
-        credential: input.credential,
-      }),
-    ).pipe(
+    const result = yield* bootstrapRemoteBearerSession({
+      httpBaseUrl: input.baseUrl,
+      credential: input.credential,
+    }).pipe(
+      Effect.provideService(HttpClient.HttpClient, httpClient),
       Effect.mapError(
         (error) => new AuthTransportError({ message: "auth request failed", cause: error }),
       ),
@@ -69,12 +66,11 @@ const makeT3AuthTransport = Effect.fn("makeT3AuthTransport")(function* () {
   const getSession = Effect.fn("AuthTransport.getSession")(function* (
     connection: AuthTransportConnection,
   ) {
-    const result = yield* provideHttpClient(
-      fetchRemoteSessionState({
-        httpBaseUrl: connection.url,
-        bearerToken: connection.token,
-      }),
-    ).pipe(
+    const result = yield* fetchRemoteSessionState({
+      httpBaseUrl: connection.url,
+      bearerToken: connection.token,
+    }).pipe(
+      Effect.provideService(HttpClient.HttpClient, httpClient),
       Effect.mapError(
         (error) => new AuthTransportError({ message: "auth request failed", cause: error }),
       ),
@@ -89,29 +85,28 @@ const makeT3AuthTransport = Effect.fn("makeT3AuthTransport")(function* () {
     } satisfies AuthSessionState;
   });
 
-  const issueWebSocketTicketForConnection = Effect.fn("AuthTransport.issueWebSocketTicket")(
-    function* (connection: AuthTransportConnection) {
-      const result = yield* provideHttpClient(
-        issueRemoteWebSocketTicket({
-          httpBaseUrl: connection.url,
-          bearerToken: connection.token,
-        }),
-      ).pipe(
-        Effect.mapError(
-          (error) => new AuthTransportError({ message: "auth request failed", cause: error }),
-        ),
-      );
-      return {
-        ticket: result.ticket,
-        expiresAt: DateTime.formatIso(result.expiresAt),
-      } satisfies AuthWebSocketTicketResult;
-    },
-  );
+  const issueWebSocketTicket = Effect.fn("AuthTransport.issueWebSocketTicket")(function* (
+    connection: AuthTransportConnection,
+  ) {
+    const result = yield* issueRemoteWebSocketTicket({
+      httpBaseUrl: connection.url,
+      bearerToken: connection.token,
+    }).pipe(
+      Effect.provideService(HttpClient.HttpClient, httpClient),
+      Effect.mapError(
+        (error) => new AuthTransportError({ message: "auth request failed", cause: error }),
+      ),
+    );
+    return {
+      ticket: result.ticket,
+      expiresAt: DateTime.formatIso(result.expiresAt),
+    } satisfies AuthWebSocketTicketResult;
+  });
 
   return {
     bootstrapBearer,
     getSession,
-    issueWebSocketTicket: issueWebSocketTicketForConnection,
+    issueWebSocketTicket,
   };
 });
 

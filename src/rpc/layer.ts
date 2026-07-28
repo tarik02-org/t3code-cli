@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as SynchronizedRef from "effect/SynchronizedRef";
@@ -12,7 +13,12 @@ import { T3PreparedConnectionProvider } from "../connection/prepared.ts";
 import { RpcError } from "./error.ts";
 import { T3Rpc, type WsClient } from "./service.ts";
 
-const connectionRetrySchedule = Schedule.exponential("100 millis").pipe(Schedule.take(4));
+const connectionRetrySchedule = Schedule.exponential("100 millis").pipe(
+  Schedule.take(4),
+  Schedule.collectWhile((metadata: Schedule.Metadata) =>
+    Predicate.isTagged(metadata.input, "ConnectionTransientError"),
+  ),
+);
 
 type Connection = {
   readonly scope: Scope.Closeable;

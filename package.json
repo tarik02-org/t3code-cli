@@ -119,7 +119,6 @@
     "@effect/vitest": "catalog:",
     "@t3tools/client-runtime": "workspace:*",
     "@t3tools/contracts": "workspace:*",
-    "@t3tools/shared": "workspace:*",
     "@total-typescript/shoehorn": "^0.1.2",
     "@types/node": "^26.1.2",
     "typescript": "^7.0.2",
