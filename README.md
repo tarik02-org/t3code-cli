@@ -36,7 +36,7 @@ This repo includes an agent skill for operating `t3cli`: [`skills/t3code-cli/SKI
 Install it with:
 
 ```sh
-npx skills add tarik02/t3cli
+npx skills add tarik02-org/t3code-cli
 ```
 
 ## Authentication
