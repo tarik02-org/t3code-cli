@@ -8,15 +8,15 @@
     "codex",
     "t3code"
   ],
-  "homepage": "https://github.com/tarik02/t3cli#readme",
+  "homepage": "https://github.com/tarik02-org/t3code-cli#readme",
   "bugs": {
-    "url": "https://github.com/tarik02/t3cli/issues"
+    "url": "https://github.com/tarik02-org/t3code-cli/issues"
   },
   "license": "MIT",
   "author": "tarik02 <taras.fomin@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tarik02/t3cli.git"
+    "url": "git+https://github.com/tarik02-org/t3code-cli.git"
   },
   "bin": {
     "t3cli": "./dist/bin.js"
