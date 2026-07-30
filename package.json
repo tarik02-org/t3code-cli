@@ -117,7 +117,7 @@
   "devDependencies": {
     "@changesets/cli": "^2.31.1",
     "@effect/vitest": "catalog:",
-    "@t3tools/client-runtime": "workspace:*",
+    "@t3tools/client-runtime": "link:upstream-t3code/packages/client-runtime",
     "@t3tools/contracts": "workspace:*",
     "@total-typescript/shoehorn": "^0.1.2",
     "@types/node": "^26.1.2",
