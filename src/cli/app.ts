@@ -7,6 +7,7 @@ import { cliEnvironmentSetting } from "./env/flag.ts";
 import { createTerminalCommandGroup } from "./terminal.ts";
 import { createModelCommand } from "./model.ts";
 import { createProjectCommand } from "./project.ts";
+import { searchThreadsCommand } from "./search.ts";
 import { createThreadCommand } from "./thread.ts";
 import { listThreadsCommand } from "./threads/list.ts";
 import { sendThreadCommand } from "./threads/send.ts";
@@ -26,6 +27,7 @@ export function createCliCommand() {
       listThreadsCommand,
       createModelCommand(),
       createProjectCommand(),
+      searchThreadsCommand,
       createTerminalCommandGroup(),
       startThreadCommand,
       sendThreadCommand,

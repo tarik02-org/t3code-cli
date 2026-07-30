@@ -3,6 +3,7 @@ import type {
   KeybindingsConfigError,
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
+  OrchestrationSearchThreadsError,
   ServerSettingsError,
   TerminalError,
 } from "@t3tools/contracts";
@@ -22,6 +23,7 @@ export type CliRpcOperationError =
   | KeybindingsConfigError
   | OrchestrationDispatchCommandError
   | OrchestrationGetSnapshotError
+  | OrchestrationSearchThreadsError
   | RpcClientError.RpcClientError
   | ServerSettingsError
   | TerminalError;

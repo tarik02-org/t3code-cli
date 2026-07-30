@@ -105,6 +105,7 @@ t3cli start [message]
 
 ```sh
 t3cli list [--project <ref>] [--archived | --all]
+t3cli search <query> [--limit <1-50>]          # Search conversation content
 t3cli show [--thread <id>]                   # Show thread details
 t3cli send [--thread <id>] [message]         # Send message to thread
 t3cli transcript [--thread <id>] [--limit]   # View messages

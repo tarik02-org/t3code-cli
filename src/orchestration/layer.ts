@@ -72,6 +72,11 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
       );
     },
   );
+  const searchThreads = Effect.fn("T3OrchestrationLive.searchThreads")(function* (input) {
+    return yield* rpc.run(ORCHESTRATION_WS_METHODS.searchThreads, (client) =>
+      client[ORCHESTRATION_WS_METHODS.searchThreads](input),
+    );
+  });
   const getThreadSnapshot = Effect.fn("T3OrchestrationLive.getThreadSnapshot")(function* (
     threadId: string,
   ) {
@@ -125,6 +130,7 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
     getServerConfig,
     getShellSnapshot,
     getArchivedShellSnapshot,
+    searchThreads,
     getThreadSnapshot,
     watchShellSequence,
     watchThreadItems,
