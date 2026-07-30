@@ -1,5 +1,15 @@
 # t3code-cli
 
+## 0.13.0
+
+### Minor Changes
+
+- 267ba43: Reuse upstream client-runtime authorization and RPC session creation for CLI connections.
+
+### Patch Changes
+
+- d70687f: Keep RPC connections compatible with server config fields the CLI does not use.
+
 ## 0.12.0
 
 ### Minor Changes
@@ -23,18 +33,22 @@
   ### Breaking changes
 
   **CLI**
+
   - `auth list`, `auth use`, and `auth unpair` are removed. Use `env list`, `env use`, and `env remove` instead.
   - `auth unpair` is renamed to `env remove` (same behavior: removes local credentials only).
 
   **Library (`t3code-cli/config`)**
+
   - `T3ConfigLive`, `makeT3Config`, `UrlError`, and `StoredConfig` are removed from the public export surface.
   - Import config services via namespace exports instead: `Config`, `Credential`, `Keystore`, `Selection`, `Env`, `Paths`, `Url`, `EnvironmentName`.
   - `ResolvedConfig` remains exported but now includes optional `environment` and a `source` discriminator (`config` | `env`).
 
   **Library (`t3code-cli/connection`)**
+
   - `T3CodeNodeRpcLayer` is no longer exported from `t3code-cli/connection`. Import it from `t3code-cli/node`.
 
   **Library (`t3code-cli/runtime` and `t3code-cli/node`)**
+
   - `NodeEnvironmentLive` is removed. Environment/process snapshot access moved to `CliRuntime` under `t3code-cli/cli`.
 
   ### Upgrade notes
@@ -83,6 +97,7 @@
 
 - 7942f5b: Restructure `vp pack` output into a single `shared.js` chunk plus thin named entry files (no hashed chunk filenames).
 - 59225bc: Restructure README with improved navigation and add self-identity guidance to skill.
+
   - README now has clearer sections: Quick Start, Authentication, Project Management, Models, Thread Management
   - Skill updated with guidance to use `t3cli thread show` to check identity before spawning threads
   - Agents should prefer same provider and model family when starting new threads
@@ -96,6 +111,7 @@
 - 1c4e911: add t3cli thread callback command
 
   new subcommand to watch a thread and send a message when it completes:
+
   - --from: source thread id to watch
   - --thread: target thread id (or T3CODE_THREAD_ID env var)
   - --prompt: message to send
@@ -118,6 +134,7 @@
 ### Minor Changes
 
 - de470d8: Restructure the public API for library consumers such as `t3-goals`.
+
   - Add package.json subpath exports: `./layout`, `./orchestration`, `./rpc`, `./auth`, `./config`, `./connection`, `./runtime`, `./application`, `./contracts`, and `./t3tools`
   - Export the full bundled `@t3tools/contracts` surface as `t3code-cli/t3tools`
   - Add `resolveT3BaseDir`, `readT3LayoutFromNodeProcess`, and `T3Layout` under `t3code-cli/layout`
@@ -128,6 +145,7 @@
   **BREAKING:** The default export no longer includes `Environment`, `EnvironmentShape`, `NodeEnvironmentLive`, `SqlClientFactory`, auth/config/connection/runtime layer exports, or contract type re-exports. Use subpath imports where those surfaces remain public.
 
 - c83b1f5: Restructure the CLI command surface for agent and human ergonomics.
+
   - Rename command groups: `projects` → `project`, `models` → `model`, `threads` → `thread`
   - Replace positional project/thread refs with `--project` and `--thread` flags
   - Make `--project` optional with cwd-based resolution (id, workspace root, or nested worktree path)
