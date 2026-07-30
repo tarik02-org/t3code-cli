@@ -1,4 +1,3 @@
-import { RpcSessionFactory } from "@t3tools/client-runtime/rpc";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -11,6 +10,7 @@ import * as SynchronizedRef from "effect/SynchronizedRef";
 
 import { T3PreparedConnectionProvider } from "../connection/prepared.ts";
 import { RpcError } from "./error.ts";
+import { T3RpcSessionFactory } from "./session.ts";
 import { T3Rpc, type WsClient } from "./service.ts";
 
 const connectionRetrySchedule = Schedule.exponential("100 millis").pipe(
@@ -27,7 +27,7 @@ type Connection = {
 
 export const makeT3RpcLayer = Effect.fn("makeT3RpcLayer")(function* () {
   const preparedConnectionProvider = yield* T3PreparedConnectionProvider;
-  const sessions = yield* RpcSessionFactory;
+  const sessions = yield* T3RpcSessionFactory;
   const parentScope = yield* Scope.Scope;
   const connection = yield* SynchronizedRef.make(Option.none<Connection>());
   const openConnection = Effect.fn("T3RpcLive.openConnection")(function* () {
