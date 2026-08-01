@@ -1,11 +1,12 @@
+import type { EnvironmentAuthorizationError } from "../../upstream-t3code/packages/contracts/src/auth.ts";
+import type { KeybindingsConfigError } from "../../upstream-t3code/packages/contracts/src/keybindings.ts";
 import type {
-  EnvironmentAuthorizationError,
-  KeybindingsConfigError,
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
-  ServerSettingsError,
-  TerminalError,
-} from "@t3tools/contracts";
+} from "../../upstream-t3code/packages/contracts/src/orchestration.ts";
+import type { PreviewAutomationError } from "../../upstream-t3code/packages/contracts/src/previewAutomation.ts";
+import type { ServerSettingsError } from "../../upstream-t3code/packages/contracts/src/settings.ts";
+import type { TerminalError } from "../../upstream-t3code/packages/contracts/src/terminal.ts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -22,6 +23,7 @@ export type CliRpcOperationError =
   | KeybindingsConfigError
   | OrchestrationDispatchCommandError
   | OrchestrationGetSnapshotError
+  | PreviewAutomationError
   | RpcClientError.RpcClientError
   | ServerSettingsError
   | TerminalError;

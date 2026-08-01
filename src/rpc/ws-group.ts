@@ -1,13 +1,14 @@
+import { EnvironmentAuthorizationError } from "../../upstream-t3code/packages/contracts/src/auth.ts";
+import { KeybindingsConfigError } from "../../upstream-t3code/packages/contracts/src/keybindings.ts";
 import {
-  EnvironmentAuthorizationError,
-  KeybindingsConfigError,
-  ServerProviders,
-  ServerSettingsError,
   WS_METHODS,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,
   WsOrchestrationSubscribeThreadRpc,
+  WsPreviewAutomationConnectRpc,
+  WsPreviewAutomationFocusHostRpc,
+  WsPreviewAutomationRespondRpc,
   WsServerProbeRpc,
   WsSubscribeTerminalEventsRpc,
   WsSubscribeTerminalMetadataRpc,
@@ -16,7 +17,9 @@ import {
   WsTerminalOpenRpc,
   WsTerminalResizeRpc,
   WsTerminalWriteRpc,
-} from "@t3tools/contracts";
+} from "../../upstream-t3code/packages/contracts/src/rpc.ts";
+import { ServerProviders } from "../../upstream-t3code/packages/contracts/src/server.ts";
+import { ServerSettingsError } from "../../upstream-t3code/packages/contracts/src/settings.ts";
 import * as Schema from "effect/Schema";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 
@@ -48,6 +51,9 @@ export const CliWsRpcGroup = RpcGroup.make(
   WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,
   WsOrchestrationSubscribeThreadRpc,
+  WsPreviewAutomationConnectRpc,
+  WsPreviewAutomationRespondRpc,
+  WsPreviewAutomationFocusHostRpc,
   WsServerProbeRpc,
   WsServerGetConfigRpc,
 );

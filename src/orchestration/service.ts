@@ -9,8 +9,8 @@ import type {
   OrchestrationShellSnapshot,
   OrchestrationThread,
   OrchestrationThreadStreamItem,
-  ServerProviders,
-} from "@t3tools/contracts";
+} from "../../upstream-t3code/packages/contracts/src/orchestration.ts";
+import type { ServerProviders } from "../../upstream-t3code/packages/contracts/src/server.ts";
 
 import type { RpcError } from "../rpc/error.ts";
 
@@ -38,6 +38,11 @@ export type Orchestration = {
   readonly getThreadSnapshot: (
     threadId: string,
   ) => Effect.Effect<OrchestrationThread, OrchestrationError>;
+  readonly watchShellSnapshots: () => Stream.Stream<
+    OrchestrationShellSnapshot,
+    OrchestrationError,
+    Scope.Scope
+  >;
   readonly watchShellSequence: () => Stream.Stream<number, OrchestrationError, Scope.Scope>;
   readonly watchThreadItems: (
     threadId: string,

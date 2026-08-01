@@ -30,15 +30,24 @@ export default defineConfig({
       contracts: "src/contracts/index.ts",
       node: "src/node/index.ts",
       orchestration: "src/orchestration/index.ts",
+      preview: "src/preview/index.ts",
+      "preview-viewport": "src/preview-viewport/index.ts",
       rpc: "src/rpc/index.ts",
       runtime: "src/runtime/index.ts",
       t3tools: "src/t3tools/index.ts",
     },
     deps: {
       alwaysBundle: shouldBundlePackDependency,
+      dts: {
+        alwaysBundle: /^@t3tools\//,
+        neverBundle: true,
+      },
       onlyBundle: false,
     },
-    dts: false,
+    dts: {
+      eager: true,
+      tsconfig: "tsconfig.dts.json",
+    },
     fixedExtension: false,
     format: "esm",
     hash: false,
@@ -47,7 +56,7 @@ export default defineConfig({
       codeSplitting: {
         groups: [
           {
-            name: "shared",
+            name: (id) => (id.endsWith(".d.ts") ? "shared.d" : "shared"),
             minShareCount: 2,
           },
         ],

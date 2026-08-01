@@ -10,4 +10,5 @@ export {
   T3LocalAuthOriginLayer,
   T3LocalAuthTokenLayer,
   T3OrchestrationLayer,
+  T3PreviewAutomationLayer,
 } from "./layer.ts";

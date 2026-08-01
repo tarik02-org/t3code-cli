@@ -1,15 +1,16 @@
 import {
   ConnectionBlockedError,
   ConnectionTransientError,
-} from "@t3tools/client-runtime/connection";
+} from "../../upstream-t3code/packages/client-runtime/src/connection/model.ts";
+import { EnvironmentAuthorizationError } from "../../upstream-t3code/packages/contracts/src/auth.ts";
+import { KeybindingsConfigError } from "../../upstream-t3code/packages/contracts/src/keybindings.ts";
 import {
-  EnvironmentAuthorizationError,
-  KeybindingsConfigError,
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
-  ServerSettingsError,
-  TerminalError,
-} from "@t3tools/contracts";
+} from "../../upstream-t3code/packages/contracts/src/orchestration.ts";
+import { PreviewAutomationError } from "../../upstream-t3code/packages/contracts/src/previewAutomation.ts";
+import { ServerSettingsError } from "../../upstream-t3code/packages/contracts/src/settings.ts";
+import { TerminalError } from "../../upstream-t3code/packages/contracts/src/terminal.ts";
 import * as Schema from "effect/Schema";
 import { RpcClientError } from "effect/unstable/rpc";
 
@@ -21,6 +22,7 @@ const RpcErrorCauseSchema = Schema.Union([
   KeybindingsConfigError,
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
+  PreviewAutomationError,
   ServerSettingsError,
   TerminalError,
   ConnectionBlockedError,
