@@ -5,7 +5,10 @@
     "emitDeclarationOnly": true,
     "noEmit": false,
     "paths": {
-      "@t3tools/client-runtime/*": ["./upstream-t3code/packages/client-runtime/src/*/index.ts"],
+      "@t3tools/client-runtime/*": [
+        "./upstream-t3code/packages/client-runtime/src/*/index.ts",
+        "./upstream-t3code/packages/client-runtime/src/*.ts"
+      ],
       "@t3tools/contracts": ["./upstream-t3code/packages/contracts/src/index.ts"],
       "@t3tools/contracts/*": ["./upstream-t3code/packages/contracts/src/*.ts"],
       "@t3tools/shared/*": ["./upstream-t3code/packages/shared/src/*.ts"]
@@ -24,9 +27,12 @@
     "src/node/index.ts",
     "src/orchestration/index.ts",
     "src/preview/index.ts",
-    "src/preview-viewport/index.ts",
     "src/rpc/index.ts",
     "src/runtime/index.ts",
-    "src/t3tools/index.ts"
+    "src/t3tools/index.ts",
+    "upstream-t3code/packages/client-runtime/src/*/index.ts",
+    "upstream-t3code/packages/client-runtime/src/operations/projects.ts",
+    "upstream-t3code/packages/client-runtime/src/state/*.ts",
+    "upstream-t3code/packages/shared/src/*.ts"
   ]
 }

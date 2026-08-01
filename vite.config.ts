@@ -1,6 +1,8 @@
 import "vite-plus/test/config";
 import { defineConfig } from "vite-plus";
 import packageJson from "./package.json" with { type: "json" };
+import clientRuntimePackageJson from "./upstream-t3code/packages/client-runtime/package.json" with { type: "json" };
+import sharedPackageJson from "./upstream-t3code/packages/shared/package.json" with { type: "json" };
 
 function shouldBundlePackDependency(id: string): boolean {
   if (id === "@napi-rs/keyring" || id.startsWith("@napi-rs/keyring-")) {
@@ -31,10 +33,21 @@ export default defineConfig({
       node: "src/node/index.ts",
       orchestration: "src/orchestration/index.ts",
       preview: "src/preview/index.ts",
-      "preview-viewport": "src/preview-viewport/index.ts",
       rpc: "src/rpc/index.ts",
       runtime: "src/runtime/index.ts",
       t3tools: "src/t3tools/index.ts",
+      ...Object.fromEntries(
+        Object.entries(clientRuntimePackageJson.exports).map(([subpath, conditions]) => [
+          `client-runtime/${subpath.slice(2)}`,
+          `upstream-t3code/packages/client-runtime/${conditions.default.slice(2)}`,
+        ]),
+      ),
+      ...Object.fromEntries(
+        Object.entries(sharedPackageJson.exports).map(([subpath, conditions]) => [
+          `shared/${subpath.slice(2)}`,
+          `upstream-t3code/packages/shared/${conditions.import.slice(2)}`,
+        ]),
+      ),
     },
     deps: {
       alwaysBundle: shouldBundlePackDependency,

@@ -122,14 +122,16 @@ const runHost = Effect.gen(function* () {
 `T3Orchestration.watchShellSnapshots()` emits the initial shell snapshot and a reduced snapshot for
 each later project or thread event. A new full snapshot resets the reducer after reconnects.
 
-The viewport catalog and resolver are available without importing T3's private workspace packages:
+T3 Code's shared and client-runtime export maps are mirrored under `t3code-cli/shared/*` and
+`t3code-cli/client-runtime/*`. For example, the viewport catalog and resolver are available through
+the matching shared subpath:
 
 ```ts
 import {
   PREVIEW_VIEWPORT_PRESETS,
-  PreviewViewportSetting,
   resolvePreviewViewport,
-} from "t3code-cli/preview-viewport";
+} from "t3code-cli/shared/previewViewport";
+import { PreviewViewportSetting } from "t3code-cli/contracts";
 ```
 
 ## Project Management

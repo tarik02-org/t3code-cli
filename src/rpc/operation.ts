@@ -29,10 +29,9 @@ export type CliRpcOperationError =
   | TerminalError;
 
 export const rpcRetrySchedule = Schedule.exponential("100 millis").pipe(
-  Schedule.take(4),
-  Schedule.collectWhile((metadata: Schedule.Metadata) =>
-    Predicate.isTagged(metadata.input, "RpcClientError"),
-  ),
+  Schedule.setInputType<CliRpcOperationError | RpcError>(),
+  Schedule.upTo({ times: 4 }),
+  Schedule.while((metadata) => Predicate.isTagged(metadata.input, "RpcClientError")),
 );
 
 export type T3RpcOperationsService = {
@@ -63,9 +62,7 @@ export const makeT3RpcOperations = Effect.fn("makeT3RpcOperations")(function* ()
         Predicate.isTagged(error, "RpcClientError") ? rpc.disconnect : Effect.void,
       ),
       Effect.retry(rpcRetrySchedule),
-      Effect.mapError((error) =>
-        Predicate.isTagged(error, "RpcError") ? error : toRpcError(error, method),
-      ),
+      Effect.mapError((error) => (error instanceof RpcError ? error : toRpcError(error, method))),
     );
 
   const subscribe: T3RpcOperationsService["subscribe"] = <A>(
@@ -77,9 +74,7 @@ export const makeT3RpcOperations = Effect.fn("makeT3RpcOperations")(function* ()
         Predicate.isTagged(error, "RpcClientError") ? rpc.disconnect : Effect.void,
       ),
       Stream.retry(rpcRetrySchedule),
-      Stream.mapError((error) =>
-        Predicate.isTagged(error, "RpcError") ? error : toRpcError(error, method),
-      ),
+      Stream.mapError((error) => (error instanceof RpcError ? error : toRpcError(error, method))),
     );
 
   return {

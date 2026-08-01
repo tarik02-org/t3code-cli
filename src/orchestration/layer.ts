@@ -12,10 +12,10 @@ import {
   type OrchestrationShellStreamItem,
   type OrchestrationThreadStreamItem,
 } from "@t3tools/contracts";
+import { applyShellStreamEvent } from "@t3tools/client-runtime/state/shell";
 
 import { RpcError } from "../rpc/error.ts";
 import { T3RpcOperations } from "../rpc/operation.ts";
-import { applyShellStreamEvent } from "./shell-reducer/index.ts";
 import { T3Orchestration, type OpenThread, type Orchestration } from "./service.ts";
 
 export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* () {
