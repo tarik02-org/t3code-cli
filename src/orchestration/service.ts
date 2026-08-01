@@ -9,8 +9,8 @@ import type {
   OrchestrationShellSnapshot,
   OrchestrationThread,
   OrchestrationThreadStreamItem,
-} from "../../upstream-t3code/packages/contracts/src/orchestration.ts";
-import type { ServerProviders } from "../../upstream-t3code/packages/contracts/src/server.ts";
+  ServerProviders,
+} from "@t3tools/contracts";
 
 import type { RpcError } from "../rpc/error.ts";
 

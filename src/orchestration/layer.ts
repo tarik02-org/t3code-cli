@@ -15,7 +15,7 @@ import {
 
 import { RpcError } from "../rpc/error.ts";
 import { T3RpcOperations } from "../rpc/operation.ts";
-import { applyShellStreamEvent } from "../../upstream-t3code/packages/client-runtime/src/state/shellReducer.ts";
+import { applyShellStreamEvent } from "#t3-shell-reducer";
 import { T3Orchestration, type OpenThread, type Orchestration } from "./service.ts";
 
 export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* () {

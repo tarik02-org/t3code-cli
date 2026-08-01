@@ -77,6 +77,9 @@ importers:
       '@t3tools/contracts':
         specifier: workspace:*
         version: link:upstream-t3code/packages/contracts
+      '@t3tools/shared':
+        specifier: link:upstream-t3code/packages/shared
+        version: link:upstream-t3code/packages/shared
       '@total-typescript/shoehorn':
         specifier: ^0.1.2
         version: 0.1.2

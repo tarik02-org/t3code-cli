@@ -1,7 +1,7 @@
 import {
   PREVIEW_VIEWPORT_PRESETS as T3_PREVIEW_VIEWPORT_PRESETS,
   resolvePreviewViewport as resolveT3PreviewViewport,
-} from "../../upstream-t3code/packages/shared/src/previewViewport.ts";
+} from "@t3tools/shared/previewViewport";
 
 import type {
   PreviewAutomationResizeInput,
