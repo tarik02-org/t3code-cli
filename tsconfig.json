@@ -7,9 +7,6 @@
     "moduleResolution": "NodeNext",
     "noEmit": true,
     "noUncheckedIndexedAccess": true,
-    "paths": {
-      "#t3-shell-reducer": ["./upstream-t3code/packages/client-runtime/src/state/shellReducer.ts"]
-    },
     "skipLibCheck": true,
     "strict": true,
     "target": "ES2024",
