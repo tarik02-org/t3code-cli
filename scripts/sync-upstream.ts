@@ -13,25 +13,24 @@ import { Command, Flag } from "effect/unstable/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { parseDocument } from "yaml";
 
-const synchronizedDependencies = [
-  "@effect/platform-node",
-  "@effect/vitest",
-  "@noble/curves",
-  "@noble/hashes",
-  "effect",
-  "jose",
-  "yaml",
-] as const;
+const synchronizedDependencyPatterns = ["@effect/*", "@noble/*", "effect", "jose", "yaml"];
 
 const WorkspaceConfig = Schema.Struct({
   catalog: Schema.Record(Schema.String, Schema.String),
   patchedDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 });
 
-const PackageJson = Schema.Record(Schema.String, Schema.MutableJson);
 const Dependencies = Schema.Record(Schema.String, Schema.String);
-const decodePackageJson = Schema.decodeEffect(Schema.fromJsonString(PackageJson));
-const decodeDependencies = Schema.decodeUnknownEffect(Dependencies);
+const PackageJson = Schema.StructWithRest(
+  Schema.Struct({
+    dependencies: Dependencies,
+    devDependencies: Dependencies,
+  }),
+  [Schema.Record(Schema.String, Schema.Json)],
+);
+const decodePackageJson = Schema.decodeEffect(Schema.fromJsonString(PackageJson), {
+  propertyOrder: "original",
+});
 const decodeWorkspaceConfig = Schema.decodeUnknownEffect(WorkspaceConfig);
 
 export class SyncUpstreamError extends Schema.TaggedErrorClass<SyncUpstreamError>()(
@@ -91,21 +90,24 @@ const updateSubmodule = Effect.fn("updateSubmodule")(function* (
     .exists(path.join(submodulePath, ".git"))
     .pipe(Effect.mapError(syncError("failed to inspect upstream-t3code")));
   if (!initialized) {
-    const exitCode = Number(
-      yield* spawner.exitCode(
+    yield* spawner
+      .exitCode(
         ChildProcess.make("git", ["submodule", "update", "--init", "--", "upstream-t3code"], {
           cwd: root,
           stdin: "inherit",
           stdout: "inherit",
           stderr: "inherit",
         }),
-      ),
-    );
-    if (exitCode !== 0) {
-      return yield* new SyncUpstreamError({
-        message: `'git submodule update --init -- upstream-t3code' exited with code ${exitCode}`,
-      });
-    }
+      )
+      .pipe(
+        Effect.filterOrFail(
+          (exitCode) => exitCode === 0,
+          (exitCode) =>
+            new SyncUpstreamError({
+              message: `'git submodule update --init -- upstream-t3code' exited with code ${exitCode}`,
+            }),
+        ),
+      );
   }
 
   const statusProcess = yield* spawner.spawn(
@@ -114,15 +116,18 @@ const updateSubmodule = Effect.fn("updateSubmodule")(function* (
       stderr: "inherit",
     }),
   );
-  const [status, statusExitCode] = yield* Effect.all(
-    [collectStream(statusProcess.stdout), statusProcess.exitCode.pipe(Effect.map(Number))],
+  const [status] = yield* Effect.all(
+    [collectStream(statusProcess.stdout), statusProcess.exitCode],
     { concurrency: "unbounded" },
+  ).pipe(
+    Effect.filterOrFail(
+      ([, exitCode]) => exitCode === 0,
+      ([, exitCode]) =>
+        new SyncUpstreamError({
+          message: `'git status --porcelain' exited with code ${exitCode}`,
+        }),
+    ),
   );
-  if (statusExitCode !== 0) {
-    return yield* new SyncUpstreamError({
-      message: `'git status --porcelain' exited with code ${statusExitCode}`,
-    });
-  }
   if (status.trim().length > 0) {
     return yield* new SyncUpstreamError({
       message: "upstream-t3code has uncommitted changes; clean it before updating",
@@ -135,18 +140,18 @@ const updateSubmodule = Effect.fn("updateSubmodule")(function* (
       stderr: "inherit",
     }),
   );
-  const [currentCommitOutput, currentCommitExitCode] = yield* Effect.all(
-    [
-      collectStream(currentCommitProcess.stdout),
-      currentCommitProcess.exitCode.pipe(Effect.map(Number)),
-    ],
+  const [currentCommitOutput] = yield* Effect.all(
+    [collectStream(currentCommitProcess.stdout), currentCommitProcess.exitCode],
     { concurrency: "unbounded" },
+  ).pipe(
+    Effect.filterOrFail(
+      ([, exitCode]) => exitCode === 0,
+      ([, exitCode]) =>
+        new SyncUpstreamError({
+          message: `'git rev-parse HEAD' exited with code ${exitCode}`,
+        }),
+    ),
   );
-  if (currentCommitExitCode !== 0) {
-    return yield* new SyncUpstreamError({
-      message: `'git rev-parse HEAD' exited with code ${currentCommitExitCode}`,
-    });
-  }
   const currentCommit = currentCommitOutput.trim();
 
   if (target === undefined) {
@@ -154,21 +159,24 @@ const updateSubmodule = Effect.fn("updateSubmodule")(function* (
   }
 
   yield* Console.log(`Fetching upstream T3 Code for target '${target}'...`);
-  const fetchExitCode = Number(
-    yield* spawner.exitCode(
+  yield* spawner
+    .exitCode(
       ChildProcess.make("git", ["fetch", "origin", "--tags", "--force"], {
         cwd: submodulePath,
         stdin: "inherit",
         stdout: "inherit",
         stderr: "inherit",
       }),
-    ),
-  );
-  if (fetchExitCode !== 0) {
-    return yield* new SyncUpstreamError({
-      message: `'git fetch origin --tags --force' exited with code ${fetchExitCode}`,
-    });
-  }
+    )
+    .pipe(
+      Effect.filterOrFail(
+        (exitCode) => exitCode === 0,
+        (exitCode) =>
+          new SyncUpstreamError({
+            message: `'git fetch origin --tags --force' exited with code ${exitCode}`,
+          }),
+      ),
+    );
 
   let ref: string;
   if (target === "stable" || target === "nightly") {
@@ -184,15 +192,18 @@ const updateSubmodule = Effect.fn("updateSubmodule")(function* (
         { cwd: submodulePath, stderr: "inherit" },
       ),
     );
-    const [tagsOutput, tagsExitCode] = yield* Effect.all(
-      [collectStream(tagsProcess.stdout), tagsProcess.exitCode.pipe(Effect.map(Number))],
+    const [tagsOutput] = yield* Effect.all(
+      [collectStream(tagsProcess.stdout), tagsProcess.exitCode],
       { concurrency: "unbounded" },
+    ).pipe(
+      Effect.filterOrFail(
+        ([, exitCode]) => exitCode === 0,
+        ([, exitCode]) =>
+          new SyncUpstreamError({
+            message: `'git tag --list' exited with code ${exitCode}`,
+          }),
+      ),
     );
-    if (tagsExitCode !== 0) {
-      return yield* new SyncUpstreamError({
-        message: `'git tag --list' exited with code ${tagsExitCode}`,
-      });
-    }
     const tag = tagsOutput
       .trim()
       .split("\n")
@@ -210,21 +221,24 @@ const updateSubmodule = Effect.fn("updateSubmodule")(function* (
   } else if (/^v?\d+\.\d+\.\d+(?:-.+)?$/u.test(target)) {
     ref = target.startsWith("v") ? target : `v${target}`;
   } else {
-    const targetFetchExitCode = Number(
-      yield* spawner.exitCode(
+    yield* spawner
+      .exitCode(
         ChildProcess.make("git", ["fetch", "origin", target], {
           cwd: submodulePath,
           stdin: "inherit",
           stdout: "inherit",
           stderr: "inherit",
         }),
-      ),
-    );
-    if (targetFetchExitCode !== 0) {
-      return yield* new SyncUpstreamError({
-        message: `'git fetch origin ${target}' exited with code ${targetFetchExitCode}`,
-      });
-    }
+      )
+      .pipe(
+        Effect.filterOrFail(
+          (exitCode) => exitCode === 0,
+          (exitCode) =>
+            new SyncUpstreamError({
+              message: `'git fetch origin ${target}' exited with code ${exitCode}`,
+            }),
+        ),
+      );
     ref = "FETCH_HEAD";
   }
 
@@ -234,33 +248,39 @@ const updateSubmodule = Effect.fn("updateSubmodule")(function* (
       stderr: "inherit",
     }),
   );
-  const [commitOutput, commitExitCode] = yield* Effect.all(
-    [collectStream(commitProcess.stdout), commitProcess.exitCode.pipe(Effect.map(Number))],
+  const [commitOutput] = yield* Effect.all(
+    [collectStream(commitProcess.stdout), commitProcess.exitCode],
     { concurrency: "unbounded" },
+  ).pipe(
+    Effect.filterOrFail(
+      ([, exitCode]) => exitCode === 0,
+      ([, exitCode]) =>
+        new SyncUpstreamError({
+          message: `'git rev-parse --verify ${ref}^{commit}' exited with code ${exitCode}`,
+        }),
+    ),
   );
-  if (commitExitCode !== 0) {
-    return yield* new SyncUpstreamError({
-      message: `'git rev-parse --verify ${ref}^{commit}' exited with code ${commitExitCode}`,
-    });
-  }
   const commit = commitOutput.trim();
 
   if (commit !== currentCommit) {
-    const checkoutExitCode = Number(
-      yield* spawner.exitCode(
+    yield* spawner
+      .exitCode(
         ChildProcess.make("git", ["checkout", "--detach", commit], {
           cwd: submodulePath,
           stdin: "inherit",
           stdout: "inherit",
           stderr: "inherit",
         }),
-      ),
-    );
-    if (checkoutExitCode !== 0) {
-      return yield* new SyncUpstreamError({
-        message: `'git checkout --detach ${commit}' exited with code ${checkoutExitCode}`,
-      });
-    }
+      )
+      .pipe(
+        Effect.filterOrFail(
+          (exitCode) => exitCode === 0,
+          (exitCode) =>
+            new SyncUpstreamError({
+              message: `'git checkout --detach ${commit}' exited with code ${exitCode}`,
+            }),
+        ),
+      );
   }
 
   return commit;
@@ -281,14 +301,13 @@ const synchronizeConfig = Effect.fn("synchronizeConfig")(function* (
   const packageJson = yield* decodePackageJson(packageJsonSource).pipe(
     Effect.mapError(syncError(`invalid package manifest in '${packageJsonPath}'`)),
   );
-  const dependencies = yield* decodeDependencies(packageJson.dependencies).pipe(
-    Effect.mapError(syncError(`invalid dependencies in '${packageJsonPath}'`)),
-  );
-  const devDependencies = yield* decodeDependencies(packageJson.devDependencies).pipe(
-    Effect.mapError(syncError(`invalid devDependencies in '${packageJsonPath}'`)),
-  );
   const rootWorkspace = yield* readWorkspaceConfig(workspacePath);
   const upstreamWorkspace = yield* readWorkspaceConfig(upstreamWorkspacePath);
+  const synchronizedDependencies = Object.keys(rootWorkspace.config.catalog).filter((dependency) =>
+    synchronizedDependencyPatterns.some((pattern) =>
+      pattern.endsWith("*") ? dependency.startsWith(pattern.slice(0, -1)) : dependency === pattern,
+    ),
+  );
   const versions: Record<string, string> = {};
 
   for (const dependency of synchronizedDependencies) {
@@ -324,8 +343,8 @@ const synchronizeConfig = Effect.fn("synchronizeConfig")(function* (
   }
   rootWorkspace.document.set("patchedDependencies", patchedDependencies);
 
-  const nextDependencies = { ...dependencies };
-  const nextDevDependencies = { ...devDependencies };
+  const nextDependencies = { ...packageJson.dependencies };
+  const nextDevDependencies = { ...packageJson.devDependencies };
   for (const [dependency, version] of Object.entries(versions)) {
     if (nextDependencies[dependency] !== undefined && nextDependencies[dependency] !== "catalog:") {
       nextDependencies[dependency] = version;
@@ -372,24 +391,27 @@ const syncUpstream = Effect.fn("syncUpstream")(function* (target: string | undef
   const versions = yield* synchronizeConfig(root, submodulePath);
 
   yield* Console.log("Installing synchronized dependencies...");
-  const installExitCode = Number(
-    yield* spawner.exitCode(
+  yield* spawner
+    .exitCode(
       ChildProcess.make("pnpm", ["install"], {
         cwd: root,
         stdin: "inherit",
         stdout: "inherit",
         stderr: "inherit",
       }),
-    ),
-  );
-  if (installExitCode !== 0) {
-    yield* new SyncUpstreamError({
-      message: `'pnpm install' exited with code ${installExitCode}`,
-    });
-  }
+    )
+    .pipe(
+      Effect.filterOrFail(
+        (exitCode) => exitCode === 0,
+        (exitCode) =>
+          new SyncUpstreamError({
+            message: `'pnpm install' exited with code ${exitCode}`,
+          }),
+      ),
+    );
   yield* Console.log(`T3 Code: ${commit}`);
-  for (const dependency of synchronizedDependencies) {
-    yield* Console.log(`${dependency}: ${versions[dependency]}`);
+  for (const [dependency, version] of Object.entries(versions)) {
+    yield* Console.log(`${dependency}: ${version}`);
   }
 });
 
