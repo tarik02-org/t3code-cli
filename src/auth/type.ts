@@ -1,3 +1,4 @@
+import type { AuthClientPresentationMetadata } from "../contracts/index.ts";
 import type { AuthBearerBootstrapResult } from "./schema.ts";
 import type { AuthSessionState } from "./schema.ts";
 
@@ -7,6 +8,11 @@ export type PairingUrl = {
   readonly baseUrl: string;
   readonly credential: string;
 };
+
+export interface AuthPairInput {
+  readonly pairingUrl: string;
+  readonly clientMetadata?: AuthClientPresentationMetadata;
+}
 
 export type AuthConfigInput = {
   readonly name: string;

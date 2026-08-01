@@ -1,4 +1,5 @@
 export { T3Auth } from "./service.ts";
+export type { AuthClientPresentationMetadata } from "../contracts/index.ts";
 export { T3AuthLive, makeT3Auth } from "./layer.ts";
 export { T3LocalAuth, T3LocalAuthLive, makeT3LocalAuth } from "./local.ts";
 export { T3LocalAuthOrigin, T3LocalAuthOriginLive, makeT3LocalAuthOrigin } from "./local-origin.ts";
@@ -29,6 +30,7 @@ export type {
   LocalAuthResult,
   LocalAuthTokenInput,
   LocalAuthTokenResult,
+  AuthPairInput,
   PairingUrl,
   PairResult,
   PersistEnvironmentInput,

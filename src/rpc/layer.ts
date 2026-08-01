@@ -1,3 +1,4 @@
+import type { ConnectionAttemptError } from "@t3tools/client-runtime/connection";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -8,16 +9,16 @@ import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 
+import { T3CodeConnectionError } from "../connection/error.ts";
 import { T3PreparedConnectionProvider } from "../connection/prepared.ts";
 import { RpcError } from "./error.ts";
 import { T3RpcSessionFactory } from "./session.ts";
 import { T3Rpc, type WsClient } from "./service.ts";
 
 const connectionRetrySchedule = Schedule.exponential("100 millis").pipe(
-  Schedule.take(4),
-  Schedule.collectWhile((metadata: Schedule.Metadata) =>
-    Predicate.isTagged(metadata.input, "ConnectionTransientError"),
-  ),
+  Schedule.setInputType<ConnectionAttemptError | T3CodeConnectionError>(),
+  Schedule.upTo({ times: 4 }),
+  Schedule.while((metadata) => Predicate.isTagged(metadata.input, "ConnectionTransientError")),
 );
 
 type Connection = {

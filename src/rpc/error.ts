@@ -7,6 +7,7 @@ import {
   KeybindingsConfigError,
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
+  PreviewAutomationError,
   ServerSettingsError,
   TerminalError,
 } from "@t3tools/contracts";
@@ -21,6 +22,7 @@ const RpcErrorCauseSchema = Schema.Union([
   KeybindingsConfigError,
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
+  PreviewAutomationError,
   ServerSettingsError,
   TerminalError,
   ConnectionBlockedError,

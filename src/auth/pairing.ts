@@ -5,13 +5,13 @@ import { Url } from "effect/unstable/http";
 
 import { AuthPairingUrlError, AuthTransportError } from "./error.ts";
 import { T3AuthTransport } from "./transport.ts";
-import type { PairingUrl, PairResult } from "./type.ts";
+import type { AuthPairInput, PairingUrl, PairResult } from "./type.ts";
 
 export class T3AuthPairing extends Context.Service<
   T3AuthPairing,
   {
     readonly pair: (
-      pairingUrl: string,
+      input: AuthPairInput,
     ) => Effect.Effect<PairResult, AuthPairingUrlError | AuthTransportError>;
   }
 >()("t3cli/T3AuthPairing") {}
@@ -19,9 +19,12 @@ export class T3AuthPairing extends Context.Service<
 export const makeT3AuthPairing = Effect.fn("makeT3AuthPairing")(function* () {
   const transport = yield* T3AuthTransport;
 
-  const pair = Effect.fn("T3AuthPairingLive.pair")(function* (pairingUrl: string) {
-    const parsed = yield* parsePairingUrl(pairingUrl);
-    const result = yield* transport.bootstrapBearer(parsed);
+  const pair = Effect.fn("T3AuthPairingLive.pair")(function* (input: AuthPairInput) {
+    const parsed = yield* parsePairingUrl(input.pairingUrl);
+    const result = yield* transport.bootstrapBearer({
+      ...parsed,
+      ...(input.clientMetadata !== undefined ? { clientMetadata: input.clientMetadata } : {}),
+    });
     return {
       url: parsed.baseUrl,
       token: result.sessionToken,
