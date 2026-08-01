@@ -54,14 +54,17 @@ const program = Effect.gen(function* () {
       process.exitCode = error.errors.length > 0 ? 1 : 0;
     }),
   ),
-  Effect.tapError((error) =>
-    Effect.gen(function* () {
-      const output = yield* T3Output;
-      yield* output.writeStderr(`${error instanceof Error ? error.message : String(error)}\n`);
-    }),
-  ),
+  Effect.matchEffect({
+    onFailure: (error) =>
+      Effect.gen(function* () {
+        const output = yield* T3Output;
+        yield* output.writeStderr(`${error instanceof Error ? error.message : String(error)}\n`);
+        process.exitCode = 1;
+      }),
+    onSuccess: (value) => Effect.succeed(value),
+  }),
   Effect.scoped,
   Effect.provide(CliLayer),
 );
 
-NodeRuntime.runMain(program, { disableErrorReporting: true });
+NodeRuntime.runMain(program);
