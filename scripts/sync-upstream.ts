@@ -78,6 +78,81 @@ const readWorkspaceConfig = Effect.fn("readWorkspaceConfig")(function* (filePath
   return { config, document, source };
 });
 
+const resolveUpstreamRef = Effect.fn("resolveUpstreamRef")(function* (
+  submodulePath: string,
+  target: string,
+) {
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
+  if (target === "stable" || target === "nightly") {
+    const tagsProcess = yield* spawner.spawn(
+      ChildProcess.make(
+        "git",
+        [
+          "tag",
+          "--list",
+          target === "stable" ? "v[0-9]*" : "v*-nightly.*",
+          "--sort=-version:refname",
+        ],
+        { cwd: submodulePath, stderr: "inherit" },
+      ),
+    );
+    const [tagsOutput] = yield* Effect.all(
+      [
+        collectStream(tagsProcess.stdout),
+        tagsProcess.exitCode.pipe(
+          Effect.filterOrFail(
+            (exitCode) => exitCode === 0,
+            (exitCode) =>
+              new SyncUpstreamError({
+                message: `'git tag --list' exited with code ${exitCode}`,
+              }),
+          ),
+        ),
+      ],
+      { concurrency: "unbounded" },
+    );
+    const tag = tagsOutput
+      .trim()
+      .split("\n")
+      .find((candidate) =>
+        target === "stable"
+          ? /^v\d+\.\d+\.\d+$/u.test(candidate)
+          : /^v\d+\.\d+\.\d+-nightly\..+$/u.test(candidate),
+      );
+    if (tag === undefined) {
+      return yield* new SyncUpstreamError({ message: `no ${target} T3 Code tag was found` });
+    }
+    return tag;
+  }
+  if (target === "main") {
+    return "origin/main";
+  }
+  if (/^v?\d+\.\d+\.\d+(?:-.+)?$/u.test(target)) {
+    return target.startsWith("v") ? target : `v${target}`;
+  }
+
+  yield* spawner
+    .exitCode(
+      ChildProcess.make("git", ["fetch", "origin", target], {
+        cwd: submodulePath,
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "inherit",
+      }),
+    )
+    .pipe(
+      Effect.filterOrFail(
+        (exitCode) => exitCode === 0,
+        (exitCode) =>
+          new SyncUpstreamError({
+            message: `'git fetch origin ${target}' exited with code ${exitCode}`,
+          }),
+      ),
+    );
+  return "FETCH_HEAD";
+});
+
 const updateSubmodule = Effect.fn("updateSubmodule")(function* (
   root: string,
   submodulePath: string,
@@ -117,16 +192,19 @@ const updateSubmodule = Effect.fn("updateSubmodule")(function* (
     }),
   );
   const [status] = yield* Effect.all(
-    [collectStream(statusProcess.stdout), statusProcess.exitCode],
+    [
+      collectStream(statusProcess.stdout),
+      statusProcess.exitCode.pipe(
+        Effect.filterOrFail(
+          (exitCode) => exitCode === 0,
+          (exitCode) =>
+            new SyncUpstreamError({
+              message: `'git status --porcelain' exited with code ${exitCode}`,
+            }),
+        ),
+      ),
+    ],
     { concurrency: "unbounded" },
-  ).pipe(
-    Effect.filterOrFail(
-      ([, exitCode]) => exitCode === 0,
-      ([, exitCode]) =>
-        new SyncUpstreamError({
-          message: `'git status --porcelain' exited with code ${exitCode}`,
-        }),
-    ),
   );
   if (status.trim().length > 0) {
     return yield* new SyncUpstreamError({
@@ -141,16 +219,19 @@ const updateSubmodule = Effect.fn("updateSubmodule")(function* (
     }),
   );
   const [currentCommitOutput] = yield* Effect.all(
-    [collectStream(currentCommitProcess.stdout), currentCommitProcess.exitCode],
+    [
+      collectStream(currentCommitProcess.stdout),
+      currentCommitProcess.exitCode.pipe(
+        Effect.filterOrFail(
+          (exitCode) => exitCode === 0,
+          (exitCode) =>
+            new SyncUpstreamError({
+              message: `'git rev-parse HEAD' exited with code ${exitCode}`,
+            }),
+        ),
+      ),
+    ],
     { concurrency: "unbounded" },
-  ).pipe(
-    Effect.filterOrFail(
-      ([, exitCode]) => exitCode === 0,
-      ([, exitCode]) =>
-        new SyncUpstreamError({
-          message: `'git rev-parse HEAD' exited with code ${exitCode}`,
-        }),
-    ),
   );
   const currentCommit = currentCommitOutput.trim();
 
@@ -178,69 +259,7 @@ const updateSubmodule = Effect.fn("updateSubmodule")(function* (
       ),
     );
 
-  let ref: string;
-  if (target === "stable" || target === "nightly") {
-    const tagsProcess = yield* spawner.spawn(
-      ChildProcess.make(
-        "git",
-        [
-          "tag",
-          "--list",
-          target === "stable" ? "v[0-9]*" : "v*-nightly.*",
-          "--sort=-version:refname",
-        ],
-        { cwd: submodulePath, stderr: "inherit" },
-      ),
-    );
-    const [tagsOutput] = yield* Effect.all(
-      [collectStream(tagsProcess.stdout), tagsProcess.exitCode],
-      { concurrency: "unbounded" },
-    ).pipe(
-      Effect.filterOrFail(
-        ([, exitCode]) => exitCode === 0,
-        ([, exitCode]) =>
-          new SyncUpstreamError({
-            message: `'git tag --list' exited with code ${exitCode}`,
-          }),
-      ),
-    );
-    const tag = tagsOutput
-      .trim()
-      .split("\n")
-      .find((candidate) =>
-        target === "stable"
-          ? /^v\d+\.\d+\.\d+$/u.test(candidate)
-          : /^v\d+\.\d+\.\d+-nightly\..+$/u.test(candidate),
-      );
-    if (tag === undefined) {
-      return yield* new SyncUpstreamError({ message: `no ${target} T3 Code tag was found` });
-    }
-    ref = tag;
-  } else if (target === "main") {
-    ref = "origin/main";
-  } else if (/^v?\d+\.\d+\.\d+(?:-.+)?$/u.test(target)) {
-    ref = target.startsWith("v") ? target : `v${target}`;
-  } else {
-    yield* spawner
-      .exitCode(
-        ChildProcess.make("git", ["fetch", "origin", target], {
-          cwd: submodulePath,
-          stdin: "inherit",
-          stdout: "inherit",
-          stderr: "inherit",
-        }),
-      )
-      .pipe(
-        Effect.filterOrFail(
-          (exitCode) => exitCode === 0,
-          (exitCode) =>
-            new SyncUpstreamError({
-              message: `'git fetch origin ${target}' exited with code ${exitCode}`,
-            }),
-        ),
-      );
-    ref = "FETCH_HEAD";
-  }
+  const ref = yield* resolveUpstreamRef(submodulePath, target);
 
   const commitProcess = yield* spawner.spawn(
     ChildProcess.make("git", ["rev-parse", "--verify", `${ref}^{commit}`], {
@@ -249,16 +268,19 @@ const updateSubmodule = Effect.fn("updateSubmodule")(function* (
     }),
   );
   const [commitOutput] = yield* Effect.all(
-    [collectStream(commitProcess.stdout), commitProcess.exitCode],
+    [
+      collectStream(commitProcess.stdout),
+      commitProcess.exitCode.pipe(
+        Effect.filterOrFail(
+          (exitCode) => exitCode === 0,
+          (exitCode) =>
+            new SyncUpstreamError({
+              message: `'git rev-parse --verify ${ref}^{commit}' exited with code ${exitCode}`,
+            }),
+        ),
+      ),
+    ],
     { concurrency: "unbounded" },
-  ).pipe(
-    Effect.filterOrFail(
-      ([, exitCode]) => exitCode === 0,
-      ([, exitCode]) =>
-        new SyncUpstreamError({
-          message: `'git rev-parse --verify ${ref}^{commit}' exited with code ${exitCode}`,
-        }),
-    ),
   );
   const commit = commitOutput.trim();
 
