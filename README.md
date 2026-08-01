@@ -134,6 +134,21 @@ import {
 import { PreviewViewportSetting } from "t3code-cli/contracts";
 ```
 
+## Upstream Maintenance
+
+Synchronize dependency versions and patches with the current `upstream-t3code` revision:
+
+```sh
+pnpm sync-upstream
+```
+
+Pass `--target` to update the submodule first. It accepts `stable`, `nightly`, `main`, a version such
+as `0.0.31` or `v0.0.31`, or a Git ref or commit:
+
+```sh
+pnpm sync-upstream --target stable
+```
+
 ## Project Management
 
 ```sh

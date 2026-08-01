@@ -25,8 +25,8 @@ catalogs:
       specifier: 4.0.0-beta.102
       version: 4.0.0-beta.102
     jose:
-      specifier: 6.2.4
-      version: 6.2.4
+      specifier: 6.2.2
+      version: 6.2.2
     vite-plus:
       specifier: 0.2.6
       version: 0.2.6
@@ -98,6 +98,9 @@ importers:
       vite-plus:
         specifier: ^0.2.6
         version: 0.2.6(@types/node@26.1.2)(typescript@7.0.2)(vite@8.0.14(@types/node@26.1.2)(yaml@2.9.0))(yaml@2.9.0)
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.0
 
   upstream-t3code/packages/client-runtime:
     dependencies:
@@ -147,7 +150,7 @@ importers:
         version: 4.0.0-beta.102(patch_hash=71215759e1ac0a7f65d7b75d816986687ae6c3a6cba02d928d184ca71790d488)
       jose:
         specifier: 'catalog:'
-        version: 6.2.4
+        version: 6.2.2
       yaml:
         specifier: 'catalog:'
         version: 2.9.0
@@ -1546,8 +1549,8 @@ packages:
   isexe@2.0.0:
     resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
 
-  jose@6.2.4:
-    resolution: {integrity: sha512-N8acGzVsQy6M/fjFcxtysNc4Q379TcM5dM/qKkNtsHFji88yANnXTr7BLeP75iPnFwBfQzM/jg2BZ9+HZrHCZA==}
+  jose@6.2.2:
+    resolution: {integrity: sha512-d7kPDd34KO/YnzaDOlikGpOurfF0ByC2sEV4cANCtdqLlTfBlw2p14O/5d/zv40gJPbIQxfES3nSx1/oYNyuZQ==}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -3242,7 +3245,7 @@ snapshots:
 
   isexe@2.0.0: {}
 
-  jose@6.2.4: {}
+  jose@6.2.2: {}
 
   js-tokens@4.0.0: {}
 

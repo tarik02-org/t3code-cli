@@ -11,7 +11,7 @@ catalog:
   "@noble/hashes": 1.8.0
   "@types/node": ^26.1.2
   effect: 4.0.0-beta.102
-  jose: 6.2.4
+  jose: 6.2.2
   vite-plus: 0.2.6
   vite: npm:@voidzero-dev/vite-plus-core@0.2.6
   vitest: npm:@voidzero-dev/vite-plus-test@0.1.24
@@ -20,4 +20,4 @@ catalog:
 patchedDependencies:
   "@effect/platform-node@4.0.0-beta.102": upstream-t3code/patches/@effect__platform-node@4.0.0-beta.102.patch
   "@effect/vitest@4.0.0-beta.102": upstream-t3code/patches/@effect__vitest@4.0.0-beta.102.patch
-  "effect@4.0.0-beta.102": upstream-t3code/patches/effect@4.0.0-beta.102.patch
+  effect@4.0.0-beta.102: upstream-t3code/patches/effect@4.0.0-beta.102.patch

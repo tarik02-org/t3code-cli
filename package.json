@@ -118,6 +118,7 @@
     "release:version": "changeset version && pnpm format",
     "release:check": "pnpm check && pnpm typecheck && pnpm pack --dry-run",
     "release:publish": "changeset publish",
+    "sync-upstream": "node scripts/sync-upstream.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -138,7 +139,8 @@
     "@total-typescript/shoehorn": "^0.1.2",
     "@types/node": "^26.1.2",
     "typescript": "^7.0.2",
-    "vite-plus": "^0.2.6"
+    "vite-plus": "^0.2.6",
+    "yaml": "catalog:"
   },
   "engines": {
     "node": ">=24.0.0"
