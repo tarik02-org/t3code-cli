@@ -8,6 +8,7 @@ import {
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
   OrchestrationSearchThreadsError,
+  PreviewAutomationError,
   ServerSettingsError,
   TerminalError,
 } from "@t3tools/contracts";
@@ -23,6 +24,7 @@ const RpcErrorCauseSchema = Schema.Union([
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
   OrchestrationSearchThreadsError,
+  PreviewAutomationError,
   ServerSettingsError,
   TerminalError,
   ConnectionBlockedError,

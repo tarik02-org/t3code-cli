@@ -43,6 +43,11 @@ export type Orchestration = {
   readonly getThreadSnapshot: (
     threadId: string,
   ) => Effect.Effect<OrchestrationThread, OrchestrationError>;
+  readonly watchShellSnapshots: () => Stream.Stream<
+    OrchestrationShellSnapshot,
+    OrchestrationError,
+    Scope.Scope
+  >;
   readonly watchShellSequence: () => Stream.Stream<number, OrchestrationError, Scope.Scope>;
   readonly watchThreadItems: (
     threadId: string,

@@ -91,6 +91,9 @@ export const makeNodeSqliteClient = Effect.fn("makeNodeSqliteClient")(function* 
     executeValues(sql, params) {
       return runValues(sql, params);
     },
+    executeValuesUnprepared(sql, params) {
+      return runValues(sql, params);
+    },
     executeUnprepared(sql, params, rowTransform) {
       const effect = runRows(sql, params);
       return rowTransform === undefined ? effect : Effect.map(effect, rowTransform);

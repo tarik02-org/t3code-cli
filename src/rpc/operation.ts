@@ -4,6 +4,7 @@ import type {
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
   OrchestrationSearchThreadsError,
+  PreviewAutomationError,
   ServerSettingsError,
   TerminalError,
 } from "@t3tools/contracts";
@@ -24,15 +25,15 @@ export type CliRpcOperationError =
   | OrchestrationDispatchCommandError
   | OrchestrationGetSnapshotError
   | OrchestrationSearchThreadsError
+  | PreviewAutomationError
   | RpcClientError.RpcClientError
   | ServerSettingsError
   | TerminalError;
 
 export const rpcRetrySchedule = Schedule.exponential("100 millis").pipe(
-  Schedule.take(4),
-  Schedule.collectWhile((metadata: Schedule.Metadata) =>
-    Predicate.isTagged(metadata.input, "RpcClientError"),
-  ),
+  Schedule.setInputType<CliRpcOperationError | RpcError>(),
+  Schedule.upTo({ times: 4 }),
+  Schedule.while((metadata) => Predicate.isTagged(metadata.input, "RpcClientError")),
 );
 
 export type T3RpcOperationsService = {

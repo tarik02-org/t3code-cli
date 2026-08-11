@@ -75,7 +75,13 @@ const pairCommand = Command.make(
       const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
       const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
-      const result = yield* auth.pair(url);
+      const result = yield* auth.pair({
+        pairingUrl: url,
+        clientMetadata: {
+          label: "t3cli",
+          deviceType: "bot",
+        },
+      });
       const fallbackName = yield* auth.defaultNameFromUrl(result.url);
       const environmentName = yield* persistAuthEnvironment({
         explicitName: name,

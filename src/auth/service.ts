@@ -11,6 +11,7 @@ import type {
   AuthUseResult,
   LocalAuthInput,
   LocalAuthResult,
+  AuthPairInput,
   PairResult,
   PersistEnvironmentInput,
 } from "./type.ts";
@@ -18,7 +19,7 @@ import type {
 export class T3Auth extends Context.Service<
   T3Auth,
   {
-    readonly pair: (value: string) => Effect.Effect<PairResult, AuthError>;
+    readonly pair: (input: AuthPairInput) => Effect.Effect<PairResult, AuthError>;
     readonly local: (input: LocalAuthInput) => Effect.Effect<LocalAuthResult, AuthError>;
     readonly writeConfig: (input: AuthConfigInput) => Effect.Effect<void, AuthError>;
     readonly persistEnvironment: (

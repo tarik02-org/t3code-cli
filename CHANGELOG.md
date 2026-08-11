@@ -1,5 +1,17 @@
 # t3code-cli
 
+## 0.14.1
+
+### Patch Changes
+
+- f9202fe: report unexpected runtime defects instead of exiting silently
+
+## 0.14.0
+
+### Minor Changes
+
+- 0665a27: add public preview automation, pairing metadata, shell snapshot, and mirrored T3 package APIs
+
 ## 0.13.0
 
 ### Minor Changes

@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { HttpClient } from "effect/unstable/http";
 
+import type { AuthClientPresentationMetadata } from "../contracts/index.ts";
 import { AuthTransportError } from "./error.ts";
 import {
   type AuthBearerBootstrapResult,
@@ -27,6 +28,7 @@ export class T3AuthTransport extends Context.Service<
     readonly bootstrapBearer: (input: {
       readonly baseUrl: string;
       readonly credential: string;
+      readonly clientMetadata?: AuthClientPresentationMetadata;
     }) => Effect.Effect<AuthBearerBootstrapResult, AuthTransportError>;
     readonly getSession: (
       connection: AuthTransportConnection,
@@ -43,10 +45,12 @@ const makeT3AuthTransport = Effect.fn("makeT3AuthTransport")(function* () {
   const bootstrapBearer = Effect.fn("AuthTransport.bootstrapBearer")(function* (input: {
     readonly baseUrl: string;
     readonly credential: string;
+    readonly clientMetadata?: AuthClientPresentationMetadata;
   }) {
     const result = yield* bootstrapRemoteBearerSession({
       httpBaseUrl: input.baseUrl,
       credential: input.credential,
+      ...(input.clientMetadata !== undefined ? { clientMetadata: input.clientMetadata } : {}),
     }).pipe(
       Effect.provideService(HttpClient.HttpClient, httpClient),
       Effect.mapError(

@@ -36,7 +36,7 @@ This repo includes an agent skill for operating `t3cli`: [`skills/t3code-cli/SKI
 Install it with:
 
 ```sh
-npx skills add tarik02/t3cli
+npx skills add tarik02-org/t3code-cli
 ```
 
 ## Authentication
@@ -62,6 +62,92 @@ t3cli --environment <name> ...                                      # Use a spec
 - Local auth enables automatic project resolution from the current directory
 - Set `T3CLI_ENV=<name>` to select an environment when `--environment` is omitted
 - `T3CODE_URL` and `T3CODE_TOKEN` override the selected environment only when both are set
+
+## Programmatic API
+
+Pairing accepts T3 client presentation metadata. Automation clients should identify themselves as
+bots and provide a label that users can recognize in T3 Code:
+
+```ts
+import * as Effect from "effect/Effect";
+import { T3AuthPairing } from "t3code-cli/auth";
+import { T3AuthPairingLayer } from "t3code-cli/runtime";
+
+const pair = Effect.gen(function* () {
+  const auth = yield* T3AuthPairing;
+  return yield* auth.pair({
+    pairingUrl,
+    clientMetadata: {
+      label: "aperture bridge",
+      deviceType: "bot",
+      os: "linux",
+    },
+  });
+}).pipe(Effect.provide(T3AuthPairingLayer));
+```
+
+`T3PreviewAutomation` registers a preview host and exposes T3's request stream, response RPC, and
+focus RPC. Compose its live layer with the existing connection layers when supplying credentials
+directly:
+
+```ts
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
+import { T3CodeConnectionProviderLive } from "t3code-cli/connection";
+import { T3CodeNodeRpcLayer } from "t3code-cli/node";
+import { T3PreviewAutomation, T3PreviewAutomationLive } from "t3code-cli/preview";
+import { T3RpcOperationsLive } from "t3code-cli/rpc";
+
+const connectionLayer = T3CodeConnectionProviderLive({
+  origin: { url },
+  auth: { token },
+});
+const rpcLayer = T3CodeNodeRpcLayer.pipe(Layer.provide(connectionLayer));
+const previewLayer = T3PreviewAutomationLive.pipe(
+  Layer.provide(T3RpcOperationsLive.pipe(Layer.provide(rpcLayer))),
+);
+
+const runHost = Effect.gen(function* () {
+  const preview = yield* T3PreviewAutomation;
+  yield* preview
+    .connect({ clientId, environmentId, supportedOperations })
+    .pipe(Stream.runForEach(handlePreviewEvent));
+}).pipe(Effect.scoped, Effect.provide(previewLayer));
+```
+
+`T3PreviewAutomationLayer` is the shorter CLI-config-backed layer for callers that use a selected
+`t3cli` environment.
+
+`T3Orchestration.watchShellSnapshots()` emits the initial shell snapshot and a reduced snapshot for
+each later project or thread event. A new full snapshot resets the reducer after reconnects.
+
+T3 Code's shared and client-runtime export maps are mirrored under `t3code-cli/shared/*` and
+`t3code-cli/client-runtime/*`. For example, the viewport catalog and resolver are available through
+the matching shared subpath:
+
+```ts
+import {
+  PREVIEW_VIEWPORT_PRESETS,
+  resolvePreviewViewport,
+} from "t3code-cli/shared/previewViewport";
+import { PreviewViewportSetting } from "t3code-cli/contracts";
+```
+
+## Upstream Maintenance
+
+Synchronize dependency versions and patches with the current `upstream-t3code` revision:
+
+```sh
+pnpm sync-upstream
+```
+
+Pass `--target` to update the submodule first. It accepts `stable`, `nightly`, `main`, a version such
+as `0.0.31` or `v0.0.31`, or a Git ref or commit:
+
+```sh
+pnpm sync-upstream --target stable
+```
 
 ## Project Management
 

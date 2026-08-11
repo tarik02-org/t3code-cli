@@ -8,9 +8,11 @@ import {
   ThreadId,
   WS_METHODS,
   type ClientOrchestrationCommand,
+  type OrchestrationShellSnapshot,
   type OrchestrationShellStreamItem,
   type OrchestrationThreadStreamItem,
 } from "@t3tools/contracts";
+import { applyShellStreamEvent } from "@t3tools/client-runtime/state/shell";
 
 import { RpcError } from "../rpc/error.ts";
 import { T3RpcOperations } from "../rpc/operation.ts";
@@ -18,6 +20,39 @@ import { T3Orchestration, type OpenThread, type Orchestration } from "./service.
 
 export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* () {
   const rpc = yield* T3RpcOperations;
+
+  const watchShellSnapshots: Orchestration["watchShellSnapshots"] = () =>
+    rpc
+      .subscribe(ORCHESTRATION_WS_METHODS.subscribeShell, (client) =>
+        client[ORCHESTRATION_WS_METHODS.subscribeShell]({}),
+      )
+      .pipe(
+        Stream.filter(
+          (
+            item,
+          ): item is Exclude<OrchestrationShellStreamItem, { readonly kind: "synchronized" }> =>
+            item.kind !== "synchronized",
+        ),
+        Stream.mapAccum(
+          () => Option.none<OrchestrationShellSnapshot>(),
+          (
+            current,
+            item,
+          ): readonly [
+            Option.Option<OrchestrationShellSnapshot>,
+            ReadonlyArray<OrchestrationShellSnapshot>,
+          ] => {
+            if (item.kind === "snapshot") {
+              return [Option.some(item.snapshot), [item.snapshot]];
+            }
+            if (Option.isNone(current)) {
+              return [current, []];
+            }
+            const next = applyShellStreamEvent(current.value, item);
+            return [Option.some(next), [next]];
+          },
+        ),
+      );
 
   const watchShellSequence: Orchestration["watchShellSequence"] = () =>
     rpc
@@ -132,6 +167,7 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
     getArchivedShellSnapshot,
     searchThreads,
     getThreadSnapshot,
+    watchShellSnapshots,
     watchShellSequence,
     watchThreadItems,
     openThread,
