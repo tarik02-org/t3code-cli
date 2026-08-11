@@ -1,5 +1,11 @@
 # t3code-cli
 
+## 0.14.2
+
+### Patch Changes
+
+- 39a7d74: add conversation content search command
+
 ## 0.14.1
 
 ### Patch Changes
