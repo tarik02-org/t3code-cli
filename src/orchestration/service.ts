@@ -7,6 +7,8 @@ import type {
   DispatchResult,
   OrchestrationEvent,
   OrchestrationShellSnapshot,
+  OrchestrationSearchThreadsInput,
+  OrchestrationSearchThreadsResult,
   OrchestrationThread,
   OrchestrationThreadStreamItem,
   ServerProviders,
@@ -35,6 +37,9 @@ export type Orchestration = {
     OrchestrationShellSnapshot,
     OrchestrationError
   >;
+  readonly searchThreads: (
+    input: OrchestrationSearchThreadsInput,
+  ) => Effect.Effect<OrchestrationSearchThreadsResult, OrchestrationError>;
   readonly getThreadSnapshot: (
     threadId: string,
   ) => Effect.Effect<OrchestrationThread, OrchestrationError>;

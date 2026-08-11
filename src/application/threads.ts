@@ -9,7 +9,11 @@ import { resolveProjectScope } from "../domain/helpers.ts";
 import { type ListThreadsInclude, type StartThreadInput } from "./service.ts";
 import type { CallbackThreadInput, SendThreadInput } from "./service.ts";
 import type { T3ThreadApplicationService } from "./service.ts";
-import type { OrchestrationThreadShell } from "@t3tools/contracts";
+import type {
+  OrchestrationSearchThreadsInput,
+  OrchestrationThreadSearchMatch,
+  OrchestrationThreadShell,
+} from "@t3tools/contracts";
 import { mergeModelOptions } from "./model-selection.ts";
 import { derivePendingApprovals, derivePendingUserInputs } from "../domain/thread-activities.ts";
 import {
@@ -72,6 +76,30 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
       project: scope.project,
       threads: snapshot.threads.filter((thread) => thread.projectId === scope.project.id),
     };
+  });
+  const searchThreads = Effect.fn("T3ApplicationLive.searchThreads")(function* (
+    input: OrchestrationSearchThreadsInput,
+  ) {
+    const result = yield* orchestration.searchThreads(input);
+    const snapshot = yield* orchestration.getShellSnapshot();
+    const threadsById = new Map(snapshot.threads.map((thread) => [thread.id, thread]));
+    const projectsById = new Map(snapshot.projects.map((project) => [project.id, project]));
+    return result.matches.map((match) => {
+      const thread = threadsById.get(match.threadId);
+      const project = projectsById.get(match.projectId);
+      return {
+        threadId: match.threadId,
+        threadTitle: thread?.title ?? null,
+        projectId: match.projectId,
+        projectTitle: project?.title ?? null,
+        workspaceRoot: project?.workspaceRoot ?? null,
+        branch: thread?.branch ?? null,
+        worktreePath: thread?.worktreePath ?? null,
+        source: match.source,
+        snippet: match.snippet,
+        messageCreatedAt: match.messageCreatedAt,
+      } satisfies ThreadSearchResult;
+    });
   });
   const getThreadMessages = Effect.fn("T3ApplicationLive.getThreadMessages")(function* (
     threadId: string,
@@ -276,6 +304,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     updateThread,
     unarchiveThread,
     listThreads,
+    searchThreads,
     getThreadMessages,
     respondToThread,
     sendThread,
@@ -286,6 +315,19 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     callbackThread,
   } satisfies T3ThreadApplicationService;
 });
+
+export type ThreadSearchResult = {
+  readonly threadId: OrchestrationThreadSearchMatch["threadId"];
+  readonly threadTitle: string | null;
+  readonly projectId: OrchestrationThreadSearchMatch["projectId"];
+  readonly projectTitle: string | null;
+  readonly workspaceRoot: string | null;
+  readonly branch: string | null;
+  readonly worktreePath: string | null;
+  readonly source: OrchestrationThreadSearchMatch["source"];
+  readonly snippet: OrchestrationThreadSearchMatch["snippet"];
+  readonly messageCreatedAt: OrchestrationThreadSearchMatch["messageCreatedAt"];
+};
 
 const loadThreadsSnapshot = Effect.fn("loadThreadsSnapshot")(function* (
   include: ListThreadsInclude,

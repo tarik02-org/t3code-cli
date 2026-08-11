@@ -110,6 +110,7 @@ Use cases: handoff long tasks, parallel work notifications, async workflows.
 
 ```sh
 t3cli list --format json
+t3cli search "conversation text" --format json
 t3cli transcript --thread <id> --format json
 printf '%s' "$PROMPT" | t3cli start --stdin --format json
 ```

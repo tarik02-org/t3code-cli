@@ -3,6 +3,7 @@ import type {
   KeybindingsConfigError,
   OrchestrationDispatchCommandError,
   OrchestrationGetSnapshotError,
+  OrchestrationSearchThreadsError,
   PreviewAutomationError,
   ServerSettingsError,
   TerminalError,
@@ -23,6 +24,7 @@ export type CliRpcOperationError =
   | KeybindingsConfigError
   | OrchestrationDispatchCommandError
   | OrchestrationGetSnapshotError
+  | OrchestrationSearchThreadsError
   | PreviewAutomationError
   | RpcClientError.RpcClientError
   | ServerSettingsError

@@ -7,7 +7,7 @@ t3cli
 ├── env list|use|remove
 ├── project list|add|delete
 ├── model list
-├── list|start|send|show|transcript|wait
+├── list|search|start|send|show|transcript|wait
 ├── terminal list|create|attach|read|stream|wait|write|destroy
 └── thread approve|respond|archive|interrupt|unarchive|update|delete|callback
 ```
@@ -96,6 +96,7 @@ Mutations dispatch `project.meta.update` with the next full scripts array and wa
 
 ```sh
 t3cli list [--project <ref>] [--archived | --all] [--format json]
+t3cli search <query> [--limit <1-50>] [--format auto|human|json]
 
 t3cli start [message]
   [--project <ref>] [--stdin] [--title <title>] [--worktree <path>]

@@ -1,4 +1,4 @@
-import type { ThreadShow } from "../../application/threads.ts";
+import type { ThreadSearchResult, ThreadShow } from "../../application/threads.ts";
 import type { WaitEvent } from "../../application/service.ts";
 import type { OrchestrationThread, OrchestrationThreadShell } from "@t3tools/contracts";
 import { latestAssistantMessage, threadStatus } from "../../domain/thread-lifecycle.ts";
@@ -96,6 +96,28 @@ export function formatThreadsHuman(threads: ReadonlyArray<OrchestrationThreadShe
     ],
     threads,
   )}\n`;
+}
+
+export function formatThreadSearchHuman(matches: ReadonlyArray<ThreadSearchResult>) {
+  if (matches.length === 0) {
+    return "no matches\n";
+  }
+  return `${matches
+    .map((match) =>
+      formatRecord([
+        { field: "thread", value: match.threadTitle ?? "-" },
+        { field: "thread id", value: match.threadId },
+        { field: "project", value: match.projectTitle ?? "-" },
+        { field: "project id", value: match.projectId },
+        { field: "workspace", value: match.workspaceRoot ?? "-" },
+        { field: "branch", value: match.branch ?? "-" },
+        { field: "worktree", value: match.worktreePath ?? "-" },
+        { field: "source", value: match.source },
+        { field: "created", value: match.messageCreatedAt ?? "-" },
+        { field: "snippet", value: match.snippet },
+      ]),
+    )
+    .join("\n\n")}\n`;
 }
 
 export function formatThreadDeletedHuman(input: {

@@ -31,3 +31,4 @@ export type {
   WaitEvent,
 } from "./service.ts";
 export type { ApplicationError } from "./error.ts";
+export type { ThreadSearchResult } from "./threads.ts";

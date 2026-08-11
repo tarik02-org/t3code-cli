@@ -6,6 +6,7 @@ import type {
   ModelSelection,
   OrchestrationMessage,
   OrchestrationProjectShell,
+  OrchestrationSearchThreadsInput,
   OrchestrationShellSnapshot,
   OrchestrationThread,
   OrchestrationThreadShell,
@@ -20,7 +21,7 @@ import type {
 } from "@t3tools/contracts";
 
 import type { ApplicationError } from "./error.ts";
-import type { ThreadShow } from "./threads.ts";
+import type { ThreadSearchResult, ThreadShow } from "./threads.ts";
 
 export type StartThreadInput = {
   readonly projectRef?: string;
@@ -196,6 +197,9 @@ export class T3ProjectApplication extends Context.Service<
 >()("t3cli/T3ProjectApplication") {}
 
 export type T3ThreadApplicationService = {
+  readonly searchThreads: (
+    input: OrchestrationSearchThreadsInput,
+  ) => Effect.Effect<ReadonlyArray<ThreadSearchResult>, ApplicationError>;
   readonly listThreads: (
     projectRef: string,
     options?: {

@@ -34,4 +34,4 @@ export type StoredConfigV1File = Schema.Schema.Type<typeof StoredConfigV1FileSch
 
 export const StoredConfigV1FileJson = Schema.fromJsonString(StoredConfigV1FileSchema);
 export const StoredConfigV2FileJson = Schema.fromJsonString(StoredConfigV2FileSchema);
-export const UnknownConfigFileJson = Schema.UnknownFromJsonString;
+export const UnknownConfigFileJson = Schema.fromJsonString(Schema.Unknown);
