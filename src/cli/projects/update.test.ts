@@ -62,6 +62,13 @@ describe("updateProjectCommand", () => {
         "ConflictingUpdateFlagsError",
       ),
     );
+
+    t.effect("rejects a thread environment value with its clear flag", () =>
+      expectError(
+        run(["--project", "proj-1", "--thread-env", "local", "--clear-thread-env"]),
+        "ConflictingUpdateFlagsError",
+      ),
+    );
   });
 });
 
