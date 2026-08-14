@@ -187,6 +187,21 @@ export type T3ProjectApplicationService = {
   readonly resolveProject: (
     projectRef: string,
   ) => Effect.Effect<OrchestrationProjectShell, ApplicationError>;
+  readonly updateProject: (input: {
+    readonly projectRef: string;
+    readonly title?: string;
+    readonly workspaceRoot?: string;
+    readonly local: boolean;
+    readonly provider?: string;
+    readonly model?: string;
+    readonly options?: NonNullable<ModelSelection["options"]>;
+    readonly defaultModelSelection?: null;
+    readonly defaultThreadEnvironment?: "local" | "worktree" | null;
+    readonly favicon?: string | null;
+  }) => Effect.Effect<
+    { readonly dispatch: DispatchResult; readonly project: OrchestrationProjectShell },
+    ApplicationError
+  >;
   readonly deleteProject: (input: {
     readonly projectId: string;
     readonly force?: boolean;

@@ -45,19 +45,19 @@ export const makeProjectDeleteCommand = Effect.fn("makeProjectDeleteCommand")(fu
 export const makeProjectMetaUpdateCommand = Effect.fn("makeProjectMetaUpdateCommand")(
   function* (input: {
     readonly projectId: string;
-    readonly scripts: Extract<
-      ClientOrchestrationCommand,
-      { readonly type: "project.meta.update" }
-    >["scripts"];
-  }) {
+  } & Omit<
+    Extract<ClientOrchestrationCommand, { readonly type: "project.meta.update" }>,
+    "type" | "commandId" | "projectId"
+  >) {
     const crypto = yield* Crypto.Crypto;
+    const { projectId, ...patch } = input;
     return {
       type: "project.meta.update",
       commandId: CommandId.make(
         `t3cli:project-meta-update:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
       ),
-      projectId: ProjectId.make(input.projectId),
-      scripts: input.scripts,
+      projectId: ProjectId.make(projectId),
+      ...patch,
     } satisfies Extract<ClientOrchestrationCommand, { readonly type: "project.meta.update" }>;
   },
 );
