@@ -59,3 +59,19 @@ export class ConflictingUpdateFlagsError extends Schema.TaggedErrorClass<Conflic
     message: Schema.String,
   },
 ) {}
+
+export class InvalidSnoozeUntilError extends Schema.TaggedErrorClass<InvalidSnoozeUntilError>()(
+  "InvalidSnoozeUntilError",
+  {
+    message: Schema.String,
+    value: Schema.String,
+  },
+) {}
+
+export class UnavailableSnoozePresetError extends Schema.TaggedErrorClass<UnavailableSnoozePresetError>()(
+  "UnavailableSnoozePresetError",
+  {
+    message: Schema.String,
+    preset: Schema.String,
+  },
+) {}

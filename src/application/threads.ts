@@ -6,7 +6,11 @@ import { CliRuntime } from "../cli/runtime/service.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import { ProjectLookupError, ThreadLookupError, ThreadSessionError } from "../domain/error.ts";
 import { resolveProjectScope } from "../domain/helpers.ts";
-import { type ListThreadsInclude, type StartThreadInput } from "./service.ts";
+import {
+  type ListThreadsInclude,
+  type SnoozeThreadInput,
+  type StartThreadInput,
+} from "./service.ts";
 import type { CallbackThreadInput, SendThreadInput } from "./service.ts";
 import type { T3ThreadApplicationService } from "./service.ts";
 import type {
@@ -28,10 +32,16 @@ import {
   makeThreadArchiveCommand,
   makeThreadDeleteCommand,
   makeThreadInterruptCommand,
+  makeThreadPinCommand,
   makeThreadSessionStopCommand,
+  makeThreadSettleCommand,
+  makeThreadSnoozeCommand,
   makeThreadStartCommands,
   makeThreadTurnContinueCommand,
   makeThreadUnarchiveCommand,
+  makeThreadUnpinCommand,
+  makeThreadUnsnoozeCommand,
+  makeThreadUnsettleCommand,
   makeThreadUserInputRespondCommand,
 } from "./thread-commands.ts";
 import { makeUpdateThread } from "./thread-update.ts";
@@ -120,6 +130,48 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     threadId: string,
   ) {
     const command = yield* makeThreadUnarchiveCommand(threadId).pipe(
+      Effect.provideService(Crypto.Crypto, crypto),
+    );
+    return yield* orchestration.dispatch(command);
+  });
+  const settleThread = Effect.fn("T3ApplicationLive.settleThread")(function* (threadId: string) {
+    const command = yield* makeThreadSettleCommand(threadId).pipe(
+      Effect.provideService(Crypto.Crypto, crypto),
+    );
+    return yield* orchestration.dispatch(command);
+  });
+  const unsettleThread = Effect.fn("T3ApplicationLive.unsettleThread")(function* (
+    threadId: string,
+  ) {
+    const command = yield* makeThreadUnsettleCommand(threadId).pipe(
+      Effect.provideService(Crypto.Crypto, crypto),
+    );
+    return yield* orchestration.dispatch(command);
+  });
+  const snoozeThread = Effect.fn("T3ApplicationLive.snoozeThread")(function* (
+    input: SnoozeThreadInput,
+  ) {
+    const command = yield* makeThreadSnoozeCommand(input).pipe(
+      Effect.provideService(Crypto.Crypto, crypto),
+    );
+    return yield* orchestration.dispatch(command);
+  });
+  const unsnoozeThread = Effect.fn("T3ApplicationLive.unsnoozeThread")(function* (
+    threadId: string,
+  ) {
+    const command = yield* makeThreadUnsnoozeCommand(threadId).pipe(
+      Effect.provideService(Crypto.Crypto, crypto),
+    );
+    return yield* orchestration.dispatch(command);
+  });
+  const pinThread = Effect.fn("T3ApplicationLive.pinThread")(function* (threadId: string) {
+    const command = yield* makeThreadPinCommand(threadId).pipe(
+      Effect.provideService(Crypto.Crypto, crypto),
+    );
+    return yield* orchestration.dispatch(command);
+  });
+  const unpinThread = Effect.fn("T3ApplicationLive.unpinThread")(function* (threadId: string) {
+    const command = yield* makeThreadUnpinCommand(threadId).pipe(
       Effect.provideService(Crypto.Crypto, crypto),
     );
     return yield* orchestration.dispatch(command);
@@ -301,8 +353,14 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     archiveThread,
     deleteThread,
     interruptThread,
+    pinThread,
+    settleThread,
+    snoozeThread,
     updateThread,
     unarchiveThread,
+    unpinThread,
+    unsnoozeThread,
+    unsettleThread,
     listThreads,
     searchThreads,
     getThreadMessages,
