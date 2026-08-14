@@ -9,7 +9,7 @@ t3cli
 ├── model list
 ├── list|search|start|send|show|transcript|wait
 ├── terminal list|create|attach|read|stream|wait|write|destroy
-└── thread approve|respond|archive|interrupt|unarchive|update|delete|callback
+└── thread approve|respond|archive|interrupt|settle|unsettle|snooze|unsnooze|pin|unpin|unarchive|update|delete|callback
 ```
 
 Auth and environment commands: [setup.md](setup.md)
@@ -141,6 +141,14 @@ t3cli thread approve --request <id> --decision accept|decline|cancel [--thread <
 t3cli thread respond --request <id> [--answers <json>] [--stdin] [--thread <id>] [--format json]
 t3cli thread archive [--thread <id>] [--force|-f] [--format json]
 t3cli thread interrupt [--thread <id>] [--force|-f] [--format json]
+t3cli thread settle [--thread <id>] [--format auto|human|json]
+t3cli thread unsettle [--thread <id>] [--format auto|human|json]
+t3cli thread snooze [--thread <id>]
+  (--until <ISO-8601> | --preset hour|evening|tomorrow|next-week)
+  [--format auto|human|json]
+t3cli thread unsnooze [--thread <id>] [--format auto|human|json]
+t3cli thread pin [--thread <id>] [--format auto|human|json]
+t3cli thread unpin [--thread <id>] [--format auto|human|json]
 t3cli thread unarchive [--thread <id>] [--format json]
 t3cli thread update [--thread <id>] [--force|-f]
   [--title <title>]
@@ -152,6 +160,8 @@ t3cli thread update [--thread <id>] [--force|-f]
 t3cli thread delete [--thread <id>] [--force|-f] [--yes] [--format json]
 t3cli thread callback --from <thread-id> --prompt <message> [--thread <id>] [--background]
 ```
+
+`thread snooze` requires exactly one wake-time option. Presets use the local time zone and the same schedule as T3 Code clients. The `evening` preset is unavailable once fewer than one hour remains before 18:00; use `tomorrow` or `--until` then.
 
 ### start responses
 

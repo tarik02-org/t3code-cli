@@ -121,6 +121,12 @@ printf '%s' "$PROMPT" | t3cli start --stdin --format json
 t3cli thread interrupt --thread <id> --format json   # stop running turn
 t3cli thread archive --thread <id> --format json
 t3cli thread unarchive --thread <id> --format json
+t3cli thread settle --thread <id> --format json
+t3cli thread unsettle --thread <id> --format json
+t3cli thread snooze --thread <id> --preset tomorrow --format json
+t3cli thread unsnooze --thread <id> --format json
+t3cli thread pin --thread <id> --format json
+t3cli thread unpin --thread <id> --format json
 ```
 
 **Terminal lifecycle**

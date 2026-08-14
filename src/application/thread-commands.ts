@@ -115,6 +115,84 @@ export const makeThreadUnarchiveCommand = Effect.fn("makeThreadUnarchiveCommand"
   } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.unarchive" }>;
 });
 
+export const makeThreadSettleCommand = Effect.fn("makeThreadSettleCommand")(function* (
+  threadId: string,
+) {
+  const crypto = yield* Crypto.Crypto;
+  return {
+    type: "thread.settle",
+    commandId: CommandId.make(
+      `t3cli:thread-settle:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    ),
+    threadId: ThreadId.make(threadId),
+  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.settle" }>;
+});
+
+export const makeThreadUnsettleCommand = Effect.fn("makeThreadUnsettleCommand")(function* (
+  threadId: string,
+) {
+  const crypto = yield* Crypto.Crypto;
+  return {
+    type: "thread.unsettle",
+    commandId: CommandId.make(
+      `t3cli:thread-unsettle:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    ),
+    threadId: ThreadId.make(threadId),
+    reason: "user",
+  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.unsettle" }>;
+});
+
+export const makeThreadSnoozeCommand = Effect.fn("makeThreadSnoozeCommand")(function* (input: {
+  readonly threadId: string;
+  readonly snoozedUntil: string;
+}) {
+  const crypto = yield* Crypto.Crypto;
+  return {
+    type: "thread.snooze",
+    commandId: CommandId.make(
+      `t3cli:thread-snooze:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    ),
+    threadId: ThreadId.make(input.threadId),
+    snoozedUntil: input.snoozedUntil,
+  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.snooze" }>;
+});
+
+export const makeThreadUnsnoozeCommand = Effect.fn("makeThreadUnsnoozeCommand")(function* (
+  threadId: string,
+) {
+  const crypto = yield* Crypto.Crypto;
+  return {
+    type: "thread.unsnooze",
+    commandId: CommandId.make(
+      `t3cli:thread-unsnooze:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    ),
+    threadId: ThreadId.make(threadId),
+    reason: "user",
+  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.unsnooze" }>;
+});
+
+export const makeThreadPinCommand = Effect.fn("makeThreadPinCommand")(function* (threadId: string) {
+  const crypto = yield* Crypto.Crypto;
+  return {
+    type: "thread.pin",
+    commandId: CommandId.make(`t3cli:thread-pin:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`),
+    threadId: ThreadId.make(threadId),
+  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.pin" }>;
+});
+
+export const makeThreadUnpinCommand = Effect.fn("makeThreadUnpinCommand")(function* (
+  threadId: string,
+) {
+  const crypto = yield* Crypto.Crypto;
+  return {
+    type: "thread.unpin",
+    commandId: CommandId.make(
+      `t3cli:thread-unpin:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+    ),
+    threadId: ThreadId.make(threadId),
+  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.unpin" }>;
+});
+
 export const makeThreadSessionStopCommand = Effect.fn("makeThreadSessionStopCommand")(function* (
   threadId: string,
 ) {

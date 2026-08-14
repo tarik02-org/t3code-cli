@@ -204,7 +204,13 @@ t3cli wait [--thread <id>]                   # Wait for completion
 t3cli thread archive [--thread <id>]        # Archive thread
 t3cli thread approve --request <id>         # Approve request
 t3cli thread interrupt [--thread <id>]      # Interrupt running turn
+t3cli thread pin [--thread <id>]            # Pin thread
 t3cli thread respond --request <id>         # Respond to request
+t3cli thread settle [--thread <id>]         # Settle thread
+t3cli thread snooze [--thread <id>] (--until <ISO-8601> | --preset hour|evening|tomorrow|next-week)
+t3cli thread unpin [--thread <id>]          # Unpin thread
+t3cli thread unsnooze [--thread <id>]       # Wake snoozed thread
+t3cli thread unsettle [--thread <id>]       # Unsettle thread
 t3cli thread update [--thread <id>]         # Update thread metadata
 t3cli thread unarchive [--thread <id>]      # Unarchive thread
 t3cli thread delete [--thread <id>] [--yes] # Delete thread

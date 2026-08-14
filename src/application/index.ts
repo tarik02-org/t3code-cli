@@ -23,6 +23,7 @@ export type {
   ProjectActionRunResult,
   ProjectActionSelector,
   SendThreadInput,
+  SnoozeThreadInput,
   StartThreadInput,
   StartThreadPolicy,
   T3ActionApplicationService,

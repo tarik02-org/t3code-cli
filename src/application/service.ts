@@ -62,6 +62,11 @@ export type CallbackThreadInput = {
   readonly prompt: string;
 };
 
+export interface SnoozeThreadInput {
+  readonly threadId: string;
+  readonly snoozedUntil: string;
+}
+
 export type ListThreadsInclude = "active" | "archived" | "all";
 
 export type UpdateThreadInput = {
@@ -234,7 +239,15 @@ export type T3ThreadApplicationService = {
   >;
   readonly archiveThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
   readonly interruptThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
+  readonly pinThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
+  readonly settleThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
+  readonly snoozeThread: (
+    input: SnoozeThreadInput,
+  ) => Effect.Effect<DispatchResult, ApplicationError>;
   readonly unarchiveThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
+  readonly unpinThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
+  readonly unsnoozeThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
+  readonly unsettleThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
   readonly deleteThread: (
     threadId: string,
   ) => Effect.Effect<
