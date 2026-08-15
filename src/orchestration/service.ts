@@ -10,22 +10,26 @@ import type {
   OrchestrationSearchThreadsInput,
   OrchestrationSearchThreadsResult,
   OrchestrationThread,
+  OrchestrationThreadDetailSnapshot,
+  OrchestrationThreadDetailWindow,
   OrchestrationThreadStreamItem,
   ServerProviders,
 } from "@t3tools/contracts";
 
+import type { ThreadSnapshotRequestError } from "./error.ts";
 import type { RpcError } from "../rpc/error.ts";
 
-export type OrchestrationError = RpcError;
+export type OrchestrationError = RpcError | ThreadSnapshotRequestError;
 
 export type OpenThread = {
   readonly snapshot: OrchestrationThread;
   readonly events: Stream.Stream<OrchestrationEvent, OrchestrationError>;
 };
 
-export type ServerConfigForCli = {
+export interface ServerConfigForCli {
   readonly providers: ServerProviders;
-};
+  readonly threadSnapshotPagination?: boolean;
+}
 
 export type Orchestration = {
   readonly dispatch: (
@@ -43,6 +47,10 @@ export type Orchestration = {
   readonly getThreadSnapshot: (
     threadId: string,
   ) => Effect.Effect<OrchestrationThread, OrchestrationError>;
+  readonly getThreadDetailSnapshot: (input: {
+    readonly threadId: string;
+    readonly window?: OrchestrationThreadDetailWindow;
+  }) => Effect.Effect<OrchestrationThreadDetailSnapshot, OrchestrationError>;
   readonly watchShellSnapshots: () => Stream.Stream<
     OrchestrationShellSnapshot,
     OrchestrationError,

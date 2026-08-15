@@ -63,18 +63,23 @@ const T3ConfigConnectionProviderLayer = Layer.effect(
   }),
 ).pipe(Layer.provide(T3ConfigLayer));
 
+const T3PreparedConnectionLayer = T3PreparedConnectionProviderLive.pipe(
+  Layer.provide(Layer.mergeAll(T3ConfigConnectionProviderLayer, NodeHttpClient.layerUndici)),
+);
 const T3RpcLayer = T3RpcLive.pipe(
   Layer.provide(
     Layer.mergeAll(
-      T3PreparedConnectionProviderLive.pipe(
-        Layer.provide(Layer.mergeAll(T3ConfigConnectionProviderLayer, NodeHttpClient.layerUndici)),
-      ),
+      T3PreparedConnectionLayer,
       T3RpcSessionFactoryLive.pipe(Layer.provide(NodeSocket.layerWebSocketConstructor)),
     ),
   ),
 );
 const T3RpcOperationsLayer = T3RpcOperationsLive.pipe(Layer.provide(T3RpcLayer));
-export const T3OrchestrationLayer = T3OrchestrationLive.pipe(Layer.provide(T3RpcOperationsLayer));
+export const T3OrchestrationLayer = T3OrchestrationLive.pipe(
+  Layer.provide(
+    Layer.mergeAll(T3RpcOperationsLayer, T3PreparedConnectionLayer, NodeHttpClient.layerUndici),
+  ),
+);
 export const T3PreviewAutomationLayer = T3PreviewAutomationLive.pipe(
   Layer.provide(T3RpcOperationsLayer),
 );

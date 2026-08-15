@@ -3,6 +3,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
+import { HttpClient } from "effect/unstable/http";
 import {
   ORCHESTRATION_WS_METHODS,
   ThreadId,
@@ -12,14 +13,25 @@ import {
   type OrchestrationShellStreamItem,
   type OrchestrationThreadStreamItem,
 } from "@t3tools/contracts";
+import { environmentEndpointUrl } from "@t3tools/client-runtime/environment";
+import {
+  executeEnvironmentHttpRequest,
+  makeEnvironmentHttpApiClient,
+} from "@t3tools/client-runtime/rpc";
 import { applyShellStreamEvent } from "@t3tools/client-runtime/state/shell";
 
+import { T3PreparedConnectionProvider } from "../connection/prepared.ts";
 import { RpcError } from "../rpc/error.ts";
 import { T3RpcOperations } from "../rpc/operation.ts";
+import { ThreadSnapshotRequestError } from "./error.ts";
 import { T3Orchestration, type OpenThread, type Orchestration } from "./service.ts";
+
+const THREAD_SNAPSHOT_TIMEOUT_MS = 30_000;
 
 export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* () {
   const rpc = yield* T3RpcOperations;
+  const preparedConnectionProvider = yield* T3PreparedConnectionProvider;
+  const httpClient = yield* HttpClient.HttpClient;
 
   const watchShellSnapshots: Orchestration["watchShellSnapshots"] = () =>
     rpc
@@ -133,6 +145,65 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
     }
     return value.snapshot.thread;
   });
+  const getThreadDetailSnapshot: Orchestration["getThreadDetailSnapshot"] = Effect.fn(
+    "T3OrchestrationLive.getThreadDetailSnapshot",
+  )(function* (input) {
+    const paginationSupported =
+      input.window === undefined
+        ? true
+        : (yield* getServerConfig()).threadSnapshotPagination === true;
+    const window = paginationSupported ? input.window : undefined;
+    const prepared = yield* preparedConnectionProvider.get.pipe(
+      Effect.mapError(
+        (cause) =>
+          new ThreadSnapshotRequestError({
+            message: "failed to prepare the thread snapshot request",
+            threadId: input.threadId,
+            cause,
+          }),
+      ),
+    );
+    const threadId = ThreadId.make(input.threadId);
+    const requestUrl = environmentEndpointUrl(
+      prepared.httpBaseUrl,
+      `/api/orchestration/threads/${threadId}`,
+    );
+    const client = yield* makeEnvironmentHttpApiClient(prepared.httpBaseUrl).pipe(
+      Effect.provideService(HttpClient.HttpClient, httpClient),
+      Effect.mapError(
+        (cause) =>
+          new ThreadSnapshotRequestError({
+            message: "failed to create the thread snapshot client",
+            threadId: input.threadId,
+            cause,
+          }),
+      ),
+    );
+    return yield* executeEnvironmentHttpRequest(
+      requestUrl,
+      THREAD_SNAPSHOT_TIMEOUT_MS,
+      client.orchestration.threadSnapshot({
+        params: { threadId },
+        payload: {
+          ...(window !== undefined ? { turnLimit: window.turnLimit } : {}),
+          ...(window?.beforeCursor !== undefined ? { beforeCursor: window.beforeCursor } : {}),
+        },
+        headers: {
+          authorization: `Bearer ${prepared.httpAuthorization.token}`,
+        },
+      }),
+    ).pipe(
+      Effect.provideService(HttpClient.HttpClient, httpClient),
+      Effect.mapError(
+        (cause) =>
+          new ThreadSnapshotRequestError({
+            message: "failed to load the thread snapshot",
+            threadId: input.threadId,
+            cause,
+          }),
+      ),
+    );
+  });
   const openThread = Effect.fn("T3OrchestrationLive.openThread")(function* (threadId: string) {
     return yield* watchThreadItems(threadId).pipe(
       Stream.peel(Sink.head<OrchestrationThreadStreamItem>()),
@@ -167,6 +238,7 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
     getArchivedShellSnapshot,
     searchThreads,
     getThreadSnapshot,
+    getThreadDetailSnapshot,
     watchShellSnapshots,
     watchShellSequence,
     watchThreadItems,

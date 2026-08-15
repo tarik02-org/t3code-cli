@@ -7,6 +7,7 @@ import { T3Orchestration } from "../orchestration/service.ts";
 import { ProjectLookupError, ThreadLookupError, ThreadSessionError } from "../domain/error.ts";
 import { resolveProjectScope } from "../domain/helpers.ts";
 import {
+  type GetThreadMessagesInput,
   type ListThreadsInclude,
   type SnoozeThreadInput,
   type StartThreadInput,
@@ -112,9 +113,9 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     });
   });
   const getThreadMessages = Effect.fn("T3ApplicationLive.getThreadMessages")(function* (
-    threadId: string,
+    input: GetThreadMessagesInput,
   ) {
-    return yield* orchestration.getThreadSnapshot(threadId);
+    return yield* orchestration.getThreadDetailSnapshot(input);
   });
   const showThread = Effect.fn("T3ApplicationLive.showThread")(function* (threadId: string) {
     const thread = yield* orchestration.getThreadSnapshot(threadId);

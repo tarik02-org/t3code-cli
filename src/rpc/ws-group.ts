@@ -31,6 +31,7 @@ export const CliServerConfig = Schema.Struct({
     }),
   }),
   providers: ServerProviders,
+  threadSnapshotPagination: Schema.optionalKey(Schema.Boolean),
 });
 export type CliServerConfig = typeof CliServerConfig.Type;
 

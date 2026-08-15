@@ -109,9 +109,16 @@ t3cli send [--thread <id>] [--force|-f] [message] [--stdin]
   [--wait] [--format auto|human|json|ndjson]
 
 t3cli show [--thread <id>] [--format auto|human|json]
-t3cli transcript [--thread <id>] [--limit N] [--full] [--format json]
+t3cli transcript [--thread <id>] [--limit N]
+  [--turn-limit N] [--before-cursor <cursor>] [--all]
+  [--full] [--format auto|human|json]
 t3cli wait [--thread <id>] [--format auto|human|ndjson]
 ```
+
+`transcript` loads the latest 10 user turns by default. Older-page requests default to 20 turns.
+JSON output includes `page.beforeCursor` and `page.hasMore`; pass the cursor to `--before-cursor` to
+load the next older page. `--turn-limit` sets either page size. `--all` loads the full thread and
+cannot be combined with the paging flags. `--limit` only caps messages rendered in human output.
 
 ## terminal
 

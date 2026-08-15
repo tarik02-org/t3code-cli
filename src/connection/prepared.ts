@@ -16,10 +16,20 @@ import { T3CodeConnectionError } from "./error.ts";
 import { T3CodeConnectionProvider } from "./service.ts";
 import type { T3CodeConnection } from "./type.ts";
 
+export interface T3PreparedConnection extends PreparedConnection {
+  readonly httpAuthorization: {
+    readonly _tag: "Bearer";
+    readonly token: string;
+  };
+}
+
 export class T3PreparedConnectionProvider extends Context.Service<
   T3PreparedConnectionProvider,
   {
-    readonly get: Effect.Effect<PreparedConnection, ConnectionAttemptError | T3CodeConnectionError>;
+    readonly get: Effect.Effect<
+      T3PreparedConnection,
+      ConnectionAttemptError | T3CodeConnectionError
+    >;
   }
 >()("t3cli/T3PreparedConnectionProvider") {}
 
@@ -59,7 +69,7 @@ const makePreparedConnection = Effect.fn("makePreparedConnection")(function* (
       label: descriptor.label,
       connectionId: descriptor.environmentId,
     }),
-  } satisfies PreparedConnection;
+  } satisfies T3PreparedConnection;
 });
 
 const makeT3PreparedConnectionProvider = Effect.fn("makeT3PreparedConnectionProvider")(

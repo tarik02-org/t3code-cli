@@ -1,6 +1,10 @@
 import type { ThreadSearchResult, ThreadShow } from "../../application/threads.ts";
 import type { WaitEvent } from "../../application/service.ts";
-import type { OrchestrationThread, OrchestrationThreadShell } from "@t3tools/contracts";
+import type {
+  OrchestrationThread,
+  OrchestrationThreadDetailSnapshot,
+  OrchestrationThreadShell,
+} from "@t3tools/contracts";
 import { latestAssistantMessage, threadStatus } from "../../domain/thread-lifecycle.ts";
 import { formatChatTranscript, formatRecord, formatTable } from "./human.ts";
 
@@ -139,9 +143,15 @@ export function formatThreadStartedHuman(input: {
   ])}`;
 }
 
-export function formatThreadMessagesHuman(thread: OrchestrationThread, limit: number) {
-  const messages = limit === 0 ? thread.messages : thread.messages.slice(-limit);
-  return formatChatTranscript(messages);
+export function formatThreadMessagesHuman(
+  snapshot: OrchestrationThreadDetailSnapshot,
+  limit: number,
+) {
+  const messages = limit === 0 ? snapshot.thread.messages : snapshot.thread.messages.slice(-limit);
+  const transcript = formatChatTranscript(messages);
+  return snapshot.page?.hasMore === true && snapshot.page.beforeCursor !== null
+    ? `${transcript}\nearlier turns available\nbefore cursor: ${snapshot.page.beforeCursor}\n`
+    : transcript;
 }
 
 export function formatWaitDoneHuman(thread: OrchestrationThread) {
@@ -151,8 +161,18 @@ export function formatWaitDoneHuman(thread: OrchestrationThread) {
   }`;
 }
 
-export function formatThreadMessagesJson(thread: OrchestrationThread, full: boolean) {
-  return full ? thread : { thread: stripThreadMessages(thread), messages: thread.messages };
+export function formatThreadMessagesJson(
+  snapshot: OrchestrationThreadDetailSnapshot,
+  full: boolean,
+) {
+  return full
+    ? { ...snapshot, page: snapshot.page ?? null }
+    : {
+        snapshotSequence: snapshot.snapshotSequence,
+        thread: stripThreadMessages(snapshot.thread),
+        messages: snapshot.thread.messages,
+        page: snapshot.page ?? null,
+      };
 }
 
 export function formatWaitEventNdjson(event: WaitEvent) {

@@ -4,7 +4,7 @@ import { Command, Flag } from "effect/unstable/cli";
 
 import { extraArgsConfig } from "../extra-args.ts";
 import { formatFlag, threadFlag } from "../flags.ts";
-import { InvalidLimitError } from "../error.ts";
+import { InvalidFlagCombinationError, InvalidLimitError } from "../error.ts";
 import { MissingThreadError } from "../error.ts";
 import { resolveThreadId } from "../scope/index.ts";
 import { formatThreadMessagesHuman, formatThreadMessagesJson } from "../format/thread.ts";
@@ -19,15 +19,35 @@ export const getThreadTranscriptCommand = Command.make(
   {
     thread: threadFlag,
     limit: Flag.integer("limit").pipe(Flag.withDefault(20)),
+    turnLimit: Flag.integer("turn-limit").pipe(Flag.optional),
+    beforeCursor: Flag.string("before-cursor").pipe(Flag.optional),
+    all: Flag.boolean("all"),
     full: Flag.boolean("full"),
     format: formatFlag,
     ...extraArgsConfig,
   },
-  ({ thread, limit, full, format }) =>
+  ({ thread, limit, turnLimit, beforeCursor, all, full, format }) =>
     Effect.gen(function* () {
       if (limit < 0) {
         return yield* Effect.fail(
           new InvalidLimitError({ message: `invalid limit: ${limit}`, value: String(limit) }),
+        );
+      }
+      const turnLimitValue = Option.getOrUndefined(turnLimit);
+      const beforeCursorValue = Option.getOrUndefined(beforeCursor);
+      if (turnLimitValue !== undefined && turnLimitValue <= 0) {
+        return yield* Effect.fail(
+          new InvalidLimitError({
+            message: `invalid turn limit: ${turnLimitValue}`,
+            value: String(turnLimitValue),
+          }),
+        );
+      }
+      if (all && (turnLimitValue !== undefined || beforeCursorValue !== undefined)) {
+        return yield* Effect.fail(
+          new InvalidFlagCombinationError({
+            message: "--all cannot be combined with --turn-limit or --before-cursor",
+          }),
         );
       }
       const application = yield* T3Application;
@@ -46,7 +66,17 @@ export const getThreadTranscriptCommand = Command.make(
         );
       }
       const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
-      const detail = yield* application.getThreadMessages(threadId);
+      const detail = yield* application.getThreadMessages({
+        threadId,
+        ...(!all
+          ? {
+              window: {
+                turnLimit: turnLimitValue ?? (beforeCursorValue === undefined ? 10 : 20),
+                ...(beforeCursorValue !== undefined ? { beforeCursor: beforeCursorValue } : {}),
+              },
+            }
+          : {}),
+      });
       if (resolvedFormat === "json") {
         return yield* output.printJson(formatThreadMessagesJson(detail, full));
       }
