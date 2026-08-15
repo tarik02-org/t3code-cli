@@ -12,6 +12,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  nix:
+    name: nix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6.0.3
+
+      - uses: cachix/install-nix-action@v31
+
+      - name: check upstream source revision
+        shell: bash
+        run: |
+          submodule_rev=$(git ls-tree HEAD upstream-t3code | awk '{ print $3 }')
+          input_rev=$(nix flake metadata --json | jq -r '.locks.nodes."upstream-t3code".locked.rev')
+          test "$submodule_rev" = "$input_rev"
+
+      - name: build
+        run: nix build
+
   check:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
