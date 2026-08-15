@@ -194,9 +194,13 @@ t3cli list [--project <ref>] [--archived | --all]
 t3cli search <query> [--limit <1-50>]          # Search conversation content
 t3cli show [--thread <id>]                   # Show thread details
 t3cli send [--thread <id>] [message]         # Send message to thread
-t3cli transcript [--thread <id>] [--limit]   # View messages
+t3cli transcript [--thread <id>] [--turn-limit N] [--before-cursor <cursor>] [--all] # View messages
 t3cli wait [--thread <id>]                   # Wait for completion
 ```
+
+`transcript` loads the latest 10 user turns by default and includes pagination metadata in JSON
+output. Pass the returned `page.beforeCursor` to `--before-cursor` for the next older page, use
+`--turn-limit` to set the page size, or use `--all` to load the complete transcript.
 
 ### Advanced Thread Commands
 

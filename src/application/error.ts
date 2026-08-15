@@ -1,4 +1,4 @@
 import type { DomainError } from "../domain/error.ts";
-import type { RpcError } from "../rpc/error.ts";
+import type { OrchestrationError } from "../orchestration/service.ts";
 
-export type ApplicationError = DomainError | RpcError;
+export type ApplicationError = DomainError | OrchestrationError;

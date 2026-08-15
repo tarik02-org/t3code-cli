@@ -9,6 +9,8 @@ import type {
   OrchestrationSearchThreadsInput,
   OrchestrationShellSnapshot,
   OrchestrationThread,
+  OrchestrationThreadDetailSnapshot,
+  OrchestrationThreadDetailWindow,
   OrchestrationThreadShell,
   ProjectScript,
   ProjectScriptIcon,
@@ -68,6 +70,11 @@ export interface SnoozeThreadInput {
 }
 
 export type ListThreadsInclude = "active" | "archived" | "all";
+
+export interface GetThreadMessagesInput {
+  readonly threadId: string;
+  readonly window?: OrchestrationThreadDetailWindow;
+}
 
 export type UpdateThreadInput = {
   readonly threadId: string;
@@ -218,8 +225,8 @@ export type T3ThreadApplicationService = {
     ApplicationError
   >;
   readonly getThreadMessages: (
-    threadId: string,
-  ) => Effect.Effect<OrchestrationThread, ApplicationError>;
+    input: GetThreadMessagesInput,
+  ) => Effect.Effect<OrchestrationThreadDetailSnapshot, ApplicationError>;
   readonly showThread: (threadId: string) => Effect.Effect<ThreadShow, ApplicationError>;
   readonly approveThread: (input: {
     readonly threadId: string;
