@@ -41,16 +41,16 @@ stdenv.mkDerivation (finalAttrs: {
   };
 
   nativeBuildInputs = [
-    autoPatchelfHook
     installShellFiles
     makeWrapper
     nodejs
     pnpm
     pnpmConfigHook
     writableTmpDirAsHomeHook
-  ];
+  ]
+  ++ lib.optional stdenv.hostPlatform.isLinux autoPatchelfHook;
 
-  buildInputs = [ libsecret ];
+  buildInputs = lib.optional stdenv.hostPlatform.isLinux libsecret;
 
   noAuditTmpdir = true;
   SSL_CERT_FILE = "${cacert}/etc/ssl/certs/ca-bundle.crt";
@@ -83,6 +83,11 @@ stdenv.mkDerivation (finalAttrs: {
     homepage = "https://github.com/tarik02-org/t3code-cli";
     license = lib.licenses.mit;
     mainProgram = "t3cli";
-    platforms = [ "x86_64-linux" ];
+    platforms = [
+      "x86_64-linux"
+      "aarch64-linux"
+      "x86_64-darwin"
+      "aarch64-darwin"
+    ];
   };
 })

@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   check:
-    name: check pnpm dependency hash
+    name: check nix package inputs
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -23,9 +23,16 @@ jobs:
         uses: cachix/install-nix-action@v31
 
       - id: update
-        name: calculate pnpm dependency hash
+        name: calculate nix package fixes
         shell: bash
         run: |
+          submodule_rev=$(git ls-tree HEAD upstream-t3code | awk '{ print $3 }')
+          sed -i -E \
+            "s#github:pingdotgg/t3code/[0-9a-f]{40}#github:pingdotgg/t3code/$submodule_rev#" \
+            flake.nix
+          grep -Fq "url = \"github:pingdotgg/t3code/$submodule_rev\";" flake.nix
+          nix flake update upstream-t3code
+
           nix run github:Mic92/nix-update/cf68051e7b7e08de6c707484cdcd1a53feb48e05 -- \
             t3code-cli \
             --flake \
@@ -33,15 +40,15 @@ jobs:
             --override-filename nix/package.nix \
             --build
 
-          if git diff --quiet -- nix/package.nix; then
+          if git diff --quiet -- flake.nix flake.lock nix/package.nix; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
             {
-              echo 'The Nix pnpm dependency hash is stale. Apply this change to the pull request:'
+              echo 'The Nix source pin or pnpm dependency hash is stale. Apply this change to the pull request:'
               echo
               echo '```diff'
-              git diff -- nix/package.nix
+              git diff -- flake.nix flake.lock nix/package.nix
               echo '```'
             } > "$RUNNER_TEMP/nix-pnpm-dependency-hash.md"
           fi
@@ -63,5 +70,5 @@ jobs:
       - name: fail on dependency hash drift
         if: steps.update.outputs.changed == 'true'
         run: |
-          echo '::error::The Nix pnpm dependency hash is stale. Apply the change from the pull request comment.'
+          echo '::error::The Nix package inputs are stale. Apply the change from the pull request comment.'
           exit 1
