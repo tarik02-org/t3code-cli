@@ -162,6 +162,7 @@ pnpm sync-upstream --target stable
 ```sh
 t3cli project list                        # List known projects
 t3cli project add [--path <path>] [--title <title>]
+t3cli project update [--project <ref>] [--title <title>] [--workspace-root <path>] [--provider <id>] [--model <slug>] [--option <key=value>] [--reasoning-effort <value>] [--effort <value>] [--fast-mode | --no-fast-mode] [--thinking | --no-thinking] [--clear-default-model] [--thread-env local|worktree | --clear-thread-env] [--favicon <path> | --clear-favicon] [--format auto|human|json]
 t3cli project delete [--project <ref>] [--force] [--yes]
 ```
 

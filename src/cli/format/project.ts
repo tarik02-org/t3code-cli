@@ -24,6 +24,14 @@ export function formatProjectAddedHuman(project: OrchestrationProjectShell) {
   ])}`;
 }
 
+export function formatProjectUpdatedHuman(project: OrchestrationProjectShell) {
+  return `project updated\n${formatRecord([
+    { field: "title", value: project.title },
+    { field: "id", value: project.id },
+    { field: "path", value: project.workspaceRoot },
+  ])}`;
+}
+
 export function formatProjectDeletedHuman(input: {
   readonly projectId: string;
   readonly dispatch: { readonly sequence: number };

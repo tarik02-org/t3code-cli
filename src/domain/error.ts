@@ -72,6 +72,11 @@ export class ProjectActionValidationError extends Schema.TaggedErrorClass<Projec
   },
 ) {}
 
+export class ProjectUpdateValidationError extends Schema.TaggedErrorClass<ProjectUpdateValidationError>()(
+  "ProjectUpdateValidationError",
+  { message: Schema.String, projectId: Schema.String },
+) {}
+
 export type DomainError =
   | ProjectLookupError
   | ModelSelectionError
@@ -81,4 +86,5 @@ export type DomainError =
   | ProjectCreateVisibilityError
   | TerminalLookupError
   | ProjectActionLookupError
-  | ProjectActionValidationError;
+  | ProjectActionValidationError
+  | ProjectUpdateValidationError;

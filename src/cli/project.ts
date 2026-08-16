@@ -6,6 +6,7 @@ import { extraArgsConfig } from "./extra-args.ts";
 import { formatFlag, projectPathFlag } from "./flags.ts";
 import { formatProjectAddedHuman, formatProjectsHuman } from "./format/project.ts";
 import { deleteProjectCommand } from "./projects/delete.ts";
+import { updateProjectCommand } from "./projects/update.ts";
 import { T3Application } from "../application/service.ts";
 import { CliRuntime } from "../cli/runtime/service.ts";
 import { loadT3CliEnv } from "../config/env/env.ts";
@@ -15,7 +16,7 @@ import { T3Output } from "./output/service.ts";
 export function createProjectCommand() {
   return Command.make("project").pipe(
     Command.withDescription("project commands"),
-    Command.withSubcommands([listCommand, addCommand, deleteProjectCommand]),
+    Command.withSubcommands([listCommand, addCommand, updateProjectCommand, deleteProjectCommand]),
   );
 }
 
