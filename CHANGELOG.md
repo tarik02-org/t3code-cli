@@ -1,5 +1,12 @@
 # t3code-cli
 
+## 0.15.0
+
+### Minor Changes
+
+- f8b5666: add thread settle, snooze, and pin lifecycle commands
+- 1a3fc61: page thread transcripts with upstream user-turn cursors
+
 ## 0.14.2
 
 ### Patch Changes
