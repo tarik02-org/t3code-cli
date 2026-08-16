@@ -39,6 +39,14 @@ Install it with:
 npx skills add tarik02-org/t3code-cli
 ```
 
+## Nix
+
+On NixOS or another system with Nix installed:
+
+```sh
+nix profile install github:tarik02-org/t3code-cli
+```
+
 ## Authentication
 
 `t3cli` stores multiple named auth environments in `~/.config/t3cli/config.json` (or `$XDG_CONFIG_HOME/t3cli/config.json`). Tokens are encrypted at rest with AES-256-GCM; the master key is stored in the OS keyring when available, otherwise in `~/.config/t3cli/key`.

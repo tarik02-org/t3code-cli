@@ -12,6 +12,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  nix:
+    name: nix (${{ matrix.system }})
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-latest
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+          - system: x86_64-darwin
+            runner: macos-15-intel
+          - system: aarch64-darwin
+            runner: macos-15
+    steps:
+      - uses: actions/checkout@v6.0.3
+
+      - uses: cachix/install-nix-action@v31
+
+      - name: build
+        run: nix build
+
   check:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
