@@ -10,12 +10,6 @@ npm install --global t3code-cli
 
 This installs the `t3cli` command globally.
 
-On NixOS or another system with Nix installed:
-
-```sh
-nix profile install github:tarik02-org/t3code-cli
-```
-
 ## Quick Start
 
 ```sh
@@ -43,6 +37,14 @@ Install it with:
 
 ```sh
 npx skills add tarik02-org/t3code-cli
+```
+
+## Nix
+
+On NixOS or another system with Nix installed:
+
+```sh
+nix profile install github:tarik02-org/t3code-cli
 ```
 
 ## Authentication
