@@ -1,105 +1,30 @@
-# Setup and auth
+# Setup
 
-## Checklist
-
-```
-- [ ] t3cli auth local   OR   t3cli auth pair --url <url> [--local]
-- [ ] t3cli auth status --format json
-- [ ] t3cli project add --path .   (if project not registered)
-- [ ] t3cli model list --format json
-```
-
-## Multiple environments
-
-One `t3cli` install can store credentials for multiple servers. Environment names must be non-empty slugs: `[A-Za-z0-9._-]`.
+## Pair once
 
 ```sh
-t3cli auth pair --url <url> --name work
-t3cli auth local --name local
-t3cli env list --format json
-t3cli env use work
-t3cli --environment local project list
+t3cli auth local                     # T3 Code on this machine
+t3cli auth pair --url <pairing-url>  # remote server; the URL comes from the server UI
+t3cli auth status --format json
+t3cli project add --path .           # when the project is not registered yet
 ```
 
-Selection precedence for runtime commands:
+Setup is done when `auth status` reports the expected `url` and `local`, and `model list` shows a
+ready provider.
 
-1. `--environment <name>`
-2. `T3CLI_ENV=<name>`
-3. config `default`
+`local` decides how commands find the project when `--project` is omitted: local environments
+(`auth local`, or `auth pair --local`) resolve it from the cwd; remote ones need `--project`,
+`T3CODE_PROJECT_ROOT`, or `T3CODE_PROJECT_ID`.
 
-`T3CODE_URL` and `T3CODE_TOKEN` override the selected environment only when both are set.
+`auth local` finds the server's data directory and origin on its own; pass `--base-dir` and
+`--origin` for a non-default installation.
 
-## auth pair
+## Environments
 
-Pair with a remote t3code server using a pairing URL from the server UI.
+One install stores credentials for several servers under slug names (`[A-Za-z0-9._-]`); `auth pair`
+names an environment after the URL's host unless `--name` says otherwise.
 
-```sh
-t3cli auth pair --url <url> [--name <name>] [--replace] [--local] [--format json]
-```
+A command uses `--environment`, then `T3CLI_ENV`, then the default set by `env use`. Setting both
+`T3CODE_URL` and `T3CODE_TOKEN` bypasses stored environments entirely.
 
-| Flag        | Required | Description                                                            |
-| ----------- | -------- | ---------------------------------------------------------------------- |
-| `--url`     | yes      | Pairing URL                                                            |
-| `--name`    | no       | Environment name (default: hostname slug from URL)                     |
-| `--replace` | no       | Replace an existing environment with the same name and make it default |
-| `--local`   | no       | Mark config as local; enables cwd project resolution                   |
-
-## auth local
-
-Authenticate against a local t3code installation. Always writes `local: true` to config.
-
-```sh
-t3cli auth local [--name <name>] [--replace] [--format json]
-t3cli auth local --base-dir <path> --origin <url> --role owner
-```
-
-| Flag         | Default       | Description                               |
-| ------------ | ------------- | ----------------------------------------- |
-| `--name`     | `local`       | Environment name                          |
-| `--replace`  | no            | Replace existing name and make it default |
-| `--base-dir` | auto          | t3code data directory                     |
-| `--origin`   | auto          | Server origin URL                         |
-| `--role`     | `owner`       | `owner` or `client`                       |
-| `--label`    | `t3cli`       | Client label                              |
-| `--subject`  | `t3cli-local` | Token subject                             |
-
-## env list
-
-```sh
-t3cli env list [--format json]
-```
-
-Lists stored environments only. JSON fields: `name`, `url`, `local`, `default`, `active`. Tokens are never printed.
-
-## env use
-
-```sh
-t3cli env use <name> [--format json]
-```
-
-Sets the default environment without contacting the server. Fails if stored credentials for that environment cannot be decrypted.
-
-## env remove
-
-```sh
-t3cli env remove [--name <name>] [--yes] [--format json]
-```
-
-Removes local CLI credentials for the default environment or `--name`. Requires confirmation; non-interactive mode requires `--yes`. Remote tokens may remain valid until natural expiry.
-
-## auth status
-
-```sh
-t3cli auth status [--format json]
-```
-
-Returns active environment name when config-backed, plus current URL, `local`, `source`, role, and expiry.
-
-## Local vs remote auth
-
-| Config                                      | `--project` omitted                                                 |
-| ------------------------------------------- | ------------------------------------------------------------------- |
-| Local (`auth local` or `auth pair --local`) | Resolves from cwd when it maps to a known project                   |
-| Remote pairing                              | Requires `--project` or `T3CODE_PROJECT_ROOT` / `T3CODE_PROJECT_ID` |
-
-Re-run `auth status --format json` after pairing to confirm `local` is set when cwd resolution is needed.
+`env remove` deletes only local credentials; the server keeps the token valid until it expires.

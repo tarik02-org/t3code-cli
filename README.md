@@ -343,5 +343,6 @@ t3cli wait --format ndjson
 ## Links
 
 - [Agent Skill Documentation](skills/t3code-cli/SKILL.md)
-- [Command Reference](skills/t3code-cli/reference/commands.md)
+- [Command Behavior](skills/t3code-cli/reference/behavior.md)
+- [Output Formats](skills/t3code-cli/reference/output.md)
 - [Setup Guide](skills/t3code-cli/reference/setup.md)
