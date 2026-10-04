@@ -24,6 +24,10 @@
       upstream-t3code,
     }:
     let
+      source = nixpkgs.lib.fileset.toSource {
+        root = ./.;
+        fileset = nixpkgs.lib.fileset.difference ./. (nixpkgs.lib.fileset.maybeMissing ./upstream-t3code);
+      };
       systems = [
         "x86_64-linux"
         "aarch64-linux"
@@ -38,7 +42,7 @@
         in
         rec {
           t3code-cli = pkgs.callPackage ./nix/package.nix {
-            src = self;
+            src = source;
             upstreamSrc = upstream-t3code;
           };
 
