@@ -169,7 +169,7 @@ Use `--thread` or `T3CODE_THREAD_ID` for thread scope. `terminal write` payloads
 
 ## Output
 
-Use `json` for one-shot results; `ndjson` with `--wait` for streaming (`dispatch`, `thread`, `message`, `status`, `done`). Details: [reference/commands.md](reference/commands.md#ndjson-stream).
+Use `json` for one-shot results; `ndjson` with `--wait` for streaming (`started`/`dispatch`, `thread`, `message`, `status`, `done`). Details: [reference/commands.md](reference/commands.md#ndjson-stream).
 
 ## Reference
 

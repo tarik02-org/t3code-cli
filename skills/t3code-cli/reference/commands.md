@@ -9,7 +9,7 @@ t3cli
 ├── model list
 ├── list|search|start|send|show|transcript|wait
 ├── terminal list|create|attach|read|stream|wait|write|destroy
-└── thread approve|respond|archive|interrupt|settle|unsettle|snooze|unsnooze|pin|unpin|unarchive|update|delete|callback
+└── thread approve|respond|archive|interrupt|queue|settle|unsettle|snooze|unsnooze|pin|unpin|unarchive|update|delete|callback
 ```
 
 Auth and environment commands: [setup.md](setup.md)
@@ -90,7 +90,7 @@ t3cli action delete [--project <ref>] (--id <id> | --name <name>)
 
 Selectors require exactly one of `--id` or `--name`. `--name` matching trims the query, compares case-insensitively, and fails if zero or multiple actions match. `add` generates an id from `--name` when omitted. Default `add` values are `--icon play` and non-setup.
 
-Mutations dispatch `project.meta.update` with the next full scripts array and wait for the shell sequence before printing. `--setup` enforces one setup action per project by clearing setup from the others. Preview fields are editable, but `action run` does not open previews. `action run` opens a new terminal by default, can target `--terminal <id>`, and can attach with `--attach`.
+Mutations send the next full scripts array as a `project.update` and print the updated project. `--setup` enforces one setup action per project by clearing setup from the others. Preview fields are editable, but `action run` does not open previews. `action run` opens a new terminal by default, can target `--terminal <id>`, and can attach with `--attach`.
 
 ## thread workflow
 
@@ -217,20 +217,22 @@ run now; `resume` starts a queue the server held after restarting.
 
 ### start responses
 
-| Mode                         | stdout                                       |
-| ---------------------------- | -------------------------------------------- |
-| `--format json`, no `--wait` | `{ dispatch, project, threadId, thread? }`   |
-| `--format json`, `--wait`    | `{ dispatch, threadId, thread }` after pause |
-| `--format ndjson`, `--wait`  | Stream of events (see below)                 |
+| Mode                         | stdout                                                                     |
+| ---------------------------- | -------------------------------------------------------------------------- |
+| `--format json`, no `--wait` | `{ threadId, project, thread, status, latestAssistantMessage }`            |
+| `--format json`, `--wait`    | `{ threadId, thread, status, latestAssistantMessage }` once the thread idles |
+| `--format ndjson`            | `started`, then thread events (see below); `--wait` streams until `done`   |
 
-`send` follows the same output rules when `--wait` is set.
+`send` returns `{ dispatch, threadId, messageId, thread, status, latestAssistantMessage }` and starts
+its NDJSON stream with `dispatch`. `thread` is the thread record without its timeline; read the
+timeline with `transcript`.
 
 ## Output formats
 
 | Commands        | `--format`                    | Agent default                   |
 | --------------- | ----------------------------- | ------------------------------- |
 | Most            | `auto` \| `human` \| `json`   | `json`                          |
-| `ask`           | + `ndjson`                    | `human`                         |
+| `ask`           | + `ndjson`                    | `json`                          |
 | `start`, `send` | + `ndjson`                    | `json` / `ndjson` with `--wait` |
 | `wait`          | `auto` \| `human` \| `ndjson` | `ndjson`                        |
 
@@ -241,16 +243,22 @@ run now; `resume` starts a queue the server held after restarting.
 One JSON object per line:
 
 ```json
-{ "type": "dispatch", "sequence": 42 }
-{ "type": "thread", "thread": {}, "messageCount": 3 }
-{ "type": "message", "message": { "role": "assistant", "text": "..." } }
+{ "type": "started", "threadId": "..." }
+{ "type": "thread", "thread": {}, "status": "running", "messageCount": 3 }
+{ "type": "message", "message": { "role": "assistant", "text": "...", "runId": "..." } }
 { "type": "status", "status": "running", "threadId": "..." }
-{ "type": "done", "thread": {}, "latestAssistantMessage": {} }
+{ "type": "done", "thread": {}, "status": "completed", "latestAssistantMessage": {} }
 ```
 
+The first line names what was sent: `started` (`start`), `dispatch` with the command `sequence`
+(`send`), or `dispatched` with `threadId` and `messageId` (`ask`). `status` lines appear only when
+the status changes. Statuses are `idle` or a run status: `preparing`, `queued`, `starting`,
+`running`, `waiting` (on an approval or user input), `completed`, `interrupted`, `failed`,
+`cancelled`, `rolled_back`.
+
 Successful `ask --format ndjson` streams the same thread events and ends with a `result` object.
-`ask --format json` returns one object with `answer`, `threadId`, `turnId`, `created`, `dispatch`,
-and `archive`. Human output writes progress to stderr and only the final answer to stdout.
+`ask --format json` returns one object with `answer`, `threadId`, `runId`, `created`, and
+`archive`. Human output writes progress to stderr and only the final answer to stdout.
 
 ## Examples
 
