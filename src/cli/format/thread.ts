@@ -1,36 +1,22 @@
-import type { ThreadSearchResult, ThreadShow } from "../../application/threads.ts";
-import type { WaitEvent } from "../../application/service.ts";
+import * as DateTime from "effect/DateTime";
 import type {
-  OrchestrationThread,
-  OrchestrationThreadDetailSnapshot,
-  OrchestrationThreadShell,
+  OrchestrationV2ProjectedTurnItem,
+  OrchestrationV2ThreadProjection,
+  OrchestrationV2ThreadShell,
 } from "@t3tools/contracts";
+
+import type {
+  ThreadSearchResult,
+  ThreadShow,
+  ThreadTranscript,
+} from "../../application/threads.ts";
+import type { WaitEvent } from "../../application/service.ts";
+import type { QueuedRun } from "../../application/thread-queue.ts";
 import { latestAssistantMessage, threadStatus } from "../../domain/thread-lifecycle.ts";
 import { formatChatTranscript, formatRecord, formatTable } from "./human.ts";
 
 export function formatThreadShowJson(thread: ThreadShow) {
-  return {
-    id: thread.id,
-    projectId: thread.projectId,
-    title: thread.title,
-    status: thread.status,
-    session: thread.session,
-    latestTurn: thread.latestTurn,
-    modelSelection: thread.modelSelection,
-    runtimeMode: thread.runtimeMode,
-    interactionMode: thread.interactionMode,
-    branch: thread.branch,
-    worktreePath: thread.worktreePath,
-    archivedAt: thread.archivedAt,
-    createdAt: thread.createdAt,
-    updatedAt: thread.updatedAt,
-    messageCount: thread.messageCount,
-    hasPendingApprovals: thread.hasPendingApprovals,
-    hasPendingUserInput: thread.hasPendingUserInput,
-    hasActionableProposedPlan: thread.hasActionableProposedPlan,
-    pendingApprovals: thread.pendingApprovals,
-    pendingUserInputs: thread.pendingUserInputs,
-  };
+  return thread;
 }
 
 export function formatThreadShowHuman(thread: ThreadShow) {
@@ -40,6 +26,10 @@ export function formatThreadShowHuman(thread: ThreadShow) {
       { field: "id", value: thread.id },
       { field: "project", value: thread.projectId },
       { field: "status", value: thread.status },
+      ...(thread.lastError !== null ? [{ field: "error", value: thread.lastError }] : []),
+      ...(thread.queuedRunCount > 0
+        ? [{ field: "queued", value: String(thread.queuedRunCount) }]
+        : []),
       {
         field: "model",
         value: `${thread.modelSelection.instanceId}/${thread.modelSelection.model}`,
@@ -49,6 +39,11 @@ export function formatThreadShowHuman(thread: ThreadShow) {
       ...(thread.branch !== null ? [{ field: "branch", value: thread.branch }] : []),
       ...(thread.worktreePath !== null ? [{ field: "worktree", value: thread.worktreePath }] : []),
       ...(thread.archivedAt !== null ? [{ field: "archived", value: thread.archivedAt }] : []),
+      ...(thread.settledAt !== null ? [{ field: "settled", value: thread.settledAt }] : []),
+      ...(thread.snoozedUntil !== null
+        ? [{ field: "snoozed until", value: thread.snoozedUntil }]
+        : []),
+      ...(thread.pinnedAt !== null ? [{ field: "pinned", value: thread.pinnedAt }] : []),
       { field: "messages", value: String(thread.messageCount) },
       { field: "updated", value: thread.updatedAt },
     ]),
@@ -86,7 +81,7 @@ export function formatThreadShowHuman(thread: ThreadShow) {
   return `${sections.join("\n")}\n`;
 }
 
-export function formatThreadsHuman(threads: ReadonlyArray<OrchestrationThreadShell>) {
+export function formatThreadsHuman(threads: ReadonlyArray<OrchestrationV2ThreadShell>) {
   if (threads.length === 0) {
     return "no threads\n";
   }
@@ -94,11 +89,27 @@ export function formatThreadsHuman(threads: ReadonlyArray<OrchestrationThreadShe
     [
       { header: "title", value: (thread) => thread.title, maxWidth: 36 },
       { header: "id", value: (thread) => thread.id, maxWidth: 40 },
-      { header: "status", value: (thread) => threadStatus(thread), maxWidth: 18 },
-      { header: "updated", value: (thread) => thread.updatedAt, maxWidth: 28 },
+      { header: "status", value: (thread) => thread.status, maxWidth: 18 },
+      { header: "updated", value: (thread) => DateTime.formatIso(thread.updatedAt), maxWidth: 28 },
       { header: "flags", value: formatThreadFlags, maxWidth: 34 },
     ],
     threads,
+  )}\n`;
+}
+
+export function formatQueuedRunsHuman(runs: ReadonlyArray<QueuedRun>) {
+  if (runs.length === 0) {
+    return "queue is empty\n";
+  }
+  return `${formatTable(
+    [
+      { header: "#", value: (run) => String(run.position), maxWidth: 4 },
+      { header: "run", value: (run) => run.runId, maxWidth: 64 },
+      { header: "held", value: (run) => (run.held ? "yes" : "-"), maxWidth: 4 },
+      { header: "requested", value: (run) => run.requestedAt, maxWidth: 28 },
+      { header: "message", value: (run) => run.text.replace(/\s+/g, " ").trim(), maxWidth: 60 },
+    ],
+    runs,
   )}\n`;
 }
 
@@ -131,97 +142,94 @@ export function formatThreadDeletedHuman(input: {
   return `thread deleted: ${input.threadId} (sequence ${input.dispatch.sequence})`;
 }
 
-export function formatThreadStartedHuman(input: {
-  readonly thread: OrchestrationThread;
-  readonly sequence: number;
-}) {
+export function formatThreadStartedHuman(projection: OrchestrationV2ThreadProjection) {
   return `thread started\n${formatRecord([
-    { field: "title", value: input.thread.title },
-    { field: "id", value: input.thread.id },
-    { field: "status", value: threadStatus(input.thread) },
-    { field: "sequence", value: String(input.sequence) },
+    { field: "title", value: projection.thread.title },
+    { field: "id", value: projection.thread.id },
+    { field: "status", value: threadStatus(projection) },
   ])}`;
 }
 
-export function formatThreadMessagesHuman(
-  snapshot: OrchestrationThreadDetailSnapshot,
-  limit: number,
-) {
-  const messages = limit === 0 ? snapshot.thread.messages : snapshot.thread.messages.slice(-limit);
-  const transcript = formatChatTranscript(messages);
-  return snapshot.page?.hasMore === true && snapshot.page.beforeCursor !== null
-    ? `${transcript}\nearlier turns available\nbefore cursor: ${snapshot.page.beforeCursor}\n`
-    : transcript;
+export function formatThreadTranscriptHuman(transcript: ThreadTranscript, limit: number) {
+  const messages = transcript.items.flatMap(transcriptMessage);
+  const transcriptText = formatChatTranscript(limit === 0 ? messages : messages.slice(-limit));
+  return transcript.hasMoreHistory && transcript.beforeCursor !== null
+    ? `${transcriptText}\nearlier history available\nbefore cursor: ${transcript.beforeCursor}\n`
+    : transcriptText;
 }
 
-export function formatWaitDoneHuman(thread: OrchestrationThread) {
-  const latest = latestAssistantMessage(thread);
-  return `status: ${threadStatus(thread)}\n${
+export function formatThreadTranscriptJson(transcript: ThreadTranscript, full: boolean) {
+  return {
+    threadId: transcript.threadId,
+    snapshotSequence: transcript.snapshotSequence,
+    hasMoreHistory: transcript.hasMoreHistory,
+    beforeCursor: transcript.beforeCursor,
+    ...(full
+      ? { items: transcript.items, projection: transcript.projection }
+      : { messages: transcript.items.flatMap(transcriptMessage) }),
+  };
+}
+
+/** Thread metadata, status, and latest answer: a projection without its heavy timeline arrays. */
+export function formatThreadResultJson(projection: OrchestrationV2ThreadProjection) {
+  return {
+    thread: projection.thread,
+    status: threadStatus(projection),
+    latestAssistantMessage: latestAssistantMessage(projection) ?? null,
+  };
+}
+
+export function formatWaitDoneHuman(projection: OrchestrationV2ThreadProjection) {
+  const latest = latestAssistantMessage(projection);
+  return `status: ${threadStatus(projection)}\n${
     latest !== undefined ? `\n${formatChatTranscript([latest])}` : ""
   }`;
 }
 
-export function formatThreadMessagesJson(
-  snapshot: OrchestrationThreadDetailSnapshot,
-  full: boolean,
-) {
-  return full
-    ? { ...snapshot, page: snapshot.page ?? null }
-    : {
-        snapshotSequence: snapshot.snapshotSequence,
-        thread: stripThreadMessages(snapshot.thread),
-        messages: snapshot.thread.messages,
-        page: snapshot.page ?? null,
-      };
-}
-
 export function formatWaitEventNdjson(event: WaitEvent) {
-  if (event.type !== "thread" && event.type !== "done") {
-    return event;
+  if (event.type === "thread") {
+    return {
+      type: "thread",
+      thread: event.projection.thread,
+      status: threadStatus(event.projection),
+      messageCount: event.projection.messages.length,
+    };
   }
-  const compactThread = stripThreadHeavy(event.thread);
-  return event.type === "done"
-    ? {
-        type: "done",
-        thread: compactThread,
-        latestAssistantMessage: latestAssistantMessage(event.thread) ?? null,
-      }
-    : {
-        type: "thread",
-        thread: compactThread,
-        messageCount: event.thread.messages.length,
-      };
+  if (event.type === "done") {
+    return { type: "done", ...formatThreadResultJson(event.projection) };
+  }
+  if (event.type === "status") {
+    return { type: "status", status: event.status, threadId: event.threadId };
+  }
+  return event;
 }
 
-function stripThreadMessages<T extends { readonly messages: unknown }>(thread: T) {
-  const { messages: _messages, ...rest } = thread;
-  return rest;
+/** User and assistant turns of the timeline; tool activity stays in `--full` output. */
+function transcriptMessage(row: OrchestrationV2ProjectedTurnItem) {
+  const item = row.item;
+  if (item.type !== "user_message" && item.type !== "assistant_message") {
+    return [];
+  }
+  return [
+    {
+      id: item.messageId,
+      role: item.type === "user_message" ? "user" : "assistant",
+      text: item.text,
+      runId: item.runId,
+      streaming: item.type === "assistant_message" && item.streaming,
+      createdAt: item.startedAt ?? item.updatedAt,
+      ...(row.visibility !== "local" ? { sourceThreadId: row.sourceThreadId } : {}),
+    },
+  ];
 }
 
-function formatThreadFlags(thread: OrchestrationThreadShell) {
+function formatThreadFlags(thread: OrchestrationV2ThreadShell) {
+  const pendingKind = thread.pendingRuntimeRequest?.kind;
   const flags = [
     thread.archivedAt !== null ? "archived" : null,
-    thread.hasPendingApprovals ? "approval" : null,
-    thread.hasPendingUserInput ? "input" : null,
+    thread.pinnedAt !== null && thread.pinnedAt !== undefined ? "pinned" : null,
+    pendingKind === undefined ? null : pendingKind === "user_input" ? "input" : "approval",
     thread.hasActionableProposedPlan ? "plan" : null,
   ].filter((flag): flag is string => flag !== null);
   return flags.length > 0 ? flags.join(", ") : "-";
-}
-
-function stripThreadHeavy<
-  T extends {
-    readonly messages: unknown;
-    readonly activities?: unknown;
-    readonly proposedPlans?: unknown;
-    readonly checkpoints?: unknown;
-  },
->(thread: T) {
-  const {
-    messages: _messages,
-    activities: _activities,
-    proposedPlans: _proposedPlans,
-    checkpoints: _checkpoints,
-    ...rest
-  } = thread;
-  return rest;
 }

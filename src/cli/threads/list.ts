@@ -17,8 +17,14 @@ export const listThreadsCommand = Command.make(
   "list",
   {
     project: projectFlag,
-    archived: Flag.boolean("archived").pipe(Flag.withDescription("List archived threads only")),
-    all: Flag.boolean("all").pipe(Flag.withDescription("List active and archived threads")),
+    archived: Flag.Boolean("archived").pipe(
+      Flag.withDescription("List archived threads only"),
+      Flag.withDefault(false),
+    ),
+    all: Flag.Boolean("all").pipe(
+      Flag.withDescription("List active and archived threads"),
+      Flag.withDefault(false),
+    ),
     format: formatFlag,
     ...extraArgsConfig,
   },

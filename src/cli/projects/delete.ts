@@ -41,10 +41,7 @@ export const deleteProjectCommand = Command.make(
         ...(force ? { force: true } : {}),
       });
       if (resolvedFormat === "json") {
-        return yield* output.printJson({
-          projectId: result.projectId,
-          dispatch: result.dispatch,
-        });
+        return yield* output.printJson({ projectId: result.projectId });
       }
       return yield* output.printInfo(formatProjectDeletedHuman(result));
     }),

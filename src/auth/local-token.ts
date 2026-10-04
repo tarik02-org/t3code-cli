@@ -195,7 +195,7 @@ export const makeT3LocalAuthToken = Effect.fn("makeT3LocalAuthToken")(function* 
       t3CliEnv,
     }).pipe(Effect.provideService(Path.Path, path));
     const session = yield* issueLocalDatabaseSession({
-      dbPath: path.join(baseDir, "userdata", "state.sqlite"),
+      dbPath: path.join(baseDir, "userdata", "statev2.sqlite"),
       secretsDir: path.join(baseDir, "userdata", "secrets"),
       role: input.role,
       label: input.label,

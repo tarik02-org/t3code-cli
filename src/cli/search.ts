@@ -15,8 +15,8 @@ import { CliRuntime } from "./runtime/service.ts";
 export const searchThreadsCommand = Command.make(
   "search",
   {
-    query: Argument.string("query"),
-    limit: Flag.integer("limit").pipe(
+    query: Argument.String("query"),
+    limit: Flag.Int("limit").pipe(
       Flag.withDescription("Maximum matches (1-50, default: 50)"),
       Flag.optional,
     ),

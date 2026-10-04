@@ -28,7 +28,6 @@ export function formatActionListHuman(input: {
 export function formatActionAddedHuman(input: {
   readonly project: OrchestrationProjectShell;
   readonly action: ProjectScript;
-  readonly sequence: number;
 }) {
   return `action added\n${formatActionRecord(input)}`;
 }
@@ -36,7 +35,6 @@ export function formatActionAddedHuman(input: {
 export function formatActionUpdatedHuman(input: {
   readonly project: OrchestrationProjectShell;
   readonly action: ProjectScript;
-  readonly sequence: number;
 }) {
   return `action updated\n${formatActionRecord(input)}`;
 }
@@ -44,7 +42,6 @@ export function formatActionUpdatedHuman(input: {
 export function formatActionDeletedHuman(input: {
   readonly project: OrchestrationProjectShell;
   readonly action: ProjectScript;
-  readonly sequence: number;
 }) {
   return `action deleted\n${formatActionRecord(input)}`;
 }
@@ -80,13 +77,11 @@ function formatActionTable(rows: ReadonlyArray<ActionRow>) {
 function formatActionRecord(input: {
   readonly project: OrchestrationProjectShell;
   readonly action: ProjectScript;
-  readonly sequence: number;
 }) {
   return formatRecord([
     { field: "name", value: input.action.name },
     { field: "id", value: input.action.id },
     { field: "project", value: input.project.id },
-    { field: "sequence", value: String(input.sequence) },
   ]);
 }
 

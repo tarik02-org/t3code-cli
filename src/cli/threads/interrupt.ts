@@ -48,10 +48,17 @@ export const interruptThreadCommand = Command.make(
       const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       const dispatch = yield* application.interruptThread(threadId);
       if (resolvedFormat === "json") {
-        return yield* output.printJson({ threadId, dispatch });
+        return yield* output.printJson({
+          threadId,
+          interrupted: dispatch !== undefined,
+          dispatch: dispatch ?? null,
+        });
+      }
+      if (dispatch === undefined) {
+        return yield* output.printInfo(`thread has no running run: ${threadId}`);
       }
       return yield* output.printInfo(
         `thread interrupted: ${threadId} (sequence ${dispatch.sequence})`,
       );
     }),
-).pipe(Command.withDescription("interrupt running thread turn"));
+).pipe(Command.withDescription("interrupt the thread's running run"));

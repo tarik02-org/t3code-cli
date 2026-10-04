@@ -21,8 +21,8 @@ export function createModelCommand() {
 const listCommand = Command.make(
   "list",
   {
-    all: Flag.boolean("all"),
-    provider: Flag.string("provider").pipe(Flag.optional),
+    all: Flag.Boolean("all").pipe(Flag.withDefault(false)),
+    provider: Flag.String("provider").pipe(Flag.optional),
     format: formatFlag,
     ...extraArgsConfig,
   },

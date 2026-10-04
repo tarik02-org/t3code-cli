@@ -6,7 +6,7 @@ import {
   MAX_SCRIPT_ID_LENGTH,
   SCRIPT_RUN_COMMAND_PATTERN,
   type OrchestrationProjectShell,
-  type OrchestrationShellSnapshot,
+  type OrchestrationV2ShellSnapshot,
   type ProjectScript,
 } from "@t3tools/contracts";
 
@@ -18,8 +18,7 @@ import {
 } from "../domain/error.ts";
 import { findProjectById, resolveProjectScope } from "../domain/helpers.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
-import { makeProjectMetaUpdateCommand } from "./project-commands.ts";
-import { waitForShellSequence } from "./shell-sequence.ts";
+import { makeProjectScriptsUpdateMutation } from "./project-commands.ts";
 import {
   T3TerminalApplication,
   type AddProjectActionInput,
@@ -40,7 +39,7 @@ export const makeActionApplication = Effect.fn("makeActionApplication")(function
   const path = yield* Path.Path;
 
   const resolveProject = Effect.fn("T3ActionApplication.resolveProject")(function* (
-    snapshot: OrchestrationShellSnapshot,
+    snapshot: OrchestrationV2ShellSnapshot,
     projectRef: string,
   ) {
     const scope = yield* resolveProjectScope(snapshot, { ref: projectRef }).pipe(
@@ -57,28 +56,15 @@ export const makeActionApplication = Effect.fn("makeActionApplication")(function
     return scope.project;
   });
 
-  const dispatchScriptsUpdate = Effect.fn("T3ActionApplication.dispatchScriptsUpdate")(function* (
+  const updateScripts = Effect.fn("T3ActionApplication.updateScripts")(function* (
     projectId: string,
     scripts: ReadonlyArray<ProjectScript>,
   ) {
-    const command = yield* makeProjectMetaUpdateCommand({
-      projectId,
-      scripts: [...scripts],
-    }).pipe(Effect.provideService(Crypto.Crypto, crypto));
-    const dispatch = yield* orchestration.dispatch(command);
-    const snapshot = yield* waitForShellSequence({ sequence: dispatch.sequence }).pipe(
-      Effect.provideService(T3Orchestration, orchestration),
+    const mutation = yield* makeProjectScriptsUpdateMutation({ projectId, scripts }).pipe(
+      Effect.provideService(Crypto.Crypto, crypto),
     );
-    const project = findProjectById(snapshot, projectId);
-    if (project === null) {
-      return yield* Effect.fail(
-        new ProjectLookupError({
-          message: `project not found after action update: ${projectId}`,
-          ref: projectId,
-        }),
-      );
-    }
-    return { dispatch, project };
+    const project = yield* orchestration.mutateProject(mutation);
+    return { project };
   });
 
   const listActions: T3ActionApplicationService["listActions"] = Effect.fn(
@@ -121,7 +107,7 @@ export const makeActionApplication = Effect.fn("makeActionApplication")(function
       [...project.scripts, action],
       action.runOnWorktreeCreate ? action.id : null,
     );
-    const result = yield* dispatchScriptsUpdate(project.id, nextScripts);
+    const result = yield* updateScripts(project.id, nextScripts);
     const persisted = yield* resolveActionBySelectorEffect(
       result.project.scripts,
       { id: action.id },
@@ -145,7 +131,7 @@ export const makeActionApplication = Effect.fn("makeActionApplication")(function
       project.scripts.map((script) => (script.id === existing.id ? updated : script)),
       updated.runOnWorktreeCreate ? updated.id : null,
     );
-    const result = yield* dispatchScriptsUpdate(project.id, nextScripts);
+    const result = yield* updateScripts(project.id, nextScripts);
     const persisted = yield* resolveActionBySelectorEffect(
       result.project.scripts,
       { id: existing.id },
@@ -165,7 +151,7 @@ export const makeActionApplication = Effect.fn("makeActionApplication")(function
       project.id,
     );
     const nextScripts = project.scripts.filter((script) => script.id !== action.id);
-    const result = yield* dispatchScriptsUpdate(project.id, nextScripts);
+    const result = yield* updateScripts(project.id, nextScripts);
     return { ...result, action };
   });
 

@@ -7,7 +7,7 @@ const ConfigErrorCauseSchema = Schema.Union([
   Schema.Defect(),
 ]);
 
-export class ConfigError extends Schema.TaggedErrorClass<ConfigError>()("ConfigError", {
+export class ConfigError extends Schema.TaggedError<ConfigError>()("ConfigError", {
   message: Schema.String,
   cause: Schema.optionalKey(ConfigErrorCauseSchema),
 }) {}

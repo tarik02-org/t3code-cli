@@ -1,3 +1,4 @@
+import type { MessageAuthor } from "../../application/service.ts";
 import type { T3CliEnvScope } from "../../config/env/env.ts";
 
 export function resolveProjectRef(input: {
@@ -61,4 +62,19 @@ export function resolveThreadId(input: {
     return fromEnv;
   }
   return undefined;
+}
+
+/** Messages default to the calling agent; a message to its own thread names no sender. */
+export function resolveMessageAuthor(input: {
+  readonly asUser: boolean;
+  readonly scope: T3CliEnvScope;
+  readonly targetThreadId: string;
+}): MessageAuthor {
+  if (input.asUser) {
+    return { kind: "user" };
+  }
+  const sender = input.scope.t3codeThreadId;
+  return sender !== undefined && sender.length > 0 && sender !== input.targetThreadId
+    ? { kind: "agent", senderThreadId: sender }
+    : { kind: "agent" };
 }

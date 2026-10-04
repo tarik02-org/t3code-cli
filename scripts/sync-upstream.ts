@@ -28,12 +28,15 @@ const PackageJson = Schema.StructWithRest(
   }),
   [Schema.Record(Schema.String, Schema.Json)],
 );
-const decodePackageJson = Schema.decodeEffect(Schema.fromJsonString(PackageJson), {
-  propertyOrder: "original",
-});
+// Struct decoding reorders keys, so the manifest is rewritten from the raw object and the
+// schema only validates it.
+const decodePackageJsonSource = Schema.decodeEffect(
+  Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
+);
+const decodePackageJson = Schema.decodeUnknownEffect(PackageJson);
 const decodeWorkspaceConfig = Schema.decodeUnknownEffect(WorkspaceConfig);
 
-export class SyncUpstreamError extends Schema.TaggedErrorClass<SyncUpstreamError>()(
+export class SyncUpstreamError extends Schema.TaggedError<SyncUpstreamError>()(
   "SyncUpstreamError",
   {
     message: Schema.String,
@@ -320,7 +323,10 @@ const synchronizeConfig = Effect.fn("synchronizeConfig")(function* (
   const packageJsonSource = yield* fs
     .readFileString(packageJsonPath)
     .pipe(Effect.mapError(syncError(`failed to read '${packageJsonPath}'`)));
-  const packageJson = yield* decodePackageJson(packageJsonSource).pipe(
+  const rawPackageJson = yield* decodePackageJsonSource(packageJsonSource).pipe(
+    Effect.mapError(syncError(`invalid package manifest in '${packageJsonPath}'`)),
+  );
+  const packageJson = yield* decodePackageJson(rawPackageJson).pipe(
     Effect.mapError(syncError(`invalid package manifest in '${packageJsonPath}'`)),
   );
   const rootWorkspace = yield* readWorkspaceConfig(workspacePath);
@@ -381,7 +387,7 @@ const synchronizeConfig = Effect.fn("synchronizeConfig")(function* (
 
   const nextPackageJsonSource = `${JSON.stringify(
     {
-      ...packageJson,
+      ...rawPackageJson,
       dependencies: nextDependencies,
       devDependencies: nextDevDependencies,
     },
@@ -440,7 +446,7 @@ const syncUpstream = Effect.fn("syncUpstream")(function* (target: string | undef
 const syncUpstreamCommand = Command.make(
   "sync-upstream",
   {
-    target: Flag.string("target").pipe(
+    target: Flag.String("target").pipe(
       Flag.withDescription("T3 Code target: stable, nightly, main, a version, ref, or commit."),
       Flag.optional,
     ),

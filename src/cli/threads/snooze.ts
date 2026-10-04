@@ -34,8 +34,8 @@ export const snoozeThreadCommand = Command.make(
   "snooze",
   {
     thread: threadFlag,
-    until: Flag.string("until").pipe(Flag.optional),
-    preset: Flag.choice("preset", snoozePresetChoices).pipe(Flag.optional),
+    until: Flag.String("until").pipe(Flag.optional),
+    preset: Flag.Literals("preset", snoozePresetChoices).pipe(Flag.optional),
     format: formatFlag,
     ...extraArgsConfig,
   },

@@ -3,29 +3,45 @@ import * as Option from "effect/Option";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 
 import { extraArgsConfig } from "../extra-args.ts";
-import { modelFlags, selfActionForceFlag, threadFlag, threadFormatFlag } from "../flags.ts";
+import {
+  asUserFlag,
+  modelFlags,
+  selfActionForceFlag,
+  threadFlag,
+  threadFormatFlag,
+} from "../flags.ts";
 import { readInitialMessage } from "../message-input.ts";
 import { buildModelOptions } from "../model-options.ts";
 import { MissingThreadError } from "../error.ts";
 import { requireSelfActionConfirmation } from "../interaction/self-action.ts";
-import { resolveThreadId } from "../scope/index.ts";
+import { resolveMessageAuthor, resolveThreadId } from "../scope/index.ts";
 import { T3Application } from "../../application/service.ts";
 import { CliRuntime } from "../../cli/runtime/service.ts";
 import { loadT3CliEnv } from "../../config/env/env.ts";
 import { T3Input } from "../input/service.ts";
 import { canRenderLiveTerminal, resolveOutputFormat } from "../format/output.ts";
 import { T3Output } from "../output/service.ts";
+import { formatThreadResultJson } from "../format/thread.ts";
 import { printWaitEventsHuman, printWaitEventsNdjson } from "../wait-events.ts";
+
+const sendModeChoices = ["auto", "queue", "steer", "restart"] as const;
 
 export const sendThreadCommand = Command.make(
   "send",
   {
     thread: threadFlag,
     force: selfActionForceFlag,
-    message: Argument.string("message").pipe(Argument.optional),
-    stdin: Flag.boolean("stdin"),
+    message: Argument.String("message").pipe(Argument.optional),
+    stdin: Flag.Boolean("stdin").pipe(Flag.withDefault(false)),
     ...modelFlags,
-    wait: Flag.boolean("wait"),
+    mode: Flag.Literals("mode", sendModeChoices).pipe(
+      Flag.withDescription(
+        "Delivery while a run is active: queue behind it, steer it, restart it, or let the server pick (auto)",
+      ),
+      Flag.withDefault("auto"),
+    ),
+    asUser: asUserFlag,
+    wait: Flag.Boolean("wait").pipe(Flag.withDefault(false)),
     format: threadFormatFlag,
     ...extraArgsConfig,
   },
@@ -39,6 +55,8 @@ export const sendThreadCommand = Command.make(
     effort,
     fastMode,
     thinking,
+    mode,
+    asUser,
     wait,
     format,
   }) =>
@@ -81,6 +99,8 @@ export const sendThreadCommand = Command.make(
       const input = {
         message: text,
         threadId,
+        mode,
+        author: resolveMessageAuthor({ asUser, scope: t3CliEnv.scope, targetThreadId: threadId }),
         ...(options.length > 0 ? { options } : {}),
       };
       const resolvedFormat = resolveOutputFormat(
@@ -102,11 +122,12 @@ export const sendThreadCommand = Command.make(
       if (wait) {
         const sent = yield* application.sendThread(input, { until: "dispatch" });
         if (resolvedFormat === "json") {
-          const finalThread = yield* application.waitForThread(sent.threadId);
+          const projection = yield* application.waitForThread(sent.threadId);
           return yield* output.printJson({
             dispatch: sent.dispatch,
             threadId: sent.threadId,
-            thread: finalThread,
+            messageId: sent.messageId,
+            ...formatThreadResultJson(projection),
           });
         }
         yield* printWaitEventsHuman(output, application.watchThread(sent.threadId), {
@@ -121,7 +142,8 @@ export const sendThreadCommand = Command.make(
         return yield* output.printJson({
           dispatch: result.dispatch,
           threadId: result.threadId,
-          thread: result.thread,
+          messageId: result.messageId,
+          ...formatThreadResultJson(result.projection!),
         });
       }
       return yield* output.printInfo(`message sent: ${result.threadId}`);

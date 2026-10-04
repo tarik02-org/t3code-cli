@@ -18,11 +18,11 @@ export const readTerminalCommand = Command.make(
   "read",
   {
     thread: threadFlag,
-    terminalId: Argument.string("terminal-id"),
-    history: Flag.boolean("history"),
-    follow: Flag.boolean("follow"),
-    fromSequence: Flag.integer("from-sequence").pipe(Flag.optional),
-    format: Flag.choice("format", jsonNdjsonFormatChoices).pipe(Flag.withDefault("json")),
+    terminalId: Argument.String("terminal-id"),
+    history: Flag.Boolean("history").pipe(Flag.withDefault(false)),
+    follow: Flag.Boolean("follow").pipe(Flag.withDefault(false)),
+    fromSequence: Flag.Int("from-sequence").pipe(Flag.optional),
+    format: Flag.Literals("format", jsonNdjsonFormatChoices).pipe(Flag.withDefault("json")),
     ...extraArgsConfig,
   },
   ({ thread, terminalId, history, follow, fromSequence, format }) =>

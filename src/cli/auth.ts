@@ -61,8 +61,8 @@ export function createAuthCommand() {
 const pairCommand = Command.make(
   "pair",
   {
-    url: Flag.string("url"),
-    local: Flag.boolean("local"),
+    url: Flag.String("url"),
+    local: Flag.Boolean("local").pipe(Flag.withDefault(false)),
     name: envNameFlag,
     replace: replaceFlag,
     format: formatFlag,
@@ -103,11 +103,11 @@ const pairCommand = Command.make(
 const localCommand = Command.make(
   "local",
   {
-    baseDir: Flag.string("base-dir").pipe(Flag.optional),
-    origin: Flag.string("origin").pipe(Flag.optional),
-    role: Flag.choice("role", ["owner", "client"] as const).pipe(Flag.withDefault("owner")),
-    label: Flag.string("label").pipe(Flag.withDefault("t3cli")),
-    subject: Flag.string("subject").pipe(Flag.withDefault("t3cli-local")),
+    baseDir: Flag.String("base-dir").pipe(Flag.optional),
+    origin: Flag.String("origin").pipe(Flag.optional),
+    role: Flag.Literals("role", ["owner", "client"] as const).pipe(Flag.withDefault("owner")),
+    label: Flag.String("label").pipe(Flag.withDefault("t3cli")),
+    subject: Flag.String("subject").pipe(Flag.withDefault("t3cli-local")),
     name: envNameFlag,
     replace: replaceFlag,
     format: formatFlag,

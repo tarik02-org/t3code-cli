@@ -1,10 +1,10 @@
 import {
   RemoteEnvironmentAuthFetchError,
-  type RemoteEnvironmentAuthError,
   RemoteEnvironmentAuthInvalidJsonError,
   RemoteEnvironmentAuthTimeoutError,
   RemoteEnvironmentAuthUndeclaredStatusError,
-} from "@t3tools/client-runtime/authorization";
+  type RemoteEnvironmentRequestError,
+} from "@t3tools/client-runtime/rpc";
 import { EnvironmentHttpCommonError } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
@@ -14,4 +14,4 @@ export const RemoteEnvironmentAuthErrorSchema = Schema.Union([
   Schema.instanceOf(RemoteEnvironmentAuthInvalidJsonError),
   Schema.instanceOf(RemoteEnvironmentAuthTimeoutError),
   Schema.instanceOf(RemoteEnvironmentAuthUndeclaredStatusError),
-]) satisfies Schema.Schema<RemoteEnvironmentAuthError>;
+]) satisfies Schema.Schema<RemoteEnvironmentRequestError>;

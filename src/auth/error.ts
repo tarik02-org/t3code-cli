@@ -6,7 +6,7 @@ import { ConfigError } from "../config/error.ts";
 import { UrlError } from "../config/url/error.ts";
 import { RemoteEnvironmentAuthErrorSchema } from "./remote-error.ts";
 
-export class AuthPairingUrlError extends Schema.TaggedErrorClass<AuthPairingUrlError>()(
+export class AuthPairingUrlError extends Schema.TaggedError<AuthPairingUrlError>()(
   "AuthPairingUrlError",
   {
     message: Schema.String,
@@ -14,12 +14,12 @@ export class AuthPairingUrlError extends Schema.TaggedErrorClass<AuthPairingUrlE
   },
 ) {}
 
-export class AuthConfigError extends Schema.TaggedErrorClass<AuthConfigError>()("AuthConfigError", {
+export class AuthConfigError extends Schema.TaggedError<AuthConfigError>()("AuthConfigError", {
   message: Schema.String,
   cause: Schema.optionalKey(Schema.Union([ConfigError, UrlError])),
 }) {}
 
-export class AuthTransportError extends Schema.TaggedErrorClass<AuthTransportError>()(
+export class AuthTransportError extends Schema.TaggedError<AuthTransportError>()(
   "AuthTransportError",
   {
     message: Schema.String,
@@ -33,7 +33,7 @@ const AuthLocalErrorCauseSchema = Schema.Union([
   UrlError,
 ]);
 
-export class AuthLocalSecretError extends Schema.TaggedErrorClass<AuthLocalSecretError>()(
+export class AuthLocalSecretError extends Schema.TaggedError<AuthLocalSecretError>()(
   "AuthLocalSecretError",
   {
     message: Schema.String,
@@ -41,7 +41,7 @@ export class AuthLocalSecretError extends Schema.TaggedErrorClass<AuthLocalSecre
   },
 ) {}
 
-export class AuthLocalDatabaseError extends Schema.TaggedErrorClass<AuthLocalDatabaseError>()(
+export class AuthLocalDatabaseError extends Schema.TaggedError<AuthLocalDatabaseError>()(
   "AuthLocalDatabaseError",
   {
     operation: Schema.Literals(["connect", "query", "schema"]),
@@ -49,7 +49,7 @@ export class AuthLocalDatabaseError extends Schema.TaggedErrorClass<AuthLocalDat
   },
 ) {}
 
-export class AuthLocalSigningError extends Schema.TaggedErrorClass<AuthLocalSigningError>()(
+export class AuthLocalSigningError extends Schema.TaggedError<AuthLocalSigningError>()(
   "AuthLocalSigningError",
   {
     operation: Schema.Literals(["sign"]),
@@ -58,7 +58,7 @@ export class AuthLocalSigningError extends Schema.TaggedErrorClass<AuthLocalSign
   },
 ) {}
 
-export class AuthLocalError extends Schema.TaggedErrorClass<AuthLocalError>()("AuthLocalError", {
+export class AuthLocalError extends Schema.TaggedError<AuthLocalError>()("AuthLocalError", {
   message: Schema.String,
   cause: Schema.optionalKey(
     Schema.Union([

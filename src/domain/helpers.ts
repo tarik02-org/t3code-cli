@@ -1,6 +1,9 @@
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
-import type { OrchestrationProjectShell, OrchestrationShellSnapshot } from "@t3tools/contracts";
+import type { OrchestrationProjectShell, OrchestrationV2ShellSnapshot } from "@t3tools/contracts";
+
+/** Active and archived shell snapshots both carry the projects and threads scope resolution reads. */
+export type ShellScope = Pick<OrchestrationV2ShellSnapshot, "projects" | "threads">;
 
 export type ResolvedProjectScope = {
   readonly project: OrchestrationProjectShell;
@@ -8,7 +11,7 @@ export type ResolvedProjectScope = {
 };
 
 export const resolveProjectScope = Effect.fn("resolveProjectScope")(function* (
-  snapshot: OrchestrationShellSnapshot,
+  snapshot: ShellScope,
   input: {
     readonly ref: string;
   },
@@ -28,7 +31,7 @@ export const resolveProjectScope = Effect.fn("resolveProjectScope")(function* (
 });
 
 export function findProjectById(
-  snapshot: OrchestrationShellSnapshot,
+  snapshot: ShellScope,
   projectId: string,
 ): OrchestrationProjectShell | null {
   return snapshot.projects.find((project) => project.id === projectId) ?? null;
@@ -44,7 +47,7 @@ const isDescendantPath = Effect.fn("isDescendantPath")(function* (parent: string
 });
 
 const findProjectByPathPriority = Effect.fn("findProjectByPathPriority")(function* (
-  snapshot: OrchestrationShellSnapshot,
+  snapshot: ShellScope,
   absolutePath: string,
 ) {
   const path = yield* Path.Path;

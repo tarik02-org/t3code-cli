@@ -5,14 +5,13 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Stream from "effect/Stream";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { fromPartial } from "@total-typescript/shoehorn";
 import type {
-  ClientOrchestrationCommand,
   OrchestrationProjectShell,
-  OrchestrationShellSnapshot,
+  OrchestrationV2ShellSnapshot,
+  ProjectMutation,
   ProjectScript,
 } from "@t3tools/contracts";
 
@@ -30,7 +29,7 @@ function makeProject(scripts: ReadonlyArray<ProjectScript>): OrchestrationProjec
   });
 }
 
-function makeSnapshot(project: OrchestrationProjectShell): OrchestrationShellSnapshot {
+function makeSnapshot(project: OrchestrationProjectShell): OrchestrationV2ShellSnapshot {
   return fromPartial({
     projects: [project],
     threads: [
@@ -56,7 +55,7 @@ function makeAction(overrides: Partial<ProjectScript>): ProjectScript {
 
 function makeTestLayer(input: {
   readonly project: OrchestrationProjectShell;
-  readonly onDispatch?: (command: ClientOrchestrationCommand) => void;
+  readonly onMutate?: (mutation: ProjectMutation) => void;
   readonly onCreateTerminal?: (input: CreateTerminalInput) => void;
 }) {
   let project = input.project;
@@ -64,13 +63,12 @@ function makeTestLayer(input: {
     T3Orchestration,
     fromPartial<Orchestration>({
       getShellSnapshot: () => Effect.succeed(makeSnapshot(project)),
-      watchShellSequence: () => Stream.make(42),
-      dispatch: (command: ClientOrchestrationCommand) => {
-        input.onDispatch?.(command);
-        if (command.type === "project.meta.update" && command.scripts !== undefined) {
-          project = { ...project, scripts: command.scripts };
+      mutateProject: (mutation: ProjectMutation) => {
+        input.onMutate?.(mutation);
+        if (mutation.type === "project.update" && mutation.scripts !== undefined) {
+          project = { ...project, scripts: mutation.scripts };
         }
-        return Effect.succeed({ sequence: 42 });
+        return Effect.succeed(fromPartial({ ...project, deletedAt: null }));
       },
     }),
   );
@@ -103,7 +101,7 @@ describe("project actions", () => {
   it.layer(NodeServices.layer)("makeActionApplication", (t) => {
     t.effect("adds an action and clears existing setup actions", () =>
       Effect.gen(function* () {
-        let dispatched: ClientOrchestrationCommand | undefined;
+        let dispatched: ProjectMutation | undefined;
         const app = yield* makeActionApplication().pipe(
           Effect.provide(
             makeTestLayer({
@@ -116,8 +114,8 @@ describe("project actions", () => {
                   runOnWorktreeCreate: true,
                 }),
               ]),
-              onDispatch: (command) => {
-                dispatched = command;
+              onMutate: (mutation) => {
+                dispatched = mutation;
               },
             }),
           ),
@@ -136,8 +134,8 @@ describe("project actions", () => {
         assert.equal(result.action.id, "run-tests");
         assert.equal(result.action.previewUrl, "http://localhost:5173");
         assert.equal(result.action.autoOpenPreview, true);
-        assert.equal(dispatched?.type, "project.meta.update");
-        if (dispatched?.type === "project.meta.update") {
+        assert.equal(dispatched?.type, "project.update");
+        if (dispatched?.type === "project.update") {
           assert.isDefined(dispatched.scripts);
           assert.deepEqual(
             dispatched.scripts.map((script) => [script.id, script.runOnWorktreeCreate]),
@@ -152,7 +150,7 @@ describe("project actions", () => {
 
     t.effect("adds a non-setup action without changing the existing setup action", () =>
       Effect.gen(function* () {
-        let dispatched: ClientOrchestrationCommand | undefined;
+        let dispatched: ProjectMutation | undefined;
         const app = yield* makeActionApplication().pipe(
           Effect.provide(
             makeTestLayer({
@@ -165,8 +163,8 @@ describe("project actions", () => {
                   runOnWorktreeCreate: true,
                 }),
               ]),
-              onDispatch: (command) => {
-                dispatched = command;
+              onMutate: (mutation) => {
+                dispatched = mutation;
               },
             }),
           ),
@@ -180,8 +178,8 @@ describe("project actions", () => {
         });
 
         assert.equal(result.action.runOnWorktreeCreate, false);
-        assert.equal(dispatched?.type, "project.meta.update");
-        if (dispatched?.type === "project.meta.update") {
+        assert.equal(dispatched?.type, "project.update");
+        if (dispatched?.type === "project.update") {
           assert.isDefined(dispatched.scripts);
           assert.deepEqual(
             dispatched.scripts.map((script) => [script.id, script.runOnWorktreeCreate]),

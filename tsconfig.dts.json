@@ -30,9 +30,8 @@
     "src/rpc/index.ts",
     "src/runtime/index.ts",
     "src/t3tools/index.ts",
-    "upstream-t3code/packages/client-runtime/src/*/index.ts",
-    "upstream-t3code/packages/client-runtime/src/operations/projects.ts",
-    "upstream-t3code/packages/client-runtime/src/state/*.ts",
-    "upstream-t3code/packages/shared/src/*.ts"
-  ]
+    "upstream-t3code/packages/client-runtime/src/**/*.ts",
+    "upstream-t3code/packages/shared/src/**/*.ts"
+  ],
+  "exclude": ["upstream-t3code/**/*.test.ts", "upstream-t3code/**/*.bench.ts"]
 }

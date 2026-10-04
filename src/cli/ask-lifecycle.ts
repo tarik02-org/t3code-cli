@@ -2,15 +2,15 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import type {
-  OrchestrationMessage,
-  OrchestrationThread,
-  OrchestrationThreadShell,
+  OrchestrationV2ThreadProjection,
+  OrchestrationV2ThreadShell,
 } from "@t3tools/contracts";
+import { derivePendingThreadRequests } from "@t3tools/client-runtime/state/thread-requests";
 
 import type { T3ApplicationService } from "../application/service.ts";
 import type { T3CliEnvShape } from "../config/env/env.ts";
 import { ThreadSessionError } from "../domain/error.ts";
-import { derivePendingApprovals, derivePendingUserInputs } from "../domain/thread-activities.ts";
+import { isRunTerminal, runForUserMessage, threadLastError } from "../domain/thread-lifecycle.ts";
 import { AskThreadArchivedError, AskThreadPendingRequestError } from "./error.ts";
 import { formatWaitEventNdjson } from "./format/thread.ts";
 import { isInteractiveHumanTerminal } from "./format/output.ts";
@@ -43,7 +43,7 @@ export interface AskExecutionState {
   threadId: string | undefined;
   createdThread: boolean;
   dispatched: boolean;
-  askTurnId: string | null;
+  askRunId: string | null;
   archiveResult: AskArchiveResult | undefined;
 }
 
@@ -58,7 +58,7 @@ export function resolveAskFormat(
   return isInteractiveHumanTerminal(cliRuntime, t3CliEnv) ? "human" : "json";
 }
 
-export function ensureAskTargetAvailable(thread: OrchestrationThreadShell) {
+export function ensureAskTargetAvailable(thread: OrchestrationV2ThreadShell) {
   if (thread.archivedAt !== null) {
     return Effect.fail(
       new AskThreadArchivedError({
@@ -67,7 +67,7 @@ export function ensureAskTargetAvailable(thread: OrchestrationThreadShell) {
       }),
     );
   }
-  if (thread.hasPendingApprovals || thread.hasPendingUserInput) {
+  if (thread.pendingRuntimeRequest !== null) {
     return Effect.fail(
       new AskThreadPendingRequestError({
         message: `thread has a pending approval or user-input request: ${thread.id}`,
@@ -89,10 +89,10 @@ export function waitForAskThread(
   },
 ) {
   let lastStatus = "";
-  let turnComplete = false;
-  const observeAskThread = (thread: OrchestrationThread) => {
-    const observation = inspectAskTurn(thread, input.messageId, input.state.askTurnId);
-    input.state.askTurnId = observation.turnId;
+  let runComplete = false;
+  const observeAskThread = (projection: OrchestrationV2ThreadProjection) => {
+    const observation = inspectAskRun(projection, input.messageId);
+    input.state.askRunId = observation.runId;
     if (observation.status === "failed") {
       return Effect.fail(
         new ThreadSessionError({
@@ -101,8 +101,16 @@ export function waitForAskThread(
         }),
       );
     }
-    turnComplete = observation.status === "complete";
-    return Effect.void;
+    runComplete = observation.status === "complete";
+    if (runComplete) {
+      return Effect.void;
+    }
+    const requests = derivePendingThreadRequests(projection);
+    return ensureNoPendingRequest({
+      id: input.threadId,
+      hasPendingApprovals: requests.approvals.length > 0,
+      hasPendingUserInput: requests.userInputs.length > 0,
+    });
   };
   return Effect.gen(function* () {
     if (input.format === "human") {
@@ -111,19 +119,8 @@ export function waitForAskThread(
     const last = yield* application.watchThread(input.threadId).pipe(
       Stream.tap((event) =>
         Effect.gen(function* () {
-          if (event.type === "thread" || event.type === "done") {
-            yield* observeAskThread(event.thread);
-          } else if (event.type === "status") {
-            const thread = (yield* application.getThreadMessages({ threadId: input.threadId }))
-              .thread;
-            yield* observeAskThread(thread);
-            if (!turnComplete) {
-              yield* ensureNoPendingRequest({
-                id: thread.id,
-                hasPendingApprovals: derivePendingApprovals(thread.activities).length > 0,
-                hasPendingUserInput: derivePendingUserInputs(thread.activities).length > 0,
-              });
-            }
+          if (event.type !== "message") {
+            yield* observeAskThread(event.projection);
           }
           if (input.format === "ndjson") {
             yield* output.printNdjson(formatWaitEventNdjson(event));
@@ -135,11 +132,11 @@ export function waitForAskThread(
           }
         }),
       ),
-      Stream.takeUntil((event) => turnComplete || event.type === "done"),
+      Stream.takeUntil((event) => runComplete || event.type === "done"),
       Stream.runLast,
     );
     const event = Option.getOrUndefined(last);
-    if (!turnComplete && event?.type !== "done") {
+    if (!runComplete && event?.type !== "done") {
       return yield* Effect.fail(
         new ThreadSessionError({
           message: `thread wait ended without a terminal event: ${input.threadId}`,
@@ -151,84 +148,30 @@ export function waitForAskThread(
   });
 }
 
-export function selectAskAnswer(
-  thread: OrchestrationThread,
+type AskRunObservation =
+  | { readonly status: "waiting"; readonly runId: string | null }
+  | { readonly status: "complete"; readonly runId: string }
+  | { readonly status: "failed"; readonly runId: string; readonly message: string };
+
+/** Follows the run the server created for the ask message. */
+export function inspectAskRun(
+  projection: OrchestrationV2ThreadProjection,
   messageId: string,
-  turnId: string | null,
-): OrchestrationMessage | undefined {
-  const userIndex = thread.messages.findIndex(
-    (message) => message.id === messageId && message.role === "user",
-  );
-  if (userIndex === -1) {
-    return undefined;
+): AskRunObservation {
+  const run = runForUserMessage(projection, messageId);
+  if (run === undefined) {
+    return { status: "waiting", runId: null };
   }
-  const following = thread.messages.slice(userIndex + 1);
-  const nextUserIndex = following.findIndex((message) => message.role === "user");
-  const askMessages = nextUserIndex === -1 ? following : following.slice(0, nextUserIndex);
-  const candidates = askMessages.filter(
-    (message) =>
-      message.role === "assistant" &&
-      !message.streaming &&
-      message.text.trim().length > 0 &&
-      (turnId === null || message.turnId === turnId),
-  );
-  return candidates.at(-1);
-}
-
-type AskTurnObservation =
-  | { readonly status: "waiting"; readonly turnId: string | null }
-  | { readonly status: "complete"; readonly turnId: string | null }
-  | { readonly status: "failed"; readonly turnId: string; readonly message: string };
-
-export function inspectAskTurn(
-  thread: OrchestrationThread,
-  messageId: string,
-  knownTurnId: string | null,
-): AskTurnObservation {
-  const userIndex = thread.messages.findIndex(
-    (message) => message.id === messageId && message.role === "user",
-  );
-  const userMessage = userIndex === -1 ? undefined : thread.messages[userIndex];
-  if (userMessage === undefined) {
-    return { status: "waiting", turnId: knownTurnId };
-  }
-
-  const following = thread.messages.slice(userIndex + 1);
-  const nextUserIndex = following.findIndex((message) => message.role === "user");
-  const askMessages = nextUserIndex === -1 ? following : following.slice(0, nextUserIndex);
-  const messageTurnId =
-    askMessages.findLast((message) => message.role === "assistant" && message.turnId !== null)
-      ?.turnId ?? null;
-  const latestTurn = thread.latestTurn;
-  const requestedTurnId =
-    latestTurn?.requestedAt === userMessage.createdAt ? latestTurn.turnId : null;
-  const turnId =
-    knownTurnId ?? requestedTurnId ?? messageTurnId ?? thread.session?.activeTurnId ?? null;
-
-  if (turnId === null) {
-    return {
-      status: nextUserIndex === -1 ? "waiting" : "complete",
-      turnId,
-    };
-  }
-
-  const askIsLatest = latestTurn?.turnId === turnId;
-  if (askIsLatest && (latestTurn.state === "error" || thread.session?.status === "error")) {
+  if (run.status === "failed") {
     return {
       status: "failed",
-      turnId,
-      message: thread.session?.lastError ?? "thread ended with error",
+      runId: run.id,
+      message: threadLastError(projection) ?? "thread ended with error",
     };
   }
-
-  const sessionRunning =
-    thread.session?.status === "starting" || thread.session?.status === "running";
-  const complete =
-    nextUserIndex !== -1 ||
-    (askIsLatest &&
-      (latestTurn.state !== "running" ||
-        (thread.session?.activeTurnId !== turnId && !sessionRunning)));
-  return { status: complete ? "complete" : "waiting", turnId };
+  return isRunTerminal(run)
+    ? { status: "complete", runId: run.id }
+    : { status: "waiting", runId: run.id };
 }
 
 export function finalizeArchive(
@@ -295,8 +238,8 @@ export function cleanupInterruptedAsk(
   }
   const threadId = state.threadId;
   return Effect.gen(function* () {
-    if (state.dispatched && state.askTurnId !== null) {
-      yield* application.interruptThreadTurn(threadId, state.askTurnId).pipe(
+    if (state.dispatched && state.askRunId !== null) {
+      yield* application.interruptThreadRun(threadId, state.askRunId).pipe(
         Effect.matchEffect({
           onFailure: (error) =>
             output

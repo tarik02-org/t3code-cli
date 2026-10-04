@@ -57,7 +57,7 @@ export function printWaitEventsHuman(
     yield* events.pipe(
       Stream.tap((event) => {
         if (event.type === "thread") {
-          const message = latestAssistantMessage(event.thread);
+          const message = latestAssistantMessage(event.projection);
           if (message !== undefined) {
             latest = compactLine(message.text);
           }
@@ -77,7 +77,7 @@ export function printWaitEventsHuman(
           if (rendered) {
             yield* output.writeStderr("\r\x1b[2K");
           }
-          yield* output.writeStdout(formatWaitDoneHuman(event.thread));
+          yield* output.writeStdout(formatWaitDoneHuman(event.projection));
         });
       }),
       Stream.runLast,

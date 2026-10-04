@@ -49,8 +49,8 @@ export const waitTerminalCommand = Command.make(
   "wait",
   {
     thread: threadFlag,
-    terminalId: Argument.string("terminal-id"),
-    target: Flag.choice("for", terminalWaitTargetChoices).pipe(Flag.withDefault("exited")),
+    terminalId: Argument.String("terminal-id"),
+    target: Flag.Literals("for", terminalWaitTargetChoices).pipe(Flag.withDefault("exited")),
     format: formatFlag,
     ...extraArgsConfig,
   },

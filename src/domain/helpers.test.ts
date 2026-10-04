@@ -5,7 +5,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { fromPartial } from "@total-typescript/shoehorn";
 
-import type { OrchestrationShellSnapshot } from "@t3tools/contracts";
+import type { OrchestrationV2ShellSnapshot } from "@t3tools/contracts";
 
 import { resolveProjectScope } from "./helpers.ts";
 
@@ -13,7 +13,7 @@ describe("resolveProjectScope", () => {
   it.layer(NodeServices.layer)("resolveProjectScope", (t) => {
     t.effect("resolves by id first (even if ref not absolute)", () =>
       Effect.gen(function* () {
-        const snapshot: OrchestrationShellSnapshot = fromPartial({
+        const snapshot: OrchestrationV2ShellSnapshot = fromPartial({
           projects: [{ id: "proj-1", workspaceRoot: "/workspace" }],
           threads: [],
         });
@@ -26,7 +26,7 @@ describe("resolveProjectScope", () => {
 
     t.effect("returns undefined for non-absolute path refs", () =>
       Effect.gen(function* () {
-        const snapshot: OrchestrationShellSnapshot = fromPartial({
+        const snapshot: OrchestrationV2ShellSnapshot = fromPartial({
           projects: [{ id: "proj-1", workspaceRoot: "/workspace" }],
           threads: [],
         });
@@ -38,7 +38,7 @@ describe("resolveProjectScope", () => {
 
     t.effect("prefers longest matching workspaceRoot", () =>
       Effect.gen(function* () {
-        const snapshot: OrchestrationShellSnapshot = fromPartial({
+        const snapshot: OrchestrationV2ShellSnapshot = fromPartial({
           projects: [
             { id: "proj-a", workspaceRoot: "/workspace" },
             { id: "proj-b", workspaceRoot: "/workspace/sub" },
@@ -54,7 +54,7 @@ describe("resolveProjectScope", () => {
 
     t.effect("does not infer worktree when ref equals workspaceRoot", () =>
       Effect.gen(function* () {
-        const snapshot: OrchestrationShellSnapshot = fromPartial({
+        const snapshot: OrchestrationV2ShellSnapshot = fromPartial({
           projects: [
             { id: "proj-a", workspaceRoot: "/workspace" },
             { id: "proj-b", workspaceRoot: "/workspace/sub" },
@@ -70,7 +70,7 @@ describe("resolveProjectScope", () => {
 
     t.effect("prefers worktree candidate over project candidate for same match path", () =>
       Effect.gen(function* () {
-        const snapshot: OrchestrationShellSnapshot = fromPartial({
+        const snapshot: OrchestrationV2ShellSnapshot = fromPartial({
           projects: [
             { id: "proj-a", workspaceRoot: "/workspace" },
             { id: "proj-b", workspaceRoot: "/workspace/proj" },
@@ -86,7 +86,7 @@ describe("resolveProjectScope", () => {
 
     t.effect("prefers longest matching worktree path", () =>
       Effect.gen(function* () {
-        const snapshot: OrchestrationShellSnapshot = fromPartial({
+        const snapshot: OrchestrationV2ShellSnapshot = fromPartial({
           projects: [{ id: "proj-a", workspaceRoot: "/workspace" }],
           threads: [
             { projectId: "proj-a", worktreePath: "/workspace/proj" },

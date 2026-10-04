@@ -17,9 +17,9 @@ export const streamTerminalCommand = Command.make(
   "stream",
   {
     thread: threadFlag,
-    terminalId: Argument.string("terminal-id"),
-    fromSequence: Flag.integer("from-sequence").pipe(Flag.optional),
-    format: Flag.choice("format", ndjsonOnlyFormatChoices).pipe(Flag.withDefault("ndjson")),
+    terminalId: Argument.String("terminal-id"),
+    fromSequence: Flag.Int("from-sequence").pipe(Flag.optional),
+    format: Flag.Literals("format", ndjsonOnlyFormatChoices).pipe(Flag.withDefault("ndjson")),
     ...extraArgsConfig,
   },
   ({ thread, terminalId, fromSequence }) =>

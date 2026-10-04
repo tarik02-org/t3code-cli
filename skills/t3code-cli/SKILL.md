@@ -131,7 +131,8 @@ printf '%s' "$PROMPT" | t3cli start --stdin --format json
 **Lifecycle**
 
 ```sh
-t3cli thread interrupt --thread <id> --format json   # stop running turn
+t3cli thread interrupt --thread <id> --format json   # stop running run
+t3cli thread queue list --thread <id> --format json  # messages waiting behind the running run
 t3cli thread archive --thread <id> --format json
 t3cli thread unarchive --thread <id> --format json
 t3cli thread settle --thread <id> --format json

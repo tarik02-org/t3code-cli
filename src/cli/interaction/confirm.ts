@@ -24,7 +24,7 @@ export const requireDestructiveConfirmation = Effect.fn("requireDestructiveConfi
       );
       return;
     }
-    const confirmed = yield* Prompt.run(Prompt.confirm({ message: input.message, initial: false }));
+    const confirmed = yield* Prompt.run(Prompt.Confirm({ message: input.message, initial: false }));
     if (confirmed) {
       return;
     }
@@ -52,7 +52,7 @@ export const requireEnvironmentReplaceConfirmation = Effect.fn(
     return;
   }
   const confirmed = yield* Prompt.run(
-    Prompt.confirm({
+    Prompt.Confirm({
       message: `Environment '${input.name}' already exists. Replace?`,
       initial: false,
     }),

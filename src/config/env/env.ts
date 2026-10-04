@@ -26,21 +26,21 @@ export type T3CliEnvShape = {
 };
 
 export const T3CliEnvConfig = Config.all({
-  home: Config.string("HOME").pipe(Config.option),
-  xdgConfigHome: Config.string("XDG_CONFIG_HOME").pipe(Config.option),
-  t3cliEnv: Config.string("T3CLI_ENV").pipe(Config.option),
-  t3codeUrl: Config.string("T3CODE_URL").pipe(Config.option),
-  t3codeToken: Config.redacted("T3CODE_TOKEN").pipe(Config.option),
-  t3codeHome: Config.string("T3CODE_HOME").pipe(Config.option),
-  t3codeProjectRoot: Config.string("T3CODE_PROJECT_ROOT").pipe(Config.option),
-  t3codeProjectId: Config.string("T3CODE_PROJECT_ID").pipe(Config.option),
-  t3codeWorktreePath: Config.string("T3CODE_WORKTREE_PATH").pipe(Config.option),
-  t3codeThreadId: Config.string("T3CODE_THREAD_ID").pipe(Config.option),
-  term: Config.string("TERM").pipe(Config.option),
-  ci: Config.string("CI").pipe(Config.option, Config.map(Option.isSome)),
-  codexCi: Config.string("CODEX_CI").pipe(Config.option, Config.map(Option.isSome)),
-  codexThreadId: Config.string("CODEX_THREAD_ID").pipe(Config.option, Config.map(Option.isSome)),
-  t3cliAgent: Config.string("T3CLI_AGENT").pipe(Config.option, Config.map(Option.isSome)),
+  home: Config.String("HOME").pipe(Config.option),
+  xdgConfigHome: Config.String("XDG_CONFIG_HOME").pipe(Config.option),
+  t3cliEnv: Config.String("T3CLI_ENV").pipe(Config.option),
+  t3codeUrl: Config.String("T3CODE_URL").pipe(Config.option),
+  t3codeToken: Config.Redacted("T3CODE_TOKEN").pipe(Config.option),
+  t3codeHome: Config.String("T3CODE_HOME").pipe(Config.option),
+  t3codeProjectRoot: Config.String("T3CODE_PROJECT_ROOT").pipe(Config.option),
+  t3codeProjectId: Config.String("T3CODE_PROJECT_ID").pipe(Config.option),
+  t3codeWorktreePath: Config.String("T3CODE_WORKTREE_PATH").pipe(Config.option),
+  t3codeThreadId: Config.String("T3CODE_THREAD_ID").pipe(Config.option),
+  term: Config.String("TERM").pipe(Config.option),
+  ci: Config.String("CI").pipe(Config.option, Config.map(Option.isSome)),
+  codexCi: Config.String("CODEX_CI").pipe(Config.option, Config.map(Option.isSome)),
+  codexThreadId: Config.String("CODEX_THREAD_ID").pipe(Config.option, Config.map(Option.isSome)),
+  t3cliAgent: Config.String("T3CLI_AGENT").pipe(Config.option, Config.map(Option.isSome)),
 });
 
 function toScope(loaded: {

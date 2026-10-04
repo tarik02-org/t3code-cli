@@ -22,6 +22,8 @@ export type {
   ProjectActionMutationResult,
   ProjectActionRunResult,
   ProjectActionSelector,
+  QueuedRunRef,
+  SendMode,
   SendThreadInput,
   SnoozeThreadInput,
   StartThreadInput,
@@ -32,4 +34,5 @@ export type {
   WaitEvent,
 } from "./service.ts";
 export type { ApplicationError } from "./error.ts";
-export type { ThreadSearchResult } from "./threads.ts";
+export type { QueuedRun } from "./thread-queue.ts";
+export type { ThreadSearchResult, ThreadShow, ThreadTranscript } from "./threads.ts";

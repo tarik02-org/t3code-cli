@@ -1,6 +1,7 @@
 export {
   T3Orchestration,
-  type OpenThread,
+  type ServerConfigForCli,
+  type ThreadState,
   type Orchestration,
   type OrchestrationError,
 } from "./service.ts";

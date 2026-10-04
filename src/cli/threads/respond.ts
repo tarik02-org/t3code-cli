@@ -14,7 +14,7 @@ import { T3Input } from "../input/service.ts";
 import { resolveOutputFormat } from "../format/output.ts";
 import { T3Output } from "../output/service.ts";
 
-const requestFlag = Flag.string("request").pipe(
+const requestFlag = Flag.String("request").pipe(
   Flag.withDescription("Pending user-input request id"),
   Flag.optional,
 );
@@ -24,8 +24,8 @@ export const respondThreadCommand = Command.make(
   {
     thread: threadFlag,
     request: requestFlag,
-    answers: Flag.string("answers").pipe(Flag.optional),
-    stdin: Flag.boolean("stdin"),
+    answers: Flag.String("answers").pipe(Flag.optional),
+    stdin: Flag.Boolean("stdin").pipe(Flag.withDefault(false)),
     format: formatFlag,
     ...extraArgsConfig,
   },

@@ -2,16 +2,15 @@ import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
 import type {
-  DispatchResult,
   ModelSelection,
-  OrchestrationMessage,
   OrchestrationProjectShell,
   OrchestrationSearchThreadsInput,
-  OrchestrationShellSnapshot,
-  OrchestrationThread,
-  OrchestrationThreadDetailSnapshot,
-  OrchestrationThreadDetailWindow,
-  OrchestrationThreadShell,
+  OrchestrationV2ConversationMessage,
+  OrchestrationV2DispatchCommandResult,
+  OrchestrationV2ShellSnapshot,
+  OrchestrationV2ThreadProjection,
+  OrchestrationV2ThreadShell,
+  Project,
   ProjectScript,
   ProjectScriptIcon,
   ProviderUserInputAnswers,
@@ -23,7 +22,10 @@ import type {
 } from "@t3tools/contracts";
 
 import type { ApplicationError } from "./error.ts";
-import type { ThreadSearchResult, ThreadShow } from "./threads.ts";
+import type { QueuedRun } from "./thread-queue.ts";
+import type { ThreadSearchResult, ThreadShow, ThreadTranscript } from "./threads.ts";
+
+export type DispatchResult = OrchestrationV2DispatchCommandResult;
 
 export type StartThreadInput = {
   readonly projectRef?: string;
@@ -52,17 +54,42 @@ export type TerminalAttachTarget = TerminalRef & {
   readonly worktreePath: string | null;
 };
 
+/**
+ * How a message reaches a thread with a run in flight. `auto` lets the server pick from the
+ * provider's capabilities; the others queue behind, steer, or restart the active run.
+ */
+export type SendMode = "auto" | "queue" | "steer" | "restart";
+
+/**
+ * Who a message is attributed to. An agent may name the thread it acts for; the id is sent
+ * only when that thread exists in the target environment, since remote environments have
+ * their own threads.
+ */
+export type MessageAuthor =
+  | { readonly kind: "user" }
+  | { readonly kind: "agent"; readonly senderThreadId?: string };
+
 export type SendThreadInput = {
   readonly threadId: string;
   readonly message: string;
   readonly options?: NonNullable<ModelSelection["options"]>;
+  readonly mode?: SendMode;
+  /** Defaults to the user. */
+  readonly author?: MessageAuthor;
 };
 
 export type CallbackThreadInput = {
   readonly fromThreadId: string;
   readonly targetThreadId: string;
   readonly prompt: string;
+  /** Attributes the message to the user instead of an agent acting for `fromThreadId`. */
+  readonly asUser?: boolean;
 };
+
+export interface QueuedRunRef {
+  readonly threadId: string;
+  readonly runId: string;
+}
 
 export interface SnoozeThreadInput {
   readonly threadId: string;
@@ -71,9 +98,11 @@ export interface SnoozeThreadInput {
 
 export type ListThreadsInclude = "active" | "archived" | "all";
 
-export interface GetThreadMessagesInput {
+export interface GetThreadTranscriptInput {
   readonly threadId: string;
-  readonly window?: OrchestrationThreadDetailWindow;
+  /** Opaque cursor from a previous page; omitted for the most recent window. */
+  readonly beforeCursor?: string;
+  readonly all?: boolean;
 }
 
 export type UpdateThreadInput = {
@@ -95,10 +124,15 @@ export interface StartThreadPolicy extends ThreadDispatchPolicy {
 }
 
 export type WaitEvent =
-  | { readonly type: "thread"; readonly thread: OrchestrationThread }
-  | { readonly type: "message"; readonly message: OrchestrationMessage }
-  | { readonly type: "status"; readonly status: string; readonly threadId: string }
-  | { readonly type: "done"; readonly thread: OrchestrationThread };
+  | { readonly type: "thread"; readonly projection: OrchestrationV2ThreadProjection }
+  | { readonly type: "message"; readonly message: OrchestrationV2ConversationMessage }
+  | {
+      readonly type: "status";
+      readonly status: string;
+      readonly threadId: string;
+      readonly projection: OrchestrationV2ThreadProjection;
+    }
+  | { readonly type: "done"; readonly projection: OrchestrationV2ThreadProjection };
 
 export type ProjectActionSelector =
   | { readonly id: string; readonly name?: never }
@@ -127,14 +161,12 @@ export type UpdateProjectActionInput = {
 };
 
 export type ProjectActionMutationResult = {
-  readonly dispatch: DispatchResult;
-  readonly project: OrchestrationProjectShell;
+  readonly project: Project;
   readonly action: ProjectScript;
 };
 
 export type ProjectActionDeleteResult = {
-  readonly dispatch: DispatchResult;
-  readonly project: OrchestrationProjectShell;
+  readonly project: Project;
   readonly action: ProjectScript;
 };
 
@@ -187,24 +219,18 @@ export class T3ModelApplication extends Context.Service<
 >()("t3cli/T3ModelApplication") {}
 
 export type T3ProjectApplicationService = {
-  readonly loadShell: () => Effect.Effect<OrchestrationShellSnapshot, ApplicationError>;
+  readonly loadShell: () => Effect.Effect<OrchestrationV2ShellSnapshot, ApplicationError>;
   readonly addProject: (input: {
     readonly path: string;
     readonly title?: string;
-  }) => Effect.Effect<
-    { readonly dispatch: DispatchResult; readonly project: OrchestrationProjectShell },
-    ApplicationError
-  >;
+  }) => Effect.Effect<{ readonly project: Project }, ApplicationError>;
   readonly resolveProject: (
     projectRef: string,
   ) => Effect.Effect<OrchestrationProjectShell, ApplicationError>;
   readonly deleteProject: (input: {
     readonly projectId: string;
     readonly force?: boolean;
-  }) => Effect.Effect<
-    { readonly projectId: string; readonly dispatch: DispatchResult },
-    ApplicationError
-  >;
+  }) => Effect.Effect<{ readonly projectId: string }, ApplicationError>;
 };
 
 export class T3ProjectApplication extends Context.Service<
@@ -225,16 +251,19 @@ export type T3ThreadApplicationService = {
   ) => Effect.Effect<
     {
       readonly project: OrchestrationProjectShell;
-      readonly threads: ReadonlyArray<OrchestrationThreadShell>;
+      readonly threads: ReadonlyArray<OrchestrationV2ThreadShell>;
     },
     ApplicationError
   >;
-  readonly getThreadMessages: (
-    input: GetThreadMessagesInput,
-  ) => Effect.Effect<OrchestrationThreadDetailSnapshot, ApplicationError>;
+  readonly getThreadTranscript: (
+    input: GetThreadTranscriptInput,
+  ) => Effect.Effect<ThreadTranscript, ApplicationError>;
+  readonly getThreadProjection: (
+    threadId: string,
+  ) => Effect.Effect<OrchestrationV2ThreadProjection, ApplicationError>;
   readonly getThreadSummary: (
     threadId: string,
-  ) => Effect.Effect<OrchestrationThreadShell, ApplicationError>;
+  ) => Effect.Effect<OrchestrationV2ThreadShell, ApplicationError>;
   readonly showThread: (threadId: string) => Effect.Effect<ThreadShow, ApplicationError>;
   readonly approveThread: (input: {
     readonly threadId: string;
@@ -253,11 +282,31 @@ export type T3ThreadApplicationService = {
     ApplicationError
   >;
   readonly archiveThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
-  readonly interruptThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
-  readonly interruptThreadTurn: (
+  /** Stops the live run; succeeds with `undefined` when nothing is running. */
+  readonly interruptThread: (
     threadId: string,
-    turnId: string,
   ) => Effect.Effect<DispatchResult | undefined, ApplicationError>;
+  /** Stops `runId` only while it is still live. */
+  readonly interruptThreadRun: (
+    threadId: string,
+    runId: string,
+  ) => Effect.Effect<DispatchResult | undefined, ApplicationError>;
+  readonly listQueuedRuns: (
+    threadId: string,
+  ) => Effect.Effect<ReadonlyArray<QueuedRun>, ApplicationError>;
+  readonly cancelQueuedRun: (
+    input: QueuedRunRef,
+  ) => Effect.Effect<DispatchResult, ApplicationError>;
+  readonly editQueuedRun: (
+    input: QueuedRunRef & { readonly text: string },
+  ) => Effect.Effect<DispatchResult, ApplicationError>;
+  /** `beforeRunId: null` moves the run to the end of the queue. */
+  readonly moveQueuedRun: (
+    input: QueuedRunRef & { readonly beforeRunId: string | null },
+  ) => Effect.Effect<DispatchResult, ApplicationError>;
+  /** Merges a queued message into the running run instead of waiting for it to finish. */
+  readonly steerQueuedRun: (input: QueuedRunRef) => Effect.Effect<DispatchResult, ApplicationError>;
+  readonly resumeQueue: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
   readonly pinThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
   readonly settleThread: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;
   readonly snoozeThread: (
@@ -281,11 +330,10 @@ export type T3ThreadApplicationService = {
     policy?: StartThreadPolicy,
   ) => Effect.Effect<
     {
-      readonly dispatch: DispatchResult;
       readonly messageId: string;
       readonly project: OrchestrationProjectShell;
       readonly threadId: string;
-      readonly thread?: OrchestrationThread;
+      readonly projection?: OrchestrationV2ThreadProjection;
     },
     ApplicationError
   >;
@@ -297,14 +345,14 @@ export type T3ThreadApplicationService = {
       readonly dispatch: DispatchResult;
       readonly messageId: string;
       readonly threadId: string;
-      readonly thread?: OrchestrationThread;
+      readonly projection?: OrchestrationV2ThreadProjection;
     },
     ApplicationError
   >;
   readonly watchThread: (threadId: string) => Stream.Stream<WaitEvent, ApplicationError>;
   readonly waitForThread: (
     threadId: string,
-  ) => Effect.Effect<OrchestrationThread, ApplicationError>;
+  ) => Effect.Effect<OrchestrationV2ThreadProjection, ApplicationError>;
   readonly callbackThread: (input: CallbackThreadInput) => Effect.Effect<
     {
       readonly dispatch: DispatchResult;
