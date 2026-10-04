@@ -22,6 +22,12 @@ jobs:
       - name: install nix
         uses: cachix/install-nix-action@v31
 
+      - name: configure cache
+        uses: cachix/cachix-action@v17
+        with:
+          name: tarik02-t3code-cli
+          skipPush: true
+
       - id: update
         name: calculate nix package fixes
         shell: bash

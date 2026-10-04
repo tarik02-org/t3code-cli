@@ -1,9 +1,15 @@
 {
   description = "T3 Code CLI";
 
+  nixConfig = {
+    extra-substituters = [ "https://tarik02-t3code-cli.cachix.org" ];
+    extra-trusted-public-keys = [
+      "tarik02-t3code-cli.cachix.org-1:peiScdictfKPjHjL02GpaKqTcCS0tVZ79ixeMFdgqK0="
+    ];
+  };
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    nixpkgs-darwin.url = "github:NixOS/nixpkgs/nixpkgs-26.05-darwin";
 
     upstream-t3code = {
       url = "github:pingdotgg/t3code/5e35272fda7cc94d9c140377bc8db70580295133";
@@ -14,7 +20,6 @@
   outputs =
     {
       nixpkgs,
-      nixpkgs-darwin,
       self,
       upstream-t3code,
     }:
@@ -22,16 +27,14 @@
       systems = [
         "x86_64-linux"
         "aarch64-linux"
-        "x86_64-darwin"
         "aarch64-darwin"
       ];
-      nixpkgsFor = system: if system == "x86_64-darwin" then nixpkgs-darwin else nixpkgs;
     in
     {
       packages = nixpkgs.lib.genAttrs systems (
         system:
         let
-          pkgs = import (nixpkgsFor system) { inherit system; };
+          pkgs = import nixpkgs { inherit system; };
         in
         rec {
           t3code-cli = pkgs.callPackage ./nix/package.nix {
@@ -46,7 +49,7 @@
       formatter = nixpkgs.lib.genAttrs systems (
         system:
         let
-          pkgs = import (nixpkgsFor system) { inherit system; };
+          pkgs = import nixpkgs { inherit system; };
         in
         pkgs.nixfmt
       );

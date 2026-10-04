@@ -70,9 +70,14 @@ stdenv.mkDerivation (finalAttrs: {
     runHook preInstall
 
     app="$out/libexec/t3code-cli"
-    mkdir -p "$out/bin"
-    pnpm --filter t3code-cli --config.inject-workspace-packages=true \
-      deploy --prod --offline "$app"
+    mkdir -p "$out/bin" "$app/node_modules/@napi-rs"
+    cp -r dist package.json "$app/"
+    # dist bundles every other dependency; these load at runtime.
+    cp -rL node_modules/undici "$app/node_modules/"
+    cp -rL node_modules/@napi-rs/keyring "$app/node_modules/@napi-rs/"
+    for binding in node_modules/.pnpm/@napi-rs+keyring-*/node_modules/@napi-rs/keyring-*; do
+      cp -rL "$binding" "$app/node_modules/@napi-rs/"
+    done
     makeWrapper ${lib.getExe nodejs} "$out/bin/t3cli" \
       --add-flags "$app/dist/bin.js"
     installShellCompletion --cmd t3cli \
@@ -91,7 +96,6 @@ stdenv.mkDerivation (finalAttrs: {
     platforms = [
       "x86_64-linux"
       "aarch64-linux"
-      "x86_64-darwin"
       "aarch64-darwin"
     ];
   };
