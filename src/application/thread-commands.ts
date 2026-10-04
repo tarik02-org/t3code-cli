@@ -1,7 +1,6 @@
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import {
-  CommandId,
   MessageId,
   RunId,
   RuntimeRequestId,
@@ -12,10 +11,11 @@ import {
   type OrchestrationV2ThreadLaunchInput,
   type ProviderApprovalDecision,
   type ProviderUserInputAnswers,
+  type ServerConfig,
 } from "@t3tools/contracts";
+import { makeCommandId } from "./command-id.ts";
 import { resolveModelSelection } from "./model-selection.ts";
 import type { MessageAuthor, SendMode, SendThreadInput, StartThreadInput } from "./service.ts";
-import type { ServerConfigForCli } from "../orchestration/service.ts";
 
 type Command<T extends OrchestrationV2Command["type"]> = Extract<
   OrchestrationV2Command,
@@ -23,11 +23,6 @@ type Command<T extends OrchestrationV2Command["type"]> = Extract<
 >;
 
 const CREATION = { createdBy: "user", creationSource: "web" } as const;
-
-const makeCommandId = Effect.fn("makeThreadCommandId")(function* (kind: string) {
-  const crypto = yield* Crypto.Crypto;
-  return CommandId.make(`t3cli:${kind}:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`);
-});
 
 const makeMessageId = Effect.fn("makeMessageId")(function* () {
   const crypto = yield* Crypto.Crypto;
@@ -37,7 +32,7 @@ const makeMessageId = Effect.fn("makeMessageId")(function* () {
 export const makeThreadLaunchInput = Effect.fn("makeThreadLaunchInput")(function* (input: {
   readonly start: StartThreadInput;
   readonly project: OrchestrationProjectShell;
-  readonly serverConfig: ServerConfigForCli;
+  readonly serverConfig: ServerConfig;
 }) {
   const crypto = yield* Crypto.Crypto;
   const modelSelection = yield* resolveModelSelection(input);

@@ -9,7 +9,7 @@ import { InvalidFlagCombinationError, MissingThreadError } from "../error.ts";
 import { extraArgsConfig } from "../extra-args.ts";
 import { formatFlag, selfActionForceFlag, threadFlag } from "../flags.ts";
 import { formatQueuedRunsHuman } from "../format/thread.ts";
-import { resolveOutputFormat } from "../format/output.ts";
+import { resolveOutputFormat, type HumanJsonFormat } from "../format/output.ts";
 import { T3Input } from "../input/service.ts";
 import { requireSelfActionConfirmation } from "../interaction/self-action.ts";
 import { readInitialMessage } from "../message-input.ts";
@@ -38,7 +38,7 @@ const requireThreadId = Effect.fn("requireQueueThreadId")(function* (
 const runQueueMutation = Effect.fn("runQueueMutation")(function* (input: {
   readonly thread: Option.Option<string>;
   readonly force: boolean;
-  readonly format: Parameters<typeof resolveOutputFormat>[0];
+  readonly format: HumanJsonFormat;
   readonly action: string;
   readonly done: string;
   readonly dispatch: (threadId: string) => Effect.Effect<DispatchResult, ApplicationError>;

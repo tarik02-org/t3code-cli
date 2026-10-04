@@ -1,12 +1,12 @@
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
 import type {
   OrchestrationSearchThreadsInput,
   OrchestrationThreadSearchMatch,
+  OrchestrationV2Command,
   OrchestrationV2ProjectedTurnItem,
   OrchestrationV2Run,
   OrchestrationV2ThreadProjection,
@@ -82,21 +82,6 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     watchThreadEvents({ threadId }).pipe(Stream.provideService(T3Orchestration, orchestration));
   const loadThreads = (include: ListThreadsInclude) =>
     loadThreadsSnapshot(include).pipe(Effect.provideService(T3Orchestration, orchestration));
-  const openThreadProjection = (threadId: string) =>
-    orchestration.watchThread(threadId).pipe(
-      Stream.runHead,
-      Effect.scoped,
-      Effect.flatMap(
-        Option.match({
-          onNone: () =>
-            Effect.fail(
-              new ThreadLookupError({ message: `thread not found: ${threadId}`, threadId }),
-            ),
-          onSome: (state) => Effect.succeed(state.projection),
-        }),
-      ),
-    );
-
   const listThreads = Effect.fn("T3ApplicationLive.listThreads")(function* (
     projectRef: string,
     options?: {
@@ -202,7 +187,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
   const showThread = Effect.fn("T3ApplicationLive.showThread")(function* (threadId: string) {
     return projectThreadShow(yield* orchestration.getThreadProjection(threadId));
   });
-  const dispatchThreadCommand = <A extends Parameters<typeof orchestration.dispatch>[0], E>(
+  const dispatchThreadCommand = <A extends OrchestrationV2Command, E>(
     command: Effect.Effect<A, E, Crypto.Crypto>,
   ) => command.pipe(withCrypto, Effect.flatMap(orchestration.dispatch));
   const archiveThread = Effect.fn("T3ApplicationLive.archiveThread")(function* (threadId: string) {
@@ -339,16 +324,17 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     }
     yield* awaitShellSequence(dispatch.sequence);
     if (until === "visible") {
-      const projection = yield* openThreadProjection(input.threadId);
+      const projection = yield* orchestration.getThreadProjection(input.threadId);
       return { dispatch, messageId, threadId: input.threadId, projection };
     }
     const projection = yield* awaitThreadCompletion(input.threadId);
     yield* failIfThreadError(projection);
     return { dispatch, messageId, threadId: input.threadId, projection };
   });
-  const queue = makeThreadQueue();
-  const withQueueServices = <A, E>(effect: Effect.Effect<A, E, T3Orchestration | Crypto.Crypto>) =>
-    effect.pipe(Effect.provideService(T3Orchestration, orchestration), withCrypto);
+  const queue = yield* makeThreadQueue().pipe(
+    Effect.provideService(T3Orchestration, orchestration),
+    withCrypto,
+  );
   const watchThread = (threadId: string) => streamThreadEvents(threadId);
   const waitForThread = Effect.fn("T3ApplicationLive.waitForThread")(function* (threadId: string) {
     const projection = yield* awaitThreadCompletion(threadId);
@@ -390,12 +376,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
   });
 
   return {
-    listQueuedRuns: (threadId) => withQueueServices(queue.listQueuedRuns(threadId)),
-    cancelQueuedRun: (input) => withQueueServices(queue.cancelQueuedRun(input)),
-    editQueuedRun: (input) => withQueueServices(queue.editQueuedRun(input)),
-    moveQueuedRun: (input) => withQueueServices(queue.moveQueuedRun(input)),
-    steerQueuedRun: (input) => withQueueServices(queue.steerQueuedRun(input)),
-    resumeQueue: (threadId) => withQueueServices(queue.resumeQueue(threadId)),
+    ...queue,
     approveThread,
     archiveThread,
     awaitShellSequence,

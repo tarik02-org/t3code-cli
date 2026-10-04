@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import { ModelSelection, ProviderInstanceId } from "@t3tools/contracts";
-import type { OrchestrationProjectShell } from "@t3tools/contracts";
+import type { OrchestrationProjectShell, ServerConfig } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
 import { ModelSelectionError } from "../domain/error.ts";
@@ -10,13 +10,12 @@ import {
   firstSelectableModel,
   firstSelectableProvider,
 } from "../domain/model-config.ts";
-import type { ServerConfigForCli } from "../orchestration/service.ts";
 import type { StartThreadInput } from "./service.ts";
 
 export function resolveModelSelection(input: {
   readonly start: StartThreadInput;
   readonly project: OrchestrationProjectShell;
-  readonly serverConfig: ServerConfigForCli;
+  readonly serverConfig: ServerConfig;
 }) {
   return Effect.gen(function* () {
     if (input.start.provider !== undefined && input.start.model !== undefined) {
@@ -95,7 +94,7 @@ export function resolveUpdateModelSelection(input: {
   readonly model?: string;
   readonly options?: NonNullable<ModelSelection["options"]>;
   readonly project: OrchestrationProjectShell;
-  readonly serverConfig: ServerConfigForCli;
+  readonly serverConfig: ServerConfig;
 }) {
   return Effect.gen(function* () {
     const hasProvider = input.provider !== undefined && input.provider.length > 0;
@@ -139,7 +138,7 @@ export function resolveUpdateModelSelection(input: {
   });
 }
 
-function firstAvailableModel(serverConfig: ServerConfigForCli) {
+function firstAvailableModel(serverConfig: ServerConfig) {
   const providers = serverConfig.providers;
   const provider = firstSelectableProvider(providers);
   if (provider === undefined) {
@@ -148,7 +147,7 @@ function firstAvailableModel(serverConfig: ServerConfigForCli) {
   return Effect.succeed(provider);
 }
 
-function findProvider(serverConfig: ServerConfigForCli, instanceId: string) {
+function findProvider(serverConfig: ServerConfig, instanceId: string) {
   const provider = findSelectableProvider(serverConfig.providers, instanceId);
   if (provider === undefined) {
     return failNoAvailableModel();

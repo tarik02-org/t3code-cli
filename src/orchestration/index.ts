@@ -1,6 +1,5 @@
 export {
   T3Orchestration,
-  type ServerConfigForCli,
   type ThreadState,
   type Orchestration,
   type OrchestrationError,

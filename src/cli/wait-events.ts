@@ -10,14 +10,25 @@ import { latestAssistantMessage } from "../domain/thread-lifecycle.ts";
 import type { T3Output } from "./output/service.ts";
 import { formatWaitDoneHuman, formatWaitEventNdjson } from "./format/thread.ts";
 
+/** Prints a status only when it changes; otherwise every streamed text chunk repeats it. */
+export function makeWaitEventNdjsonPrinter(output: T3Output["Service"]) {
+  let lastStatus: string | undefined;
+  return (event: WaitEvent) => {
+    if (event.type === "status") {
+      if (event.status === lastStatus) {
+        return Effect.void;
+      }
+      lastStatus = event.status;
+    }
+    return output.printNdjson(formatWaitEventNdjson(event));
+  };
+}
+
 export function printWaitEventsNdjson(
   output: T3Output["Service"],
   events: Stream.Stream<WaitEvent, ApplicationError>,
 ) {
-  return events.pipe(
-    Stream.tap((event) => output.printNdjson(formatWaitEventNdjson(event))),
-    Stream.runDrain,
-  );
+  return events.pipe(Stream.tap(makeWaitEventNdjsonPrinter(output)), Stream.runDrain);
 }
 
 export function printWaitEventsHuman(

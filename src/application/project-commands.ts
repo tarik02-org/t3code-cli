@@ -1,12 +1,9 @@
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
-import { CommandId, ProjectId, type ProjectMutation, type ProjectScript } from "@t3tools/contracts";
+import { ProjectId, type ProjectMutation, type ProjectScript } from "@t3tools/contracts";
 
-const makeCommandId = Effect.fn("makeProjectCommandId")(function* (kind: string) {
-  const crypto = yield* Crypto.Crypto;
-  return CommandId.make(`t3cli:${kind}:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`);
-});
+import { makeCommandId } from "./command-id.ts";
 
 export const makeProjectCreateMutation = Effect.fn("makeProjectCreateMutation")(function* (input: {
   readonly path: string;

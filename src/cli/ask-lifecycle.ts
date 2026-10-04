@@ -12,9 +12,9 @@ import type { T3CliEnvShape } from "../config/env/env.ts";
 import { ThreadSessionError } from "../domain/error.ts";
 import { isRunTerminal, runForUserMessage, threadLastError } from "../domain/thread-lifecycle.ts";
 import { AskThreadArchivedError, AskThreadPendingRequestError } from "./error.ts";
-import { formatWaitEventNdjson } from "./format/thread.ts";
 import { isInteractiveHumanTerminal } from "./format/output.ts";
 import { T3Output } from "./output/service.ts";
+import { makeWaitEventNdjsonPrinter } from "./wait-events.ts";
 import { CliRuntime } from "./runtime/service.ts";
 
 export const archivePolicyChoices = ["never", "always", "on-success", "on-failure"] as const;
@@ -90,6 +90,7 @@ export function waitForAskThread(
 ) {
   let lastStatus = "";
   let runComplete = false;
+  const printNdjson = makeWaitEventNdjsonPrinter(output);
   const observeAskThread = (projection: OrchestrationV2ThreadProjection) => {
     const observation = inspectAskRun(projection, input.messageId);
     input.state.askRunId = observation.runId;
@@ -123,7 +124,7 @@ export function waitForAskThread(
             yield* observeAskThread(event.projection);
           }
           if (input.format === "ndjson") {
-            yield* output.printNdjson(formatWaitEventNdjson(event));
+            yield* printNdjson(event);
             return;
           }
           if (input.format === "human" && event.type === "status" && event.status !== lastStatus) {

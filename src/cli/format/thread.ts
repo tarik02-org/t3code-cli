@@ -15,10 +15,6 @@ import type { QueuedRun } from "../../application/thread-queue.ts";
 import { latestAssistantMessage, threadStatus } from "../../domain/thread-lifecycle.ts";
 import { formatChatTranscript, formatRecord, formatTable } from "./human.ts";
 
-export function formatThreadShowJson(thread: ThreadShow) {
-  return thread;
-}
-
 export function formatThreadShowHuman(thread: ThreadShow) {
   const sections = [
     formatRecord([

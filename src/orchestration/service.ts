@@ -18,7 +18,7 @@ import type {
   OrchestrationV2ThreadProjection,
   Project,
   ProjectMutation,
-  ServerProviders,
+  ServerConfig,
 } from "@t3tools/contracts";
 
 import type { ThreadSnapshotRequestError } from "./error.ts";
@@ -33,10 +33,6 @@ export interface ThreadState {
   readonly event: OrchestrationV2DomainEvent | null;
 }
 
-export interface ServerConfigForCli {
-  readonly providers: ServerProviders;
-}
-
 export type Orchestration = {
   readonly dispatch: (
     command: OrchestrationV2Command,
@@ -45,7 +41,7 @@ export type Orchestration = {
   readonly launchThread: (
     input: OrchestrationV2ThreadLaunchInput,
   ) => Effect.Effect<OrchestrationV2ThreadLaunchResult, OrchestrationError>;
-  readonly getServerConfig: () => Effect.Effect<ServerConfigForCli, OrchestrationError>;
+  readonly getServerConfig: () => Effect.Effect<ServerConfig, OrchestrationError>;
   readonly getShellSnapshot: () => Effect.Effect<OrchestrationV2ShellSnapshot, OrchestrationError>;
   readonly getArchivedShellSnapshot: () => Effect.Effect<
     OrchestrationV2ArchivedShellSnapshot,

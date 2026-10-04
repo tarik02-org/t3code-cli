@@ -1,3 +1,4 @@
+import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import type { OrchestrationV2ThreadProjection } from "@t3tools/contracts";
@@ -44,12 +45,15 @@ export function queuedRuns(projection: OrchestrationV2ThreadProjection): Readonl
     }));
 }
 
-export function makeThreadQueue() {
+export const makeThreadQueue = Effect.fn("makeThreadQueue")(function* () {
+  const orchestration = yield* T3Orchestration;
+  const crypto = yield* Crypto.Crypto;
+  const withCrypto = Effect.provideService(Crypto.Crypto, crypto);
+
   const loadQueuedRun = Effect.fn("T3ThreadQueue.loadQueuedRun")(function* (input: {
     readonly threadId: string;
     readonly runId: string;
   }) {
-    const orchestration = yield* T3Orchestration;
     const projection = yield* orchestration.getThreadProjection(input.threadId);
     const run = projection.runs.find((candidate) => candidate.id === input.runId);
     if (run?.status !== "queued") {
@@ -66,7 +70,6 @@ export function makeThreadQueue() {
   });
 
   const listQueuedRuns = Effect.fn("T3ThreadQueue.listQueuedRuns")(function* (threadId: string) {
-    const orchestration = yield* T3Orchestration;
     return queuedRuns(yield* orchestration.getThreadProjection(threadId));
   });
 
@@ -74,9 +77,8 @@ export function makeThreadQueue() {
     readonly threadId: string;
     readonly runId: string;
   }) {
-    const orchestration = yield* T3Orchestration;
     yield* loadQueuedRun(input);
-    return yield* orchestration.dispatch(yield* makeQueuedRunCancelCommand(input));
+    return yield* orchestration.dispatch(yield* makeQueuedRunCancelCommand(input).pipe(withCrypto));
   });
 
   const editQueuedRun = Effect.fn("T3ThreadQueue.editQueuedRun")(function* (input: {
@@ -84,9 +86,8 @@ export function makeThreadQueue() {
     readonly runId: string;
     readonly text: string;
   }) {
-    const orchestration = yield* T3Orchestration;
     yield* loadQueuedRun(input);
-    return yield* orchestration.dispatch(yield* makeQueuedRunEditCommand(input));
+    return yield* orchestration.dispatch(yield* makeQueuedRunEditCommand(input).pipe(withCrypto));
   });
 
   const moveQueuedRun = Effect.fn("T3ThreadQueue.moveQueuedRun")(function* (input: {
@@ -95,19 +96,19 @@ export function makeThreadQueue() {
     /** `null` moves the run to the end of the queue. */
     readonly beforeRunId: string | null;
   }) {
-    const orchestration = yield* T3Orchestration;
     yield* loadQueuedRun(input);
     if (input.beforeRunId !== null) {
       yield* loadQueuedRun({ threadId: input.threadId, runId: input.beforeRunId });
     }
-    return yield* orchestration.dispatch(yield* makeQueuedRunReorderCommand(input));
+    return yield* orchestration.dispatch(
+      yield* makeQueuedRunReorderCommand(input).pipe(withCrypto),
+    );
   });
 
   const steerQueuedRun = Effect.fn("T3ThreadQueue.steerQueuedRun")(function* (input: {
     readonly threadId: string;
     readonly runId: string;
   }) {
-    const orchestration = yield* T3Orchestration;
     const projection = yield* loadQueuedRun(input);
     const target = liveRun(projection);
     if (target === undefined) {
@@ -122,13 +123,12 @@ export function makeThreadQueue() {
         threadId: input.threadId,
         queuedRunId: input.runId,
         targetRunId: target.id,
-      }),
+      }).pipe(withCrypto),
     );
   });
 
   const resumeQueue = Effect.fn("T3ThreadQueue.resumeQueue")(function* (threadId: string) {
-    const orchestration = yield* T3Orchestration;
-    return yield* orchestration.dispatch(yield* makeQueueResumeCommand(threadId));
+    return yield* orchestration.dispatch(yield* makeQueueResumeCommand(threadId).pipe(withCrypto));
   });
 
   return {
@@ -139,4 +139,4 @@ export function makeThreadQueue() {
     steerQueuedRun,
     resumeQueue,
   };
-}
+});

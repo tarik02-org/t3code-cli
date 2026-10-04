@@ -81,7 +81,11 @@ describe("makeThreadQueue", () => {
         { id: "queued", status: "queued", ordinal: 2, queuePosition: 1 },
       ]);
       yield* makeThreadQueue()
-        .steerQueuedRun({ threadId: "thread-1", runId: "queued" })
+        .pipe(
+          Effect.flatMap((queue) =>
+            queue.steerQueuedRun({ threadId: "thread-1", runId: "queued" }),
+          ),
+        )
         .pipe(
           Effect.provide(
             makeLayer(projection, (command) => {
@@ -103,7 +107,11 @@ describe("makeThreadQueue", () => {
         { id: "queued", status: "queued", ordinal: 1, queuePosition: 1 },
       ]);
       const error = yield* makeThreadQueue()
-        .steerQueuedRun({ threadId: "thread-1", runId: "queued" })
+        .pipe(
+          Effect.flatMap((queue) =>
+            queue.steerQueuedRun({ threadId: "thread-1", runId: "queued" }),
+          ),
+        )
         .pipe(Effect.provide(makeLayer(projection, () => {})), Effect.flip);
       assert.instanceOf(error, QueuedRunError);
     }),
@@ -114,7 +122,11 @@ describe("makeThreadQueue", () => {
       let dispatched = false;
       const projection = makeProjection([{ id: "started", status: "running", ordinal: 1 }]);
       const error = yield* makeThreadQueue()
-        .cancelQueuedRun({ threadId: "thread-1", runId: "started" })
+        .pipe(
+          Effect.flatMap((queue) =>
+            queue.cancelQueuedRun({ threadId: "thread-1", runId: "started" }),
+          ),
+        )
         .pipe(
           Effect.provide(
             makeLayer(projection, () => {
