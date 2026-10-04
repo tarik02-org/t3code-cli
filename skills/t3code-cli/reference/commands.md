@@ -217,11 +217,11 @@ run now; `resume` starts a queue the server held after restarting.
 
 ### start responses
 
-| Mode                         | stdout                                                                     |
-| ---------------------------- | -------------------------------------------------------------------------- |
-| `--format json`, no `--wait` | `{ threadId, project, thread, status, latestAssistantMessage }`            |
+| Mode                         | stdout                                                                       |
+| ---------------------------- | ---------------------------------------------------------------------------- |
+| `--format json`, no `--wait` | `{ threadId, project, thread, status, latestAssistantMessage }`              |
 | `--format json`, `--wait`    | `{ threadId, thread, status, latestAssistantMessage }` once the thread idles |
-| `--format ndjson`            | `started`, then thread events (see below); `--wait` streams until `done`   |
+| `--format ndjson`            | `started`, then thread events (see below); `--wait` streams until `done`     |
 
 `send` returns `{ dispatch, threadId, messageId, thread, status, latestAssistantMessage }` and starts
 its NDJSON stream with `dispatch`. `thread` is the thread record without its timeline; read the
