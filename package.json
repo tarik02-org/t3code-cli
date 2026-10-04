@@ -132,7 +132,7 @@
     "wrap-ansi": "^10.0.0"
   },
   "devDependencies": {
-    "@ast-grep/napi": "^0.45.3",
+    "@ast-grep/cli": "^0.45.3",
     "@changesets/cli": "^2.31.1",
     "@effect/vitest": "catalog:",
     "@t3tools/client-runtime": "link:upstream-t3code/packages/client-runtime",

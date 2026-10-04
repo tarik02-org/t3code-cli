@@ -1,0 +1,39 @@
+# Types each method's schemas by reference instead of inlining them.
+id: orchestration-v2-rpc-schemas
+language: TypeScript
+files:
+  - upstream-t3code/packages/contracts/src/orchestrationV2.ts
+rule:
+  pattern: export const OrchestrationV2RpcSchemas = { $$$METHODS } as const
+rewriters:
+  - id: method
+    rule:
+      pattern:
+        context: "({ $METHOD: { input: $INPUT, output: $OUTPUT } })"
+        selector: pair
+    transform:
+      INPUT_TYPE:
+        rewrite: { source: $INPUT, rewriters: [schema-reference, empty-struct] }
+      OUTPUT_TYPE:
+        rewrite: { source: $OUTPUT, rewriters: [schema-reference, empty-struct] }
+    fix: "readonly $METHOD: { readonly input: $INPUT_TYPE; readonly output: $OUTPUT_TYPE }"
+  - id: schema-reference
+    rule:
+      kind: identifier
+      pattern: $SCHEMA
+      not:
+        inside:
+          kind: call_expression
+    fix: typeof $SCHEMA
+  - id: empty-struct
+    rule:
+      pattern: Schema.Struct({})
+    fix: Schema.Struct<{}>
+transform:
+  METHOD_TYPES:
+    rewrite:
+      source: $$$METHODS
+      rewriters: [method]
+      joinBy: "; "
+fix: |-
+  export const OrchestrationV2RpcSchemas: { $METHOD_TYPES } = { $$$METHODS } as const

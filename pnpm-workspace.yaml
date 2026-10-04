@@ -25,3 +25,6 @@ overrides:
 patchedDependencies:
   "@effect/vitest@4.0.0-rc.115": upstream-t3code/patches/@effect__vitest@4.0.0-rc.115.patch
   effect@4.0.0-rc.115: upstream-t3code/patches/effect@4.0.0-rc.115.patch
+
+onlyBuiltDependencies:
+  - "@ast-grep/cli"

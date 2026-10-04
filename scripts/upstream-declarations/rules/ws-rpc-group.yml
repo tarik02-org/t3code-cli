@@ -1,0 +1,21 @@
+# Names the group's RPCs so the declaration references them instead of inlining every schema.
+id: ws-rpc-group
+language: TypeScript
+files:
+  - upstream-t3code/packages/contracts/src/rpc.ts
+rule:
+  pattern: export const WsRpcGroup = RpcGroup.make($$$RPCS)
+rewriters:
+  - id: typeof-rpc
+    rule:
+      kind: identifier
+      pattern: $RPC
+    fix: typeof $RPC
+transform:
+  RPC_UNION:
+    rewrite:
+      source: $$$RPCS
+      rewriters: [typeof-rpc]
+      joinBy: " | "
+fix: |-
+  export const WsRpcGroup: RpcGroup.RpcGroup<$RPC_UNION> = RpcGroup.make($$$RPCS)

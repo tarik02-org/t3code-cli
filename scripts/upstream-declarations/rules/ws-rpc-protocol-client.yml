@@ -1,0 +1,15 @@
+id: ws-rpc-protocol-client
+language: TypeScript
+files:
+  - upstream-t3code/packages/client-runtime/src/rpc/protocol.ts
+rule:
+  pattern: export const makeWsRpcProtocolClient = RpcClient.make(WsRpcGroup)
+fix: |-
+  export const makeWsRpcProtocolClient: Effect.Effect<
+    RpcClient.RpcClient<
+      import("effect/unstable/rpc").RpcGroup.Rpcs<typeof WsRpcGroup>,
+      import("effect/unstable/rpc").RpcClientError.RpcClientError
+    >,
+    never,
+    RpcClient.Protocol | import("effect/Scope").Scope
+  > = RpcClient.make(WsRpcGroup)
