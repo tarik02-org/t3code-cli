@@ -8,6 +8,7 @@
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -53,6 +54,11 @@ const run = Effect.fn("run")(function* (
 const annotateUpstream = Effect.fn("annotateUpstream")(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  // Lets packagers substitute a binary that runs where the npm one cannot, such as Nix builds.
+  const astGrepBin = yield* Config.String("AST_GREP_BIN").pipe(
+    Config.withDefault("ast-grep"),
+    Effect.mapError(packError("invalid AST_GREP_BIN")),
+  );
   const rulesDir = path.join(root, "scripts/upstream-declarations/rules");
   const astGrep = [
     "scan",
@@ -66,7 +72,7 @@ const annotateUpstream = Effect.fn("annotateUpstream")(function* (root: string) 
     .pipe(Effect.mapError(packError(`failed to read ${rulesDir}`))))
     .filter((file) => file.endsWith(".yml"))
     .map((file) => file.slice(0, -".yml".length));
-  const matches = yield* run("ast-grep", [...astGrep, "--json=compact"], {
+  const matches = yield* run(astGrepBin, [...astGrep, "--json=compact"], {
     cwd: root,
     capture: true,
   }).pipe(
@@ -87,7 +93,7 @@ const annotateUpstream = Effect.fn("annotateUpstream")(function* (root: string) 
       yield* fs.readFileString(file).pipe(Effect.mapError(packError(`failed to read ${file}`))),
     );
   }
-  yield* run("ast-grep", [...astGrep, "--update-all"], { cwd: root }).pipe(
+  yield* run(astGrepBin, [...astGrep, "--update-all"], { cwd: root }).pipe(
     Effect.onError(() => restoreUpstream(originals).pipe(Effect.ignore)),
   );
   return originals;
