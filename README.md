@@ -47,6 +47,28 @@ On NixOS or another system with Nix installed:
 nix profile install github:tarik02-org/t3code-cli
 ```
 
+Packages are built for `x86_64-linux`, `aarch64-linux`, and `aarch64-darwin`.
+
+### Prebuilt packages
+
+Trusted `master` builds publish the package to the public `tarik02-t3code-cli` Cachix cache. Pull
+requests build without cache write credentials.
+
+The flake offers the cache configuration when used directly. For NixOS or nix-darwin configurations
+that consume it as an input, configure the cache explicitly:
+
+```nix
+nix.settings = {
+  extra-substituters = [ "https://tarik02-t3code-cli.cachix.org" ];
+  extra-trusted-public-keys = [
+    "tarik02-t3code-cli.cachix.org-1:peiScdictfKPjHjL02GpaKqTcCS0tVZ79ixeMFdgqK0="
+  ];
+};
+```
+
+Cache entries may be evicted when storage fills. Nix builds from source when a matching prebuilt
+package is unavailable.
+
 ## Authentication
 
 `t3cli` stores multiple named auth environments in `~/.config/t3cli/config.json` (or `$XDG_CONFIG_HOME/t3cli/config.json`). Tokens are encrypted at rest with AES-256-GCM; the master key is stored in the OS keyring when available, otherwise in `~/.config/t3cli/key`.
