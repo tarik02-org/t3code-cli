@@ -4,7 +4,8 @@ import {
   ConnectionTransientError,
   type PreparedConnection,
 } from "@t3tools/client-runtime/connection";
-import { WS_METHODS } from "@t3tools/contracts";
+import { makeWsRpcProtocolClient } from "@t3tools/client-runtime/rpc";
+import { WS_METHODS, type ServerConfig } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -16,12 +17,10 @@ import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
 import * as Socket from "effect/unstable/socket/Socket";
 
 import type { WsClient as CliWsClient } from "./service.ts";
-import type { CliServerConfig } from "./ws-group.ts";
-import { CliWsRpcGroup } from "./ws-group.ts";
 
 interface T3RpcSession {
   readonly client: CliWsClient;
-  readonly initialConfig: Effect.Effect<CliServerConfig, ConnectionAttemptError>;
+  readonly initialConfig: Effect.Effect<ServerConfig, ConnectionAttemptError>;
   readonly ready: Effect.Effect<void, ConnectionAttemptError>;
   readonly probe: Effect.Effect<void, ConnectionAttemptError>;
   readonly closed: Effect.Effect<never, ConnectionTransientError>;
@@ -39,8 +38,6 @@ export class T3RpcSessionFactory extends Context.Service<
 type SessionRpcError =
   | Effect.Error<ReturnType<CliWsClient[typeof WS_METHODS.serverGetConfig]>>
   | Effect.Error<ReturnType<CliWsClient[typeof WS_METHODS.serverProbe]>>;
-
-const makeClient = RpcClient.make(CliWsRpcGroup);
 
 const makeT3RpcSessionFactory = Effect.fn("makeT3RpcSessionFactory")(function* () {
   const webSocketConstructor = yield* Socket.WebSocketConstructor;
@@ -92,7 +89,7 @@ const makeT3RpcSessionFactory = Effect.fn("makeT3RpcSessionFactory")(function* (
     const protocolContext = yield* Layer.build(protocolLayer).pipe(
       Effect.withSpan("environment.websocket.connect"),
     );
-    const client = yield* makeClient.pipe(Effect.provide(protocolContext));
+    const client = yield* makeWsRpcProtocolClient.pipe(Effect.provide(protocolContext));
     const initialConfig = yield* Effect.cached(
       client[WS_METHODS.serverGetConfig]({}).pipe(
         catchSessionRpcErrors,
@@ -102,7 +99,7 @@ const makeT3RpcSessionFactory = Effect.fn("makeT3RpcSessionFactory")(function* (
     const probe = initialConfig.pipe(
       Effect.flatMap((config) =>
         Effect.gen(function* () {
-          if (config.environment.capabilities.connectionProbe) {
+          if (config.environment.capabilities.connectionProbe === true) {
             return yield* client[WS_METHODS.serverProbe]({});
           }
           return yield* client[WS_METHODS.serverGetConfig]({});
