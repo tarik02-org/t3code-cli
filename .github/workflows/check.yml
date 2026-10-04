@@ -42,6 +42,9 @@ jobs:
         run: |
           nix build --no-link --print-out-paths --print-build-logs .#default \
             > "$RUNNER_TEMP/nix-package-paths"
+          # Published too: dependency fetches repeat on every PR until the lockfile changes.
+          nix eval --raw .#default.pnpmDeps.outPath >> "$RUNNER_TEMP/nix-package-paths"
+          echo >> "$RUNNER_TEMP/nix-package-paths"
 
       - name: smoke-test
         run: |
