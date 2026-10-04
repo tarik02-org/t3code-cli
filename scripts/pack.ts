@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
 // Upstream T3 Code never emits declarations, so a few of its exports infer types too large
-// for declaration emit (TS7056). This adds explicit annotations to them for the duration of
-// `vp pack` and restores the upstream sources afterwards. Every edit must match exactly once,
-// so an upstream change that moves one fails the build instead of shipping without types.
+// for declaration emit (TS7056). This annotates them for the duration of `vp pack` and
+// restores the upstream sources afterwards. Every annotation must match exactly one
+// declaration, so an upstream change that moves one fails the build instead of shipping
+// without types.
 
+import { Lang, parse, type Edit, type SgNode } from "@ast-grep/napi";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
@@ -18,154 +20,103 @@ export class PackError extends Schema.TaggedError<PackError>()("PackError", {
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-interface Edit {
+interface Annotation {
   readonly file: string;
-  readonly apply: (source: string) => string | PackError;
+  /** The exported name; `pattern` must bind it to `$NAME`. */
+  readonly name: string;
+  readonly pattern: string;
+  readonly edit: (match: SgNode, name: SgNode) => Edit | PackError;
 }
 
-const replaceOnce =
-  (file: string, from: string, to: string | ((source: string) => string | PackError)) =>
-  (source: string) => {
-    const index = source.indexOf(from);
-    if (index === -1 || source.indexOf(from, index + 1) !== -1) {
-      return new PackError({ message: `${file}: expected exactly one match for ${from}` });
-    }
-    const replacement = typeof to === "string" ? to : to(source);
-    if (typeof replacement !== "string") {
-      return replacement;
-    }
-    return source.slice(0, index) + replacement + source.slice(index + from.length);
-  };
+/** Adds `: type` after the declared name. */
+const withType = (type: (match: SgNode) => string | PackError) => (match: SgNode, name: SgNode) => {
+  const annotation = type(match);
+  return typeof annotation === "string"
+    ? name.replace(`${name.text()}: ${annotation}`)
+    : annotation;
+};
 
-const contractsRpc = "upstream-t3code/packages/contracts/src/rpc.ts";
-const contractsOrchestration = "upstream-t3code/packages/contracts/src/orchestrationV2.ts";
-const clientRpcHttp = "upstream-t3code/packages/client-runtime/src/rpc/http.ts";
-const clientRpcProtocol = "upstream-t3code/packages/client-runtime/src/rpc/protocol.ts";
-const clientHttpAuth = "upstream-t3code/packages/client-runtime/src/state/environmentHttpAuth.ts";
+const schemaType = (expression: SgNode) => {
+  if (expression.kind() === "identifier") {
+    return `typeof ${expression.text()}`;
+  }
+  if (expression.text() === "Schema.Struct({})") {
+    return "Schema.Struct<{}>";
+  }
+  return undefined;
+};
 
-const wsRpcGroupHead = "export const WsRpcGroup = RpcGroup.make(";
-const rpcSchemasHead = "export const OrchestrationV2RpcSchemas = {";
-
-const schemaType = (expression: string | undefined) =>
-  expression === undefined
-    ? undefined
-    : /^\w+$/u.test(expression)
-      ? `typeof ${expression}`
-      : expression === "Schema.Struct({})"
-        ? "Schema.Struct<{}>"
-        : undefined;
-
-const edits: ReadonlyArray<Edit> = [
+const annotations: ReadonlyArray<Annotation> = [
   {
-    file: contractsRpc,
     // Names the group's RPCs so the declaration references them instead of inlining schemas.
-    apply: replaceOnce(contractsRpc, wsRpcGroupHead, (source) => {
-      const start = source.indexOf(wsRpcGroupHead) + wsRpcGroupHead.length;
-      const names = source
-        .slice(start, source.indexOf(");", start))
-        .split(",")
-        .map((name) => name.trim())
-        .filter((name) => name.length > 0);
-      if (names.length === 0 || names.some((name) => !/^\w+$/u.test(name))) {
-        return new PackError({
-          message: `${contractsRpc}: WsRpcGroup members are not identifiers`,
-        });
-      }
-      return `type WsRpcGroupRpcs = ${names.map((name) => `typeof ${name}`).join(" | ")};
-export const WsRpcGroup: RpcGroup.RpcGroup<WsRpcGroupRpcs> = RpcGroup.make(`;
+    file: "upstream-t3code/packages/contracts/src/rpc.ts",
+    name: "WsRpcGroup",
+    pattern: "export const $NAME = RpcGroup.make($$$RPCS)",
+    edit: withType((match) => {
+      const rpcs = match
+        .getMultipleMatches("RPCS")
+        .filter((node) => node.kind() === "identifier")
+        .map((node) => `typeof ${node.text()}`);
+      return `RpcGroup.RpcGroup<${rpcs.join(" | ")}>`;
     }),
   },
   {
-    file: contractsOrchestration,
-    apply: replaceOnce(contractsOrchestration, rpcSchemasHead, (source) => {
-      const start = source.indexOf(rpcSchemasHead);
-      const body = source.slice(start, source.indexOf("} as const;", start));
-      const entries = [
-        ...body.matchAll(/(\w+): \{\s*input: ([^,]+),\s*output: ([^,]+),\s*\}/gu),
-      ].map(([, method, input, output]) => ({ method, input, output }));
-      const fields = entries.map(({ method, input, output }) => {
-        const inputType = schemaType(input);
-        const outputType = schemaType(output);
-        return method === undefined || inputType === undefined || outputType === undefined
-          ? undefined
-          : `  readonly ${method}: { readonly input: ${inputType}; readonly output: ${outputType} };`;
-      });
-      if (fields.length === 0 || fields.some((field) => field === undefined)) {
-        return new PackError({
-          message: `${contractsOrchestration}: OrchestrationV2RpcSchemas has an unsupported entry`,
-        });
+    file: "upstream-t3code/packages/contracts/src/orchestrationV2.ts",
+    name: "OrchestrationV2RpcSchemas",
+    pattern: "export const $NAME = { $$$ } as const",
+    edit: withType((match) => {
+      const fields: Array<string> = [];
+      for (const entry of match.findAll("$METHOD: { input: $INPUT, output: $OUTPUT }")) {
+        const input = schemaType(entry.getMatch("INPUT")!);
+        const output = schemaType(entry.getMatch("OUTPUT")!);
+        if (input === undefined || output === undefined) {
+          return new PackError({
+            message: `OrchestrationV2RpcSchemas: unsupported schema in ${entry.text()}`,
+          });
+        }
+        fields.push(
+          `readonly ${entry.getMatch("METHOD")!.text()}: { readonly input: ${input}; readonly output: ${output} }`,
+        );
       }
-      return `export const OrchestrationV2RpcSchemas: {\n${fields.join("\n")}\n} = {`;
+      return `{ ${fields.join("; ")} }`;
     }),
   },
   {
-    file: clientRpcProtocol,
-    apply: replaceOnce(
-      clientRpcProtocol,
-      `import { RpcClient } from "effect/unstable/rpc";
-
-export const makeWsRpcProtocolClient = RpcClient.make(WsRpcGroup);`,
-      `import type * as Scope from "effect/Scope";
-import { RpcClient, type RpcClientError, type RpcGroup } from "effect/unstable/rpc";
-
-export const makeWsRpcProtocolClient: Effect.Effect<
-  RpcClient.RpcClient<RpcGroup.Rpcs<typeof WsRpcGroup>, RpcClientError.RpcClientError>,
-  never,
-  RpcClient.Protocol | Scope.Scope
-> = RpcClient.make(WsRpcGroup);`,
+    file: "upstream-t3code/packages/client-runtime/src/rpc/protocol.ts",
+    name: "makeWsRpcProtocolClient",
+    pattern: "export const $NAME = RpcClient.make(WsRpcGroup)",
+    edit: withType(
+      () =>
+        `Effect.Effect<RpcClient.RpcClient<import("effect/unstable/rpc").RpcGroup.Rpcs<typeof WsRpcGroup>, import("effect/unstable/rpc").RpcClientError.RpcClientError>, never, RpcClient.Protocol | import("effect/Scope").Scope>`,
     ),
   },
   {
-    file: clientRpcHttp,
-    apply: (source) => {
-      const withImports = replaceOnce(
-        clientRpcHttp,
-        `import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";`,
-        `import type * as HttpApi from "effect/unstable/httpapi/HttpApi";
-import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
-import type * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";`,
-      )(source);
-      if (typeof withImports !== "string") {
-        return withImports;
+    file: "upstream-t3code/packages/client-runtime/src/rpc/http.ts",
+    name: "makeEnvironmentHttpApiGroupClient",
+    pattern: "export const $NAME = <$$$TYPES>($$$PARAMS) => $BODY",
+    // Adds the return type after the parameter list.
+    edit: (match) => {
+      const parameters = match.find("<$$$TYPES>($$$PARAMS) => $BODY")?.field("parameters");
+      if (parameters === undefined || parameters === null) {
+        return new PackError({ message: "makeEnvironmentHttpApiGroupClient: no parameter list" });
       }
-      return replaceOnce(
-        clientRpcHttp,
-        `export const makeEnvironmentHttpApiGroupClient = <
-  Group extends keyof typeof EnvironmentHttpApi.groups,
->(
-  httpBaseUrl: string,
-  group: Group,
-) =>`,
-        `type EnvironmentHttpApiGroups =
-  typeof EnvironmentHttpApi extends HttpApi.HttpApi<string, infer Groups> ? Groups : never;
-
-export const makeEnvironmentHttpApiGroupClient = <
-  Group extends keyof typeof EnvironmentHttpApi.groups,
->(
-  httpBaseUrl: string,
-  group: Group,
-): Effect.Effect<
-  HttpApiClient.Client.Group<
-    HttpApiGroup.WithIdentifier<EnvironmentHttpApiGroups, Group>,
-    HttpClientError.HttpClientError,
-    never
-  >,
-  never,
-  | HttpClient.HttpClient
-  | HttpApiGroup.MiddlewareClient<HttpApiGroup.WithIdentifier<EnvironmentHttpApiGroups, Group>>
-> =>`,
-      )(withImports);
+      const groups = `(typeof EnvironmentHttpApi extends import("effect/unstable/httpapi/HttpApi").HttpApi<string, infer Groups> ? Groups : never)`;
+      const group = `import("effect/unstable/httpapi/HttpApiGroup").WithIdentifier<${groups}, Group>`;
+      const end = parameters.range().end.index;
+      return {
+        startPos: end,
+        endPos: end,
+        insertedText: `: Effect.Effect<HttpApiClient.Client.Group<${group}, HttpClientError.HttpClientError, never>, never, HttpClient.HttpClient | import("effect/unstable/httpapi/HttpApiGroup").MiddlewareClient<${group}>>`,
+      };
     },
   },
   {
-    file: clientHttpAuth,
     // Mirrors the generator's input; an upstream change to it surfaces as a type error.
-    apply: replaceOnce(
-      clientHttpAuth,
-      `export const executeAuthenticatedEnvironmentHttpRequest = Effect.fn(
-  "clientRuntime.state.executeAuthenticatedEnvironmentHttpRequest",
-)(function* <`,
-      `export const executeAuthenticatedEnvironmentHttpRequest: <
+    file: "upstream-t3code/packages/client-runtime/src/state/environmentHttpAuth.ts",
+    name: "executeAuthenticatedEnvironmentHttpRequest",
+    pattern: "export const $NAME = Effect.fn($LABEL)($GENERATOR)",
+    edit: withType(
+      () => `<
   Group extends Parameters<typeof makeEnvironmentHttpApiGroupClient>[1],
   A,
   E,
@@ -187,24 +138,39 @@ export const makeEnvironmentHttpApiGroupClient = <
   A,
   RemoteEnvironmentRequestError,
   Effect.Services<ReturnType<typeof makeEnvironmentHttpApiGroupClient<Group>>> | R
-> = Effect.fn("clientRuntime.state.executeAuthenticatedEnvironmentHttpRequest")(function* <`,
+>`,
     ),
   },
 ];
 
 const packError = (message: string) => (cause: unknown) => new PackError({ message, cause });
 
+const annotate = (annotation: Annotation, source: string) => {
+  const root = parse(Lang.TypeScript, source).root();
+  const matches = root
+    .findAll(annotation.pattern)
+    .filter((match) => match.getMatch("NAME")?.text() === annotation.name);
+  const match = matches[0];
+  if (match === undefined || matches.length > 1) {
+    return new PackError({
+      message: `${annotation.file}: expected one declaration of ${annotation.name}, found ${matches.length}`,
+    });
+  }
+  const edit = annotation.edit(match, match.getMatch("NAME")!);
+  return edit instanceof PackError ? edit : root.commitEdits([edit]);
+};
+
 const annotateUpstream = Effect.fn("annotateUpstream")(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const originals = new Map<string, string>();
   yield* Effect.gen(function* () {
-    for (const edit of edits) {
-      const file = path.join(root, edit.file);
+    for (const annotation of annotations) {
+      const file = path.join(root, annotation.file);
       const source = yield* fs
         .readFileString(file)
         .pipe(Effect.mapError(packError(`failed to read ${file}`)));
-      const next = edit.apply(source);
+      const next = annotate(annotation, source);
       if (typeof next !== "string") {
         return yield* next;
       }
