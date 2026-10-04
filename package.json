@@ -106,7 +106,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "vp pack",
+    "build": "node scripts/pack.ts",
     "check": "vp check",
     "format": "vp fmt",
     "format:check": "vp fmt --check",
@@ -122,15 +122,17 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@effect/platform-node": "4.0.0-beta.103",
+    "@effect/platform-node": "4.0.0-rc.115",
     "@napi-rs/keyring": "^1.3.0",
-    "effect": "4.0.0-beta.103",
+    "effect": "4.0.0-rc.115",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
     "string-width": "^8.2.2",
+    "undici": "^8.11.2",
     "wrap-ansi": "^10.0.0"
   },
   "devDependencies": {
+    "@ast-grep/cli": "^0.45.3",
     "@changesets/cli": "^2.31.1",
     "@effect/vitest": "catalog:",
     "@t3tools/client-runtime": "link:upstream-t3code/packages/client-runtime",

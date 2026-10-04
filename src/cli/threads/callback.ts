@@ -5,7 +5,7 @@ import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner
 import { Command, Flag } from "effect/unstable/cli";
 
 import { extraArgsConfig } from "../extra-args.ts";
-import { threadFlag } from "../flags.ts";
+import { asUserFlag, threadFlag } from "../flags.ts";
 import { MissingThreadError } from "../error.ts";
 import { resolveThreadId } from "../scope/index.ts";
 import { loadT3CliEnv } from "../../config/env/env.ts";
@@ -16,16 +16,17 @@ import { CliPath } from "../../cli-path/service.ts";
 export const callbackThreadCommand = Command.make(
   "callback",
   {
-    from: Flag.string("from").pipe(Flag.withDescription("Thread ID to watch for completion")),
+    from: Flag.String("from").pipe(Flag.withDescription("Thread ID to watch for completion")),
     thread: threadFlag,
-    prompt: Flag.string("prompt").pipe(Flag.withDescription("Message to send to target thread")),
-    background: Flag.boolean("background").pipe(
+    prompt: Flag.String("prompt").pipe(Flag.withDescription("Message to send to target thread")),
+    background: Flag.Boolean("background").pipe(
       Flag.withDescription("Fork and detach as background process"),
       Flag.optional,
     ),
+    asUser: asUserFlag,
     ...extraArgsConfig,
   },
-  ({ from, thread, prompt, background }) =>
+  ({ from, thread, prompt, background, asUser }) =>
     Effect.gen(function* () {
       const application = yield* T3Application;
       const t3CliEnv = yield* loadT3CliEnv;
@@ -59,6 +60,7 @@ export const callbackThreadCommand = Command.make(
           targetThreadId,
           "--prompt",
           prompt,
+          ...(asUser ? ["--as-user"] : []),
         ];
 
         const proc = ChildProcess.make(process.execPath, args, {
@@ -83,6 +85,7 @@ export const callbackThreadCommand = Command.make(
         fromThreadId,
         targetThreadId,
         prompt,
+        asUser,
       });
 
       yield* output.printInfo(

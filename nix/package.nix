@@ -1,4 +1,5 @@
 {
+  ast-grep,
   autoPatchelfHook,
   cacert,
   fetchPnpmDeps,
@@ -37,10 +38,11 @@ stdenv.mkDerivation (finalAttrs: {
     inherit (finalAttrs) pname version src;
     inherit pnpm;
     fetcherVersion = 4;
-    hash = "sha256-2bwrSxiSH8/S/JaB9aqNpNEmzLo5rSoIawIk8FONMMI=";
+    hash = "sha256-BCPgSGHtN5uokbnMp6QBwjDGpoP9/LwCL50KBV4yOVE=";
   };
 
   nativeBuildInputs = [
+    ast-grep
     installShellFiles
     makeWrapper
     nodejs
@@ -51,6 +53,9 @@ stdenv.mkDerivation (finalAttrs: {
   ++ lib.optional stdenv.hostPlatform.isLinux autoPatchelfHook;
 
   buildInputs = lib.optional stdenv.hostPlatform.isLinux libsecret;
+
+  # The npm ast-grep binary is not linked for the build sandbox.
+  env.AST_GREP_BIN = lib.getExe ast-grep;
 
   noAuditTmpdir = true;
   SSL_CERT_FILE = "${cacert}/etc/ssl/certs/ca-bundle.crt";

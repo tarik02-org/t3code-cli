@@ -1,5 +1,6 @@
 export {
   resolveCommandProjectRef,
+  resolveMessageAuthor,
   resolveProjectRef,
   resolveThreadId,
   resolveWorktreePath,

@@ -7,7 +7,7 @@ import { formatFlag, threadFlag } from "../flags.ts";
 import { InvalidFlagCombinationError, InvalidLimitError } from "../error.ts";
 import { MissingThreadError } from "../error.ts";
 import { resolveThreadId } from "../scope/index.ts";
-import { formatThreadMessagesHuman, formatThreadMessagesJson } from "../format/thread.ts";
+import { formatThreadTranscriptHuman, formatThreadTranscriptJson } from "../format/thread.ts";
 import { T3Application } from "../../application/service.ts";
 import { CliRuntime } from "../../cli/runtime/service.ts";
 import { loadT3CliEnv } from "../../config/env/env.ts";
@@ -18,35 +18,25 @@ export const getThreadTranscriptCommand = Command.make(
   "transcript",
   {
     thread: threadFlag,
-    limit: Flag.integer("limit").pipe(Flag.withDefault(20)),
-    turnLimit: Flag.integer("turn-limit").pipe(Flag.optional),
-    beforeCursor: Flag.string("before-cursor").pipe(Flag.optional),
-    all: Flag.boolean("all"),
-    full: Flag.boolean("full"),
+    limit: Flag.Int("limit").pipe(Flag.withDefault(20)),
+    beforeCursor: Flag.String("before-cursor").pipe(Flag.optional),
+    all: Flag.Boolean("all").pipe(Flag.withDefault(false)),
+    full: Flag.Boolean("full").pipe(Flag.withDefault(false)),
     format: formatFlag,
     ...extraArgsConfig,
   },
-  ({ thread, limit, turnLimit, beforeCursor, all, full, format }) =>
+  ({ thread, limit, beforeCursor, all, full, format }) =>
     Effect.gen(function* () {
       if (limit < 0) {
         return yield* Effect.fail(
           new InvalidLimitError({ message: `invalid limit: ${limit}`, value: String(limit) }),
         );
       }
-      const turnLimitValue = Option.getOrUndefined(turnLimit);
       const beforeCursorValue = Option.getOrUndefined(beforeCursor);
-      if (turnLimitValue !== undefined && turnLimitValue <= 0) {
-        return yield* Effect.fail(
-          new InvalidLimitError({
-            message: `invalid turn limit: ${turnLimitValue}`,
-            value: String(turnLimitValue),
-          }),
-        );
-      }
-      if (all && (turnLimitValue !== undefined || beforeCursorValue !== undefined)) {
+      if (all && beforeCursorValue !== undefined) {
         return yield* Effect.fail(
           new InvalidFlagCombinationError({
-            message: "--all cannot be combined with --turn-limit or --before-cursor",
+            message: "--all cannot be combined with --before-cursor",
           }),
         );
       }
@@ -66,20 +56,14 @@ export const getThreadTranscriptCommand = Command.make(
         );
       }
       const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
-      const detail = yield* application.getThreadMessages({
+      const transcript = yield* application.getThreadTranscript({
         threadId,
-        ...(!all
-          ? {
-              window: {
-                turnLimit: turnLimitValue ?? (beforeCursorValue === undefined ? 10 : 20),
-                ...(beforeCursorValue !== undefined ? { beforeCursor: beforeCursorValue } : {}),
-              },
-            }
-          : {}),
+        ...(all ? { all: true } : {}),
+        ...(beforeCursorValue !== undefined ? { beforeCursor: beforeCursorValue } : {}),
       });
       if (resolvedFormat === "json") {
-        return yield* output.printJson(formatThreadMessagesJson(detail, full));
+        return yield* output.printJson(formatThreadTranscriptJson(transcript, full));
       }
-      return yield* output.writeStdout(formatThreadMessagesHuman(detail, limit));
+      return yield* output.writeStdout(formatThreadTranscriptHuman(transcript, limit));
     }),
 ).pipe(Command.withDescription("get latest thread transcript"));

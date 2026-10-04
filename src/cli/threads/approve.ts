@@ -12,11 +12,13 @@ import { loadT3CliEnv } from "../../config/env/env.ts";
 import { resolveOutputFormat } from "../format/output.ts";
 import { T3Output } from "../output/service.ts";
 
-const approvalDecisionFlag = Flag.choice("decision", ["accept", "decline", "cancel"] as const).pipe(
-  Flag.withDescription("Approval decision"),
-);
+const approvalDecisionFlag = Flag.Literals("decision", [
+  "accept",
+  "decline",
+  "cancel",
+] as const).pipe(Flag.withDescription("Approval decision"));
 
-const requestFlag = Flag.string("request").pipe(
+const requestFlag = Flag.String("request").pipe(
   Flag.withDescription("Pending approval request id"),
   Flag.optional,
 );

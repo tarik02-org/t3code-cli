@@ -217,21 +217,26 @@ t3cli start [message]
 t3cli list [--project <ref>] [--archived | --all]
 t3cli search <query> [--limit <1-50>]          # Search conversation content
 t3cli show [--thread <id>]                   # Show thread details
-t3cli send [--thread <id>] [message]         # Send message to thread
-t3cli transcript [--thread <id>] [--turn-limit N] [--before-cursor <cursor>] [--all] # View messages
+t3cli send [--thread <id>] [message] [--mode auto|queue|steer|restart] # Send message to thread
+t3cli transcript [--thread <id>] [--before-cursor <cursor>] [--all] # View messages
 t3cli wait [--thread <id>]                   # Wait for completion
 ```
 
-`transcript` loads the latest 10 user turns by default and includes pagination metadata in JSON
-output. Pass the returned `page.beforeCursor` to `--before-cursor` for the next older page, use
-`--turn-limit` to set the page size, or use `--all` to load the complete transcript.
+`transcript` loads the most recent window of the thread timeline and includes pagination metadata
+in JSON output. Pass the returned `beforeCursor` to `--before-cursor` for the next older page, or use
+`--all` to load the complete transcript.
+
+`send --mode` controls delivery while a run is active: `queue` runs after it, `steer` joins it,
+`restart` interrupts and restarts it, and `auto` lets the server choose.
 
 ### Advanced Thread Commands
 
 ```sh
 t3cli thread archive [--thread <id>]        # Archive thread
 t3cli thread approve --request <id>         # Approve request
-t3cli thread interrupt [--thread <id>]      # Interrupt running turn
+t3cli thread interrupt [--thread <id>]      # Interrupt running run
+t3cli thread queue list [--thread <id>]     # Messages queued behind the running run
+t3cli thread queue cancel|edit|move|steer <run-id>  # Manage a queued message
 t3cli thread pin [--thread <id>]            # Pin thread
 t3cli thread respond --request <id>         # Respond to request
 t3cli thread settle [--thread <id>]         # Settle thread

@@ -16,8 +16,8 @@ export const destroyTerminalCommand = Command.make(
   "destroy",
   {
     thread: threadFlag,
-    terminalId: Argument.string("terminal-id"),
-    quiet: Flag.boolean("quiet"),
+    terminalId: Argument.String("terminal-id"),
+    quiet: Flag.Boolean("quiet").pipe(Flag.withDefault(false)),
     yes: yesFlag,
     format: formatFlag,
     ...extraArgsConfig,

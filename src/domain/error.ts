@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 
-export class ProjectLookupError extends Schema.TaggedErrorClass<ProjectLookupError>()(
+export class ProjectLookupError extends Schema.TaggedError<ProjectLookupError>()(
   "ProjectLookupError",
   {
     message: Schema.String,
@@ -8,21 +8,18 @@ export class ProjectLookupError extends Schema.TaggedErrorClass<ProjectLookupErr
   },
 ) {}
 
-export class ModelSelectionError extends Schema.TaggedErrorClass<ModelSelectionError>()(
+export class ModelSelectionError extends Schema.TaggedError<ModelSelectionError>()(
   "ModelSelectionError",
   {
     message: Schema.String,
   },
 ) {}
 
-export class ThreadEventError extends Schema.TaggedErrorClass<ThreadEventError>()(
-  "ThreadEventError",
-  {
-    message: Schema.String,
-  },
-) {}
+export class ThreadEventError extends Schema.TaggedError<ThreadEventError>()("ThreadEventError", {
+  message: Schema.String,
+}) {}
 
-export class ThreadSessionError extends Schema.TaggedErrorClass<ThreadSessionError>()(
+export class ThreadSessionError extends Schema.TaggedError<ThreadSessionError>()(
   "ThreadSessionError",
   {
     message: Schema.String,
@@ -30,7 +27,7 @@ export class ThreadSessionError extends Schema.TaggedErrorClass<ThreadSessionErr
   },
 ) {}
 
-export class ThreadLookupError extends Schema.TaggedErrorClass<ThreadLookupError>()(
+export class ThreadLookupError extends Schema.TaggedError<ThreadLookupError>()(
   "ThreadLookupError",
   {
     message: Schema.String,
@@ -38,15 +35,13 @@ export class ThreadLookupError extends Schema.TaggedErrorClass<ThreadLookupError
   },
 ) {}
 
-export class ProjectCreateVisibilityError extends Schema.TaggedErrorClass<ProjectCreateVisibilityError>()(
-  "ProjectCreateVisibilityError",
-  {
-    message: Schema.String,
-    projectId: Schema.String,
-  },
-) {}
+export class QueuedRunError extends Schema.TaggedError<QueuedRunError>()("QueuedRunError", {
+  message: Schema.String,
+  threadId: Schema.String,
+  runId: Schema.String,
+}) {}
 
-export class TerminalLookupError extends Schema.TaggedErrorClass<TerminalLookupError>()(
+export class TerminalLookupError extends Schema.TaggedError<TerminalLookupError>()(
   "TerminalLookupError",
   {
     message: Schema.String,
@@ -55,7 +50,7 @@ export class TerminalLookupError extends Schema.TaggedErrorClass<TerminalLookupE
   },
 ) {}
 
-export class ProjectActionLookupError extends Schema.TaggedErrorClass<ProjectActionLookupError>()(
+export class ProjectActionLookupError extends Schema.TaggedError<ProjectActionLookupError>()(
   "ProjectActionLookupError",
   {
     message: Schema.String,
@@ -64,7 +59,7 @@ export class ProjectActionLookupError extends Schema.TaggedErrorClass<ProjectAct
   },
 ) {}
 
-export class ProjectActionValidationError extends Schema.TaggedErrorClass<ProjectActionValidationError>()(
+export class ProjectActionValidationError extends Schema.TaggedError<ProjectActionValidationError>()(
   "ProjectActionValidationError",
   {
     message: Schema.String,
@@ -78,7 +73,7 @@ export type DomainError =
   | ThreadEventError
   | ThreadSessionError
   | ThreadLookupError
-  | ProjectCreateVisibilityError
+  | QueuedRunError
   | TerminalLookupError
   | ProjectActionLookupError
   | ProjectActionValidationError;

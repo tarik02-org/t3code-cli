@@ -3,8 +3,13 @@ import {
   BearerConnectionTarget,
   type ConnectionAttemptError,
   mapRemoteEnvironmentError,
+  orchestrationProtocolCompatibilityError,
   type PreparedConnection,
 } from "@t3tools/client-runtime/connection";
+import {
+  ORCHESTRATION_PROTOCOL_QUERY_PARAM,
+  ORCHESTRATION_PROTOCOL_VERSION,
+} from "@t3tools/contracts";
 import { fetchRemoteEnvironmentDescriptor } from "@t3tools/client-runtime/environment";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -49,17 +54,27 @@ const makePreparedConnection = Effect.fn("makePreparedConnection")(function* (
   const descriptor = yield* fetchRemoteEnvironmentDescriptor({ httpBaseUrl }).pipe(
     Effect.mapError(mapRemoteEnvironmentError),
   );
-  const socketUrl = yield* resolveRemoteWebSocketConnectionUrl({
+  const compatibilityError = orchestrationProtocolCompatibilityError(descriptor);
+  if (compatibilityError !== null) {
+    return yield* compatibilityError;
+  }
+  const authorizedSocketUrl = yield* resolveRemoteWebSocketConnectionUrl({
     httpBaseUrl,
     wsBaseUrl,
     bearerToken: connection.auth.token,
   }).pipe(Effect.mapError(mapRemoteEnvironmentError));
+  // The server refuses websocket upgrades that do not name its orchestration protocol.
+  const socketUrl = new URL(authorizedSocketUrl);
+  socketUrl.searchParams.set(
+    ORCHESTRATION_PROTOCOL_QUERY_PARAM,
+    String(ORCHESTRATION_PROTOCOL_VERSION),
+  );
 
   return {
     environmentId: descriptor.environmentId,
     label: descriptor.label,
     httpBaseUrl,
-    socketUrl,
+    socketUrl: socketUrl.toString(),
     httpAuthorization: {
       _tag: "Bearer",
       token: connection.auth.token,

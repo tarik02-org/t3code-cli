@@ -102,7 +102,7 @@ t3cli ask [message]
   [--project <ref>] [--thread <id>] [--force|-f] [--stdin]
   [--title <title>] [--worktree <path>] [--provider <name>] [--model <id>]
   [--option key=value] [--reasoning-effort <v>] [--effort <v>] [--fast-mode] [--thinking]
-  [--archive never|always|on-success|on-failure]
+  [--archive never|always|on-success|on-failure] [--as-user]
   [--timeout <duration>]
   [--format auto|human|json|ndjson]
 
@@ -114,16 +114,26 @@ t3cli start [message]
 
 t3cli send [--thread <id>] [--force|-f] [message] [--stdin]
   [--option ...] [--reasoning-effort] [--effort] [--fast-mode] [--thinking]
-  [--wait] [--format auto|human|json|ndjson]
+  [--mode auto|queue|steer|restart] [--as-user] [--wait] [--format auto|human|json|ndjson]
 
 t3cli show [--thread <id>] [--format auto|human|json]
 t3cli transcript [--thread <id>] [--limit N]
-  [--turn-limit N] [--before-cursor <cursor>] [--all]
+  [--before-cursor <cursor>] [--all]
   [--full] [--format auto|human|json]
 t3cli wait [--thread <id>] [--format auto|human|ndjson]
 ```
 
-`ask` always waits for the turn it starts. Without `--thread`, it creates a thread and defaults to
+`send --mode` decides what happens when the thread already has a run in flight: `queue` runs the
+message after it, `steer` adds it to the active run, `restart` interrupts the active run and starts
+over with it, and `auto` (default) lets the server pick from the provider's capabilities. An idle
+thread starts a new run in every mode.
+
+Messages from `send`, `ask --thread`, and `thread callback` are sent as agent messages that name
+the calling thread (`T3CODE_THREAD_ID`, or `--from` for `callback`) when that thread exists in the
+target environment. `--as-user` sends them as plain user messages instead. The first message of a
+new thread (`start`, `ask` without `--thread`) is always recorded as the user's.
+
+`ask` always waits for the run it starts. Without `--thread`, it creates a thread and defaults to
 `--archive on-success`. With an explicit `--thread`, it defaults to `--archive never`. An explicit
 archive policy applies to either target. Archive failures produce a warning and remain visible in
 structured output without changing a successful exit status.
@@ -132,17 +142,18 @@ Existing busy or archived threads and threads with pending approval or user-inpu
 rejected.
 
 `--timeout` accepts positive durations such as `30s`, `5m`, and `1h`; omitting it waits without a
-limit. A timeout or local interruption stops a turn started by `ask` when ownership can be
+limit. A timeout or local interruption stops a run started by `ask` when ownership can be
 confirmed, then applies the failure archive policy.
 
 `--title`, `--worktree`, `--provider`, and `--model` apply only when creating a thread and are
 rejected with `--thread`. Model option flags apply to both modes. `ask` never reads
 `T3CODE_THREAD_ID`; selecting an existing thread requires `--thread`.
 
-`transcript` loads the latest 10 user turns by default. Older-page requests default to 20 turns.
-JSON output includes `page.beforeCursor` and `page.hasMore`; pass the cursor to `--before-cursor` to
-load the next older page. `--turn-limit` sets either page size. `--all` loads the full thread and
-cannot be combined with the paging flags. `--limit` only caps messages rendered in human output.
+`transcript` loads the most recent window of the thread timeline; the server sizes each page. JSON
+output includes `beforeCursor` and `hasMoreHistory`; pass the cursor to `--before-cursor` to load
+the next older page. `--all` loads the full thread and cannot be combined with `--before-cursor`.
+`--full` adds the raw timeline rows (tool calls, reasoning, plans) to JSON output. `--limit` only
+caps messages rendered in human output.
 
 ## terminal
 
@@ -172,6 +183,12 @@ t3cli thread approve --request <id> --decision accept|decline|cancel [--thread <
 t3cli thread respond --request <id> [--answers <json>] [--stdin] [--thread <id>] [--format json]
 t3cli thread archive [--thread <id>] [--force|-f] [--format json]
 t3cli thread interrupt [--thread <id>] [--force|-f] [--format json]
+t3cli thread queue list [--thread <id>] [--format auto|human|json]
+t3cli thread queue cancel [--thread <id>] [--force|-f] <run-id> [--format json]
+t3cli thread queue edit [--thread <id>] [--force|-f] <run-id> [message] [--stdin] [--format json]
+t3cli thread queue move [--thread <id>] [--force|-f] <run-id> (--before <run-id> | --last) [--format json]
+t3cli thread queue steer [--thread <id>] [--force|-f] <run-id> [--format json]
+t3cli thread queue resume [--thread <id>] [--force|-f] [--format json]
 t3cli thread settle [--thread <id>] [--format auto|human|json]
 t3cli thread unsettle [--thread <id>] [--format auto|human|json]
 t3cli thread snooze [--thread <id>]
@@ -189,8 +206,12 @@ t3cli thread update [--thread <id>] [--force|-f]
   [--worktree <path>] [--clear-worktree]
   [--format json]
 t3cli thread delete [--thread <id>] [--force|-f] [--yes] [--format json]
-t3cli thread callback --from <thread-id> --prompt <message> [--thread <id>] [--background]
+t3cli thread callback --from <thread-id> --prompt <message> [--thread <id>] [--background] [--as-user]
 ```
+
+`thread queue` manages messages sent with `send --mode queue` (or queued by the server) while a run
+is active. `list` shows them in start order with their run ids; `steer` delivers one to the running
+run now; `resume` starts a queue the server held after restarting.
 
 `thread snooze` requires exactly one wake-time option. Presets use the local time zone and the same schedule as T3 Code clients. The `evening` preset is unavailable once fewer than one hour remains before 18:00; use `tomorrow` or `--until` then.
 

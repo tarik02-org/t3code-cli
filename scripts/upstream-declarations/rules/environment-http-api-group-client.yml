@@ -1,0 +1,27 @@
+id: environment-http-api-group-client
+language: TypeScript
+files:
+  - upstream-t3code/packages/client-runtime/src/rpc/http.ts
+rule:
+  pattern: export const makeEnvironmentHttpApiGroupClient = <$$$TYPES>($$$PARAMS) => $BODY
+fix: |-
+  export const makeEnvironmentHttpApiGroupClient = <$$$TYPES>(
+    $$$PARAMS
+  ): Effect.Effect<
+    HttpApiClient.Client.Group<
+      import("effect/unstable/httpapi/HttpApiGroup").WithIdentifier<
+        typeof EnvironmentHttpApi extends import("effect/unstable/httpapi/HttpApi").HttpApi<string, infer Groups> ? Groups : never,
+        Group
+      >,
+      HttpClientError.HttpClientError,
+      never
+    >,
+    never,
+    | HttpClient.HttpClient
+    | import("effect/unstable/httpapi/HttpApiGroup").MiddlewareClient<
+        import("effect/unstable/httpapi/HttpApiGroup").WithIdentifier<
+          typeof EnvironmentHttpApi extends import("effect/unstable/httpapi/HttpApi").HttpApi<string, infer Groups> ? Groups : never,
+          Group
+        >
+      >
+  > => $BODY

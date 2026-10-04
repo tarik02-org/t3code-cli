@@ -49,7 +49,7 @@ const listCommand = Command.make(
 const useCommand = Command.make(
   "use",
   {
-    name: Argument.string("name"),
+    name: Argument.String("name"),
     format: formatFlag,
     ...extraArgsConfig,
   },

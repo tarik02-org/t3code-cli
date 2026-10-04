@@ -5,7 +5,7 @@ const PlatformErrorCauseSchema = Schema.Struct({
   message: Schema.String,
 });
 
-export class InputError extends Schema.TaggedErrorClass<InputError>()("InputError", {
+export class InputError extends Schema.TaggedError<InputError>()("InputError", {
   message: Schema.String,
   cause: Schema.optionalKey(PlatformErrorCauseSchema),
 }) {}

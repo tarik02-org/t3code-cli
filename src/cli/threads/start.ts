@@ -9,7 +9,7 @@ import { readInitialMessage } from "../message-input.ts";
 import { buildModelOptions } from "../model-options.ts";
 import { requireCommandProjectRef } from "../require.ts";
 import { resolveWorktreePath } from "../scope/index.ts";
-import { formatThreadStartedHuman } from "../format/thread.ts";
+import { formatThreadResultJson, formatThreadStartedHuman } from "../format/thread.ts";
 import { T3Application } from "../../application/service.ts";
 import { CliRuntime } from "../../cli/runtime/service.ts";
 import { loadT3CliEnv } from "../../config/env/env.ts";
@@ -22,14 +22,14 @@ export const startThreadCommand = Command.make(
   "start",
   {
     project: projectFlag,
-    message: Argument.string("message").pipe(Argument.optional),
-    stdin: Flag.boolean("stdin"),
-    title: Flag.string("title").pipe(Flag.optional),
+    message: Argument.String("message").pipe(Argument.optional),
+    stdin: Flag.Boolean("stdin").pipe(Flag.withDefault(false)),
+    title: Flag.String("title").pipe(Flag.optional),
     worktree: worktreeFlag,
-    provider: Flag.string("provider").pipe(Flag.optional),
-    model: Flag.string("model").pipe(Flag.optional),
+    provider: Flag.String("provider").pipe(Flag.optional),
+    model: Flag.String("model").pipe(Flag.optional),
     ...modelFlags,
-    wait: Flag.boolean("wait"),
+    wait: Flag.Boolean("wait").pipe(Flag.withDefault(false)),
     format: threadFormatFlag,
     ...extraArgsConfig,
   },
@@ -94,29 +94,24 @@ export const startThreadCommand = Command.make(
       );
 
       if (resolvedFormat === "ndjson") {
-        const started = yield* application.startThread(input, {
-          until: wait ? "dispatch" : "visible",
-        });
-        yield* output.printNdjson({ type: "dispatch", sequence: started.dispatch.sequence });
-        if (wait) {
-          yield* printWaitEventsNdjson(output, application.watchThread(started.threadId));
-        } else {
-          yield* printWaitEventsNdjson(
-            output,
-            Stream.fromIterable([{ type: "thread", thread: started.thread! }]),
-          );
-        }
+        const started = yield* application.startThread(input, { until: "visible" });
+        yield* output.printNdjson({ type: "started", threadId: started.threadId });
+        yield* printWaitEventsNdjson(
+          output,
+          wait
+            ? application.watchThread(started.threadId)
+            : Stream.make({ type: "thread", projection: started.projection! }),
+        );
         return;
       }
 
       if (wait) {
         const started = yield* application.startThread(input, { until: "dispatch" });
         if (resolvedFormat === "json") {
-          const thread = yield* application.waitForThread(started.threadId);
+          const projection = yield* application.waitForThread(started.threadId);
           yield* output.printJson({
-            dispatch: started.dispatch,
             threadId: started.threadId,
-            thread,
+            ...formatThreadResultJson(projection),
           });
           return;
         }
@@ -130,18 +125,12 @@ export const startThreadCommand = Command.make(
       const result = yield* application.startThread(input, { until: "visible" });
       if (resolvedFormat === "json") {
         yield* output.printJson({
-          dispatch: result.dispatch,
-          project: result.project,
           threadId: result.threadId,
-          thread: result.thread,
+          project: result.project,
+          ...formatThreadResultJson(result.projection!),
         });
       } else {
-        yield* output.printInfo(
-          formatThreadStartedHuman({
-            thread: result.thread!,
-            sequence: result.dispatch.sequence,
-          }),
-        );
+        yield* output.printInfo(formatThreadStartedHuman(result.projection!));
       }
     }),
 ).pipe(Command.withDescription("start thread with initial message"));

@@ -1,10 +1,13 @@
 import type {
   EnvironmentAuthorizationError,
   KeybindingsConfigError,
-  OrchestrationDispatchCommandError,
-  OrchestrationGetSnapshotError,
   OrchestrationSearchThreadsError,
+  OrchestrationV2DispatchCommandError,
+  OrchestrationV2GetShellSnapshotError,
+  OrchestrationV2GetThreadProjectionError,
+  OrchestrationV2ThreadLaunchError,
   PreviewAutomationError,
+  ProjectMutationError,
   ServerSettingsError,
   TerminalError,
 } from "@t3tools/contracts";
@@ -22,10 +25,13 @@ import { T3Rpc, type WsClient } from "./service.ts";
 export type CliRpcOperationError =
   | EnvironmentAuthorizationError
   | KeybindingsConfigError
-  | OrchestrationDispatchCommandError
-  | OrchestrationGetSnapshotError
   | OrchestrationSearchThreadsError
+  | OrchestrationV2DispatchCommandError
+  | OrchestrationV2GetShellSnapshotError
+  | OrchestrationV2GetThreadProjectionError
+  | OrchestrationV2ThreadLaunchError
   | PreviewAutomationError
+  | ProjectMutationError
   | RpcClientError.RpcClientError
   | ServerSettingsError
   | TerminalError;

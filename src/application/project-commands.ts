@@ -1,10 +1,11 @@
 import * as Crypto from "effect/Crypto";
-import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
-import { CommandId, ProjectId, type ClientOrchestrationCommand } from "@t3tools/contracts";
+import { ProjectId, type ProjectMutation, type ProjectScript } from "@t3tools/contracts";
 
-export const makeProjectCreateCommand = Effect.fn("makeProjectCreateCommand")(function* (input: {
+import { makeCommandId } from "./command-id.ts";
+
+export const makeProjectCreateMutation = Effect.fn("makeProjectCreateMutation")(function* (input: {
   readonly path: string;
   readonly title?: string;
   readonly cwd: string;
@@ -12,52 +13,38 @@ export const makeProjectCreateCommand = Effect.fn("makeProjectCreateCommand")(fu
   const path = yield* Path.Path;
   const crypto = yield* Crypto.Crypto;
   const workspaceRoot = path.resolve(input.cwd, input.path);
-  const projectId = ProjectId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie));
   const title = input.title?.trim();
-  const createdAt = DateTime.formatIso(yield* DateTime.now);
   return {
     type: "project.create",
-    commandId: CommandId.make(
-      `t3cli:project-create:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-    ),
-    projectId,
+    commandId: yield* makeCommandId("project-create"),
+    projectId: ProjectId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie)),
     title: title !== undefined && title.length > 0 ? title : path.basename(workspaceRoot),
     workspaceRoot,
-    createdAt,
-  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "project.create" }>;
+  } satisfies Extract<ProjectMutation, { readonly type: "project.create" }>;
 });
 
-export const makeProjectDeleteCommand = Effect.fn("makeProjectDeleteCommand")(function* (input: {
+export const makeProjectDeleteMutation = Effect.fn("makeProjectDeleteMutation")(function* (input: {
   readonly projectId: string;
   readonly force?: boolean;
 }) {
-  const crypto = yield* Crypto.Crypto;
   return {
     type: "project.delete",
-    commandId: CommandId.make(
-      `t3cli:project-delete:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-    ),
+    commandId: yield* makeCommandId("project-delete"),
     projectId: ProjectId.make(input.projectId),
     ...(input.force === true ? { force: true } : {}),
-  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "project.delete" }>;
+  } satisfies Extract<ProjectMutation, { readonly type: "project.delete" }>;
 });
 
-export const makeProjectMetaUpdateCommand = Effect.fn("makeProjectMetaUpdateCommand")(
+export const makeProjectScriptsUpdateMutation = Effect.fn("makeProjectScriptsUpdateMutation")(
   function* (input: {
     readonly projectId: string;
-    readonly scripts: Extract<
-      ClientOrchestrationCommand,
-      { readonly type: "project.meta.update" }
-    >["scripts"];
+    readonly scripts: ReadonlyArray<ProjectScript>;
   }) {
-    const crypto = yield* Crypto.Crypto;
     return {
-      type: "project.meta.update",
-      commandId: CommandId.make(
-        `t3cli:project-meta-update:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-      ),
+      type: "project.update",
+      commandId: yield* makeCommandId("project-update"),
       projectId: ProjectId.make(input.projectId),
       scripts: input.scripts,
-    } satisfies Extract<ClientOrchestrationCommand, { readonly type: "project.meta.update" }>;
+    } satisfies Extract<ProjectMutation, { readonly type: "project.update" }>;
   },
 );

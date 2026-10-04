@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import { ORCHESTRATION_WS_METHODS } from "@t3tools/contracts";
+import { ORCHESTRATION_V2_WS_METHODS } from "@t3tools/contracts";
 
 import { T3Orchestration } from "../orchestration/service.ts";
 import { RpcError } from "../rpc/error.ts";
@@ -18,10 +18,10 @@ export function waitForShellSequence(input: { readonly sequence: number }) {
       return yield* Effect.fail(
         new RpcError({
           message: `shell stream ended before sequence ${input.sequence}`,
-          method: ORCHESTRATION_WS_METHODS.subscribeShell,
+          method: ORCHESTRATION_V2_WS_METHODS.subscribeShell,
         }),
       );
     }
-    return yield* orchestration.getShellSnapshot();
+    return yield* Effect.void;
   });
 }

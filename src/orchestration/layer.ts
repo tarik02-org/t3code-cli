@@ -1,95 +1,124 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import { HttpClient } from "effect/unstable/http";
 import {
-  ORCHESTRATION_WS_METHODS,
+  ORCHESTRATION_PROTOCOL_HEADER,
+  ORCHESTRATION_PROTOCOL_VERSION_TEXT,
+  ORCHESTRATION_V2_WS_METHODS,
   ThreadId,
   WS_METHODS,
-  type ClientOrchestrationCommand,
-  type OrchestrationShellSnapshot,
-  type OrchestrationShellStreamItem,
-  type OrchestrationThreadStreamItem,
+  type OrchestrationV2Command,
+  type OrchestrationV2ShellStreamItem,
+  type OrchestrationV2ThreadProjection,
 } from "@t3tools/contracts";
 import { environmentEndpointUrl } from "@t3tools/client-runtime/environment";
 import {
   executeEnvironmentHttpRequest,
   makeEnvironmentHttpApiClient,
 } from "@t3tools/client-runtime/rpc";
-import { applyShellStreamEvent } from "@t3tools/client-runtime/state/shell";
+import { applyOrchestrationV2ProjectionEvent } from "@t3tools/client-runtime/state/orchestration-v2-projection";
 
 import { T3PreparedConnectionProvider } from "../connection/prepared.ts";
 import { RpcError } from "../rpc/error.ts";
 import { T3RpcOperations } from "../rpc/operation.ts";
 import { ThreadSnapshotRequestError } from "./error.ts";
-import { T3Orchestration, type OpenThread, type Orchestration } from "./service.ts";
+import { T3Orchestration, type Orchestration, type ThreadState } from "./service.ts";
 
 const THREAD_SNAPSHOT_TIMEOUT_MS = 30_000;
+
+type HttpApiClient = Effect.Success<ReturnType<typeof makeEnvironmentHttpApiClient>>;
 
 export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* () {
   const rpc = yield* T3RpcOperations;
   const preparedConnectionProvider = yield* T3PreparedConnectionProvider;
   const httpClient = yield* HttpClient.HttpClient;
 
-  const watchShellSnapshots: Orchestration["watchShellSnapshots"] = () =>
+  const subscribeShell = () =>
+    rpc.subscribe(ORCHESTRATION_V2_WS_METHODS.subscribeShell, (client) =>
+      client[ORCHESTRATION_V2_WS_METHODS.subscribeShell]({}),
+    );
+
+  const watchShellSequence: Orchestration["watchShellSequence"] = () =>
+    subscribeShell().pipe(
+      Stream.filter(
+        (
+          item,
+        ): item is Exclude<OrchestrationV2ShellStreamItem, { readonly kind: "synchronized" }> =>
+          item.kind !== "synchronized",
+      ),
+      Stream.map((item) =>
+        item.kind === "snapshot" ? item.snapshot.snapshotSequence : item.sequence,
+      ),
+    );
+
+  const watchThread: Orchestration["watchThread"] = (threadId) =>
     rpc
-      .subscribe(ORCHESTRATION_WS_METHODS.subscribeShell, (client) =>
-        client[ORCHESTRATION_WS_METHODS.subscribeShell]({}),
+      .subscribe(ORCHESTRATION_V2_WS_METHODS.subscribeThread, (client) =>
+        client[ORCHESTRATION_V2_WS_METHODS.subscribeThread]({ threadId: ThreadId.make(threadId) }),
       )
       .pipe(
-        Stream.filter(
-          (
-            item,
-          ): item is Exclude<OrchestrationShellStreamItem, { readonly kind: "synchronized" }> =>
-            item.kind !== "synchronized",
-        ),
-        Stream.mapAccum(
-          () => Option.none<OrchestrationShellSnapshot>(),
-          (
-            current,
-            item,
-          ): readonly [
-            Option.Option<OrchestrationShellSnapshot>,
-            ReadonlyArray<OrchestrationShellSnapshot>,
-          ] => {
+        Stream.mapAccumEffect(
+          () => Option.none<ThreadState>(),
+          (current, item) => {
             if (item.kind === "snapshot") {
-              return [Option.some(item.snapshot), [item.snapshot]];
+              const next: ThreadState = {
+                sequence: item.snapshotSequence,
+                projection: item.projection,
+                event: null,
+              };
+              return Effect.succeed([Option.some(next), [next]] as const);
+            }
+            if (item.kind === "synchronized") {
+              return Effect.succeed([current, []] as const);
             }
             if (Option.isNone(current)) {
-              return [current, []];
+              return Effect.fail(
+                new RpcError({
+                  message: `thread stream event received before snapshot: ${threadId}`,
+                  method: ORCHESTRATION_V2_WS_METHODS.subscribeThread,
+                }),
+              );
             }
-            const next = applyShellStreamEvent(current.value, item);
-            return [Option.some(next), [next]];
+            if (item.sequence <= current.value.sequence) {
+              return Effect.succeed([current, []] as const);
+            }
+            if (item.kind === "unknown-event") {
+              // Newer servers add event types; skip them but keep the resume cursor moving.
+              const next: ThreadState = { ...current.value, sequence: item.sequence, event: null };
+              return Effect.succeed([Option.some(next), []] as const);
+            }
+            const projection: OrchestrationV2ThreadProjection =
+              applyOrchestrationV2ProjectionEvent(current.value.projection, item.event) ??
+              current.value.projection;
+            const next: ThreadState = { sequence: item.sequence, projection, event: item.event };
+            return Effect.succeed([Option.some(next), [next]] as const);
           },
         ),
       );
 
-  const watchShellSequence: Orchestration["watchShellSequence"] = () =>
-    rpc
-      .subscribe(ORCHESTRATION_WS_METHODS.subscribeShell, (client) =>
-        client[ORCHESTRATION_WS_METHODS.subscribeShell]({}),
-      )
-      .pipe(
-        Stream.filter((item: OrchestrationShellStreamItem) => item.kind !== "synchronized"),
-        Stream.map((item) =>
-          item.kind === "snapshot" ? item.snapshot.snapshotSequence : item.sequence,
-        ),
-      );
-
-  const watchThreadItems: Orchestration["watchThreadItems"] = (threadId: string) =>
-    rpc.subscribe(ORCHESTRATION_WS_METHODS.subscribeThread, (client) =>
-      client[ORCHESTRATION_WS_METHODS.subscribeThread]({ threadId: ThreadId.make(threadId) }),
-    );
-
   const dispatch = Effect.fn("T3OrchestrationLive.dispatch")(function* (
-    command: ClientOrchestrationCommand,
+    command: OrchestrationV2Command,
   ) {
-    return yield* rpc.run(ORCHESTRATION_WS_METHODS.dispatchCommand, (client) =>
-      client[ORCHESTRATION_WS_METHODS.dispatchCommand](command),
+    return yield* rpc.run(ORCHESTRATION_V2_WS_METHODS.dispatchCommand, (client) =>
+      client[ORCHESTRATION_V2_WS_METHODS.dispatchCommand](command),
     );
   });
+  const mutateProject: Orchestration["mutateProject"] = Effect.fn(
+    "T3OrchestrationLive.mutateProject",
+  )(function* (mutation) {
+    return yield* rpc.run(WS_METHODS.projectsMutate, (client) =>
+      client[WS_METHODS.projectsMutate](mutation),
+    );
+  });
+  const launchThread: Orchestration["launchThread"] = Effect.fn("T3OrchestrationLive.launchThread")(
+    function* (input) {
+      return yield* rpc.run(ORCHESTRATION_V2_WS_METHODS.launchThread, (client) =>
+        client[ORCHESTRATION_V2_WS_METHODS.launchThread](input),
+      );
+    },
+  );
   const getServerConfig = Effect.fn("T3OrchestrationLive.getServerConfig")(function* () {
     return yield* rpc.run(WS_METHODS.serverGetConfig, (client) =>
       client[WS_METHODS.serverGetConfig]({}),
@@ -97,16 +126,14 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
   });
   const getShellSnapshot = Effect.fn("T3OrchestrationLive.getShellSnapshot")(function* () {
     const item = yield* Stream.runHead(
-      rpc.subscribe(ORCHESTRATION_WS_METHODS.subscribeShell, (client) =>
-        client[ORCHESTRATION_WS_METHODS.subscribeShell]({}),
-      ),
+      subscribeShell().pipe(Stream.filter((next) => next.kind !== "synchronized")),
     );
     const value = Option.getOrUndefined(item);
     if (value === undefined || value.kind !== "snapshot") {
       return yield* Effect.fail(
         new RpcError({
           message: "server did not return shell snapshot",
-          method: ORCHESTRATION_WS_METHODS.subscribeShell,
+          method: ORCHESTRATION_V2_WS_METHODS.subscribeShell,
         }),
       );
     }
@@ -114,136 +141,113 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
   });
   const getArchivedShellSnapshot = Effect.fn("T3OrchestrationLive.getArchivedShellSnapshot")(
     function* () {
-      return yield* rpc.run(ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot, (client) =>
-        client[ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot]({}),
+      return yield* rpc.run(ORCHESTRATION_V2_WS_METHODS.getArchivedShellSnapshot, (client) =>
+        client[ORCHESTRATION_V2_WS_METHODS.getArchivedShellSnapshot]({}),
       );
     },
   );
-  const searchThreads = Effect.fn("T3OrchestrationLive.searchThreads")(function* (input) {
-    return yield* rpc.run(ORCHESTRATION_WS_METHODS.searchThreads, (client) =>
-      client[ORCHESTRATION_WS_METHODS.searchThreads](input),
+  const searchThreads: Orchestration["searchThreads"] = Effect.fn(
+    "T3OrchestrationLive.searchThreads",
+  )(function* (input) {
+    return yield* rpc.run(ORCHESTRATION_V2_WS_METHODS.searchThreads, (client) =>
+      client[ORCHESTRATION_V2_WS_METHODS.searchThreads](input),
     );
   });
-  const getThreadSnapshot = Effect.fn("T3OrchestrationLive.getThreadSnapshot")(function* (
+  const getThreadProjection = Effect.fn("T3OrchestrationLive.getThreadProjection")(function* (
     threadId: string,
   ) {
-    const item = yield* Stream.runHead(
-      rpc.subscribe(ORCHESTRATION_WS_METHODS.subscribeThread, (client) =>
-        client[ORCHESTRATION_WS_METHODS.subscribeThread]({
-          threadId: ThreadId.make(threadId),
-        }),
-      ),
-    );
-    const value = Option.getOrUndefined(item);
-    if (value === undefined || value.kind !== "snapshot") {
-      return yield* Effect.fail(
-        new RpcError({
-          message: `thread ${threadId} not found`,
-          method: ORCHESTRATION_WS_METHODS.subscribeThread,
-        }),
-      );
-    }
-    return value.snapshot.thread;
-  });
-  const getThreadDetailSnapshot: Orchestration["getThreadDetailSnapshot"] = Effect.fn(
-    "T3OrchestrationLive.getThreadDetailSnapshot",
-  )(function* (input) {
-    const paginationSupported =
-      input.window === undefined
-        ? true
-        : (yield* getServerConfig()).threadSnapshotPagination === true;
-    const window = paginationSupported ? input.window : undefined;
-    const prepared = yield* preparedConnectionProvider.get.pipe(
-      Effect.mapError(
-        (cause) =>
-          new ThreadSnapshotRequestError({
-            message: "failed to prepare the thread snapshot request",
-            threadId: input.threadId,
-            cause,
-          }),
-      ),
-    );
-    const threadId = ThreadId.make(input.threadId);
-    const requestUrl = environmentEndpointUrl(
-      prepared.httpBaseUrl,
-      `/api/orchestration/threads/${threadId}`,
-    );
-    const client = yield* makeEnvironmentHttpApiClient(prepared.httpBaseUrl).pipe(
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-      Effect.mapError(
-        (cause) =>
-          new ThreadSnapshotRequestError({
-            message: "failed to create the thread snapshot client",
-            threadId: input.threadId,
-            cause,
-          }),
-      ),
-    );
-    return yield* executeEnvironmentHttpRequest(
-      requestUrl,
-      THREAD_SNAPSHOT_TIMEOUT_MS,
-      client.orchestration.threadSnapshot({
-        params: { threadId },
-        payload: {
-          ...(window !== undefined ? { turnLimit: window.turnLimit } : {}),
-          ...(window?.beforeCursor !== undefined ? { beforeCursor: window.beforeCursor } : {}),
-        },
-        headers: {
-          authorization: `Bearer ${prepared.httpAuthorization.token}`,
-        },
-      }),
-    ).pipe(
-      Effect.provideService(HttpClient.HttpClient, httpClient),
-      Effect.mapError(
-        (cause) =>
-          new ThreadSnapshotRequestError({
-            message: "failed to load the thread snapshot",
-            threadId: input.threadId,
-            cause,
-          }),
-      ),
-    );
-  });
-  const openThread = Effect.fn("T3OrchestrationLive.openThread")(function* (threadId: string) {
-    return yield* watchThreadItems(threadId).pipe(
-      Stream.peel(Sink.head<OrchestrationThreadStreamItem>()),
-      Effect.flatMap(([item, rest]) => {
-        const value = Option.getOrUndefined(item);
-        if (value === undefined || value.kind !== "snapshot") {
-          return Effect.fail(
-            new RpcError({
-              message: `thread ${threadId} not found`,
-              method: ORCHESTRATION_WS_METHODS.subscribeThread,
-            }),
-          );
-        }
-        return Effect.succeed({
-          snapshot: value.snapshot.thread,
-          events: rest.pipe(
-            Stream.filter(
-              (next): next is Extract<OrchestrationThreadStreamItem, { readonly kind: "event" }> =>
-                next.kind === "event",
-            ),
-            Stream.map((next) => next.event),
-          ),
-        } satisfies OpenThread);
+    return yield* rpc.run(ORCHESTRATION_V2_WS_METHODS.getThreadProjection, (client) =>
+      client[ORCHESTRATION_V2_WS_METHODS.getThreadProjection]({
+        threadId: ThreadId.make(threadId),
       }),
     );
   });
 
+  const requestThreadSnapshot = <A, E>(input: {
+    readonly threadId: string;
+    readonly path: string;
+    readonly description: string;
+    readonly request: (
+      client: HttpApiClient,
+      headers: {
+        readonly authorization: string;
+        readonly [ORCHESTRATION_PROTOCOL_HEADER]: typeof ORCHESTRATION_PROTOCOL_VERSION_TEXT;
+      },
+    ) => Effect.Effect<A, E>;
+  }) =>
+    Effect.gen(function* () {
+      const fail = (message: string) => (cause: unknown) =>
+        new ThreadSnapshotRequestError({ message, threadId: input.threadId, cause });
+      const prepared = yield* preparedConnectionProvider.get.pipe(
+        Effect.mapError(fail(`failed to prepare the ${input.description} request`)),
+      );
+      const client = yield* makeEnvironmentHttpApiClient(prepared.httpBaseUrl).pipe(
+        Effect.provideService(HttpClient.HttpClient, httpClient),
+        Effect.mapError(fail(`failed to create the ${input.description} client`)),
+      );
+      return yield* executeEnvironmentHttpRequest(
+        environmentEndpointUrl(prepared.httpBaseUrl, input.path),
+        THREAD_SNAPSHOT_TIMEOUT_MS,
+        input.request(client, {
+          authorization: `Bearer ${prepared.httpAuthorization.token}`,
+          [ORCHESTRATION_PROTOCOL_HEADER]: ORCHESTRATION_PROTOCOL_VERSION_TEXT,
+        }),
+      ).pipe(
+        Effect.provideService(HttpClient.HttpClient, httpClient),
+        Effect.mapError(fail(`failed to load the ${input.description}`)),
+      );
+    });
+
+  const getThreadDetailSnapshot: Orchestration["getThreadDetailSnapshot"] = (threadId) => {
+    const id = ThreadId.make(threadId);
+    return requestThreadSnapshot({
+      threadId,
+      path: `/api/orchestration/threads/${id}`,
+      description: "thread snapshot",
+      request: (client, headers) =>
+        client.orchestration.threadSnapshot({ params: { threadId: id }, headers }),
+    });
+  };
+  const getThreadBoundedSnapshot: Orchestration["getThreadBoundedSnapshot"] = (threadId) => {
+    const id = ThreadId.make(threadId);
+    return requestThreadSnapshot({
+      threadId,
+      path: `/api/orchestration/threads/${id}/bounded`,
+      description: "thread snapshot",
+      request: (client, headers) =>
+        client.orchestration.threadBoundedSnapshot({ params: { threadId: id }, headers }),
+    });
+  };
+  const getThreadHistoryPage: Orchestration["getThreadHistoryPage"] = (input) => {
+    const id = ThreadId.make(input.threadId);
+    return requestThreadSnapshot({
+      threadId: input.threadId,
+      path: `/api/orchestration/threads/${id}/history`,
+      description: "thread history page",
+      request: (client, headers) =>
+        client.orchestration.threadHistoryPage({
+          params: { threadId: id },
+          query: { cursor: input.cursor },
+          headers,
+        }),
+    });
+  };
+
   return {
     dispatch,
+    mutateProject,
+    launchThread,
     getServerConfig,
     getShellSnapshot,
     getArchivedShellSnapshot,
     searchThreads,
-    getThreadSnapshot,
+    getThreadProjection,
     getThreadDetailSnapshot,
-    watchShellSnapshots,
+    getThreadBoundedSnapshot,
+    getThreadHistoryPage,
     watchShellSequence,
-    watchThreadItems,
-    openThread,
-  };
+    watchThread,
+  } satisfies Orchestration;
 });
 
 export const T3OrchestrationLive = Layer.effect(T3Orchestration, makeT3Orchestration());

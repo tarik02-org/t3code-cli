@@ -41,20 +41,20 @@ export function createActionCommand() {
   );
 }
 
-const idFlag = Flag.string("id").pipe(Flag.optional);
-const nameFlag = Flag.string("name").pipe(Flag.optional);
-const commandFlag = Flag.string("command");
-const optionalCommandFlag = Flag.string("command").pipe(Flag.optional);
-const iconFlag = Flag.choice("icon", actionIconChoices).pipe(Flag.withDefault("play"));
-const optionalIconFlag = Flag.choice("icon", actionIconChoices).pipe(Flag.optional);
-const setupFlag = Flag.boolean("setup");
-const optionalSetupFlag = Flag.boolean("setup").pipe(Flag.optional);
-const noSetupFlag = Flag.boolean("no-setup").pipe(Flag.optional);
-const previewUrlFlag = Flag.string("preview-url").pipe(Flag.optional);
-const clearPreviewUrlFlag = Flag.boolean("clear-preview-url").pipe(Flag.optional);
-const autoOpenPreviewFlag = Flag.boolean("auto-open-preview").pipe(Flag.optional);
-const noAutoOpenPreviewFlag = Flag.boolean("no-auto-open-preview").pipe(Flag.optional);
-const clearAutoOpenPreviewFlag = Flag.boolean("clear-auto-open-preview").pipe(Flag.optional);
+const idFlag = Flag.String("id").pipe(Flag.optional);
+const nameFlag = Flag.String("name").pipe(Flag.optional);
+const commandFlag = Flag.String("command");
+const optionalCommandFlag = Flag.String("command").pipe(Flag.optional);
+const iconFlag = Flag.Literals("icon", actionIconChoices).pipe(Flag.withDefault("play"));
+const optionalIconFlag = Flag.Literals("icon", actionIconChoices).pipe(Flag.optional);
+const setupFlag = Flag.Boolean("setup").pipe(Flag.withDefault(false));
+const optionalSetupFlag = Flag.Boolean("setup").pipe(Flag.optional);
+const noSetupFlag = Flag.Boolean("no-setup").pipe(Flag.optional);
+const previewUrlFlag = Flag.String("preview-url").pipe(Flag.optional);
+const clearPreviewUrlFlag = Flag.Boolean("clear-preview-url").pipe(Flag.optional);
+const autoOpenPreviewFlag = Flag.Boolean("auto-open-preview").pipe(Flag.optional);
+const noAutoOpenPreviewFlag = Flag.Boolean("no-auto-open-preview").pipe(Flag.optional);
+const clearAutoOpenPreviewFlag = Flag.Boolean("clear-auto-open-preview").pipe(Flag.optional);
 
 const listActionsCommand = Command.make(
   "list",
@@ -88,8 +88,8 @@ const runActionCommand = Command.make(
     thread: threadFlag,
     id: idFlag,
     name: nameFlag,
-    terminal: Flag.string("terminal").pipe(Flag.optional),
-    attach: Flag.boolean("attach"),
+    terminal: Flag.String("terminal").pipe(Flag.optional),
+    attach: Flag.Boolean("attach").pipe(Flag.withDefault(false)),
     format: formatFlag,
     ...extraArgsConfig,
   },
@@ -129,13 +129,13 @@ const addActionCommand = Command.make(
   "add",
   {
     project: projectFlag,
-    name: Flag.string("name"),
+    name: Flag.String("name"),
     command: commandFlag,
     id: idFlag,
     icon: iconFlag,
     setup: setupFlag,
     previewUrl: previewUrlFlag,
-    autoOpenPreview: Flag.boolean("auto-open-preview"),
+    autoOpenPreview: Flag.Boolean("auto-open-preview").pipe(Flag.withDefault(false)),
     format: formatFlag,
     ...extraArgsConfig,
   },
@@ -168,7 +168,6 @@ const addActionCommand = Command.make(
           formatActionAddedHuman({
             project: result.project,
             action: result.action,
-            sequence: result.dispatch.sequence,
           }),
         );
       }
@@ -181,7 +180,7 @@ const updateActionCommand = Command.make(
     project: projectFlag,
     id: idFlag,
     name: nameFlag,
-    setName: Flag.string("set-name").pipe(Flag.optional),
+    setName: Flag.String("set-name").pipe(Flag.optional),
     command: optionalCommandFlag,
     icon: optionalIconFlag,
     setup: optionalSetupFlag,
@@ -244,7 +243,6 @@ const updateActionCommand = Command.make(
           formatActionUpdatedHuman({
             project: result.project,
             action: result.action,
-            sequence: result.dispatch.sequence,
           }),
         );
       }
@@ -292,7 +290,6 @@ const deleteActionCommand = Command.make(
           formatActionDeletedHuman({
             project: result.project,
             action: result.action,
-            sequence: result.dispatch.sequence,
           }),
         );
       }

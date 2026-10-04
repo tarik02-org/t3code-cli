@@ -17,9 +17,9 @@ export const createTerminalCommand = Command.make(
   "create",
   {
     thread: threadFlag,
-    command: Argument.string("command").pipe(Argument.optional),
-    id: Flag.string("id").pipe(Flag.optional),
-    attach: Flag.boolean("attach"),
+    command: Argument.String("command").pipe(Argument.optional),
+    id: Flag.String("id").pipe(Flag.optional),
+    attach: Flag.Boolean("attach").pipe(Flag.withDefault(false)),
     format: formatFlag,
     ...extraArgsConfig,
   },

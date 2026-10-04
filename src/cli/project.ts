@@ -45,7 +45,7 @@ const addCommand = Command.make(
   "add",
   {
     path: projectPathFlag,
-    title: Flag.string("title").pipe(Flag.optional),
+    title: Flag.String("title").pipe(Flag.optional),
     format: formatFlag,
     ...extraArgsConfig,
   },

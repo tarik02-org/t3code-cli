@@ -8,6 +8,10 @@ function shouldBundlePackDependency(id: string): boolean {
   if (id === "@napi-rs/keyring" || id.startsWith("@napi-rs/keyring-")) {
     return false;
   }
+  // CommonJS; a bundled `export * from "undici"` loses its named exports such as `Agent`.
+  if (id === "undici" || id.startsWith("undici/")) {
+    return false;
+  }
   return true;
 }
 

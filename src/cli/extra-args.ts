@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import { Argument, CliError } from "effect/unstable/cli";
 
-const rejectExtraArguments = Argument.string("extra").pipe(
+const rejectExtraArguments = Argument.String("extra").pipe(
   Argument.variadic(),
   Argument.mapEffect((extra) =>
     extra.length === 0

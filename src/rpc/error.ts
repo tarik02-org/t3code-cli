@@ -5,10 +5,13 @@ import {
 import {
   EnvironmentAuthorizationError,
   KeybindingsConfigError,
-  OrchestrationDispatchCommandError,
-  OrchestrationGetSnapshotError,
   OrchestrationSearchThreadsError,
+  OrchestrationV2DispatchCommandError,
+  OrchestrationV2GetShellSnapshotError,
+  OrchestrationV2GetThreadProjectionError,
+  OrchestrationV2ThreadLaunchError,
   PreviewAutomationError,
+  ProjectMutationError,
   ServerSettingsError,
   TerminalError,
 } from "@t3tools/contracts";
@@ -21,10 +24,13 @@ const RpcErrorCauseSchema = Schema.Union([
   RpcClientError.RpcClientError,
   EnvironmentAuthorizationError,
   KeybindingsConfigError,
-  OrchestrationDispatchCommandError,
-  OrchestrationGetSnapshotError,
   OrchestrationSearchThreadsError,
+  OrchestrationV2DispatchCommandError,
+  OrchestrationV2GetShellSnapshotError,
+  OrchestrationV2GetThreadProjectionError,
+  OrchestrationV2ThreadLaunchError,
   PreviewAutomationError,
+  ProjectMutationError,
   ServerSettingsError,
   TerminalError,
   ConnectionBlockedError,
@@ -34,7 +40,7 @@ const RpcErrorCauseSchema = Schema.Union([
 
 export type RpcKnownCause = Schema.Schema.Type<typeof RpcErrorCauseSchema>;
 
-export class RpcError extends Schema.TaggedErrorClass<RpcError>()("RpcError", {
+export class RpcError extends Schema.TaggedError<RpcError>()("RpcError", {
   message: Schema.String,
   method: Schema.optionalKey(Schema.String),
   cause: Schema.optionalKey(RpcErrorCauseSchema),

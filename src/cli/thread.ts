@@ -6,6 +6,7 @@ import { callbackThreadCommand } from "./threads/callback.ts";
 import { deleteThreadCommand } from "./threads/delete.ts";
 import { interruptThreadCommand } from "./threads/interrupt.ts";
 import { pinThreadCommand } from "./threads/pin.ts";
+import { queueThreadCommand } from "./threads/queue.ts";
 import { respondThreadCommand } from "./threads/respond.ts";
 import { settleThreadCommand } from "./threads/settle.ts";
 import { snoozeThreadCommand } from "./threads/snooze.ts";
@@ -23,6 +24,7 @@ export function createThreadCommand() {
       respondThreadCommand,
       archiveThreadCommand,
       interruptThreadCommand,
+      queueThreadCommand,
       settleThreadCommand,
       unsettleThreadCommand,
       snoozeThreadCommand,

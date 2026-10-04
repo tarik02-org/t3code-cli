@@ -11,7 +11,7 @@ export const attachTerminalCommand = Command.make(
   "attach",
   {
     thread: threadFlag,
-    terminalId: Argument.string("terminal-id"),
+    terminalId: Argument.String("terminal-id"),
     ...extraArgsConfig,
   },
   ({ thread, terminalId }) =>

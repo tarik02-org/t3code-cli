@@ -1,303 +1,309 @@
 import * as Crypto from "effect/Crypto";
-import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import {
-  ApprovalRequestId,
-  CommandId,
   MessageId,
+  RunId,
+  RuntimeRequestId,
   ThreadId,
-  TurnId,
-  type ClientOrchestrationCommand,
   type ModelSelection,
   type OrchestrationProjectShell,
+  type OrchestrationV2Command,
+  type OrchestrationV2ThreadLaunchInput,
   type ProviderApprovalDecision,
   type ProviderUserInputAnswers,
+  type ServerConfig,
 } from "@t3tools/contracts";
-import type { ServerConfigForCli } from "../orchestration/service.ts";
+import { makeCommandId } from "./command-id.ts";
 import { resolveModelSelection } from "./model-selection.ts";
-import type { SendThreadInput, StartThreadInput } from "./service.ts";
+import type { MessageAuthor, SendMode, SendThreadInput, StartThreadInput } from "./service.ts";
 
-export const makeThreadStartCommands = Effect.fn("makeThreadStartCommands")(function* (input: {
+type Command<T extends OrchestrationV2Command["type"]> = Extract<
+  OrchestrationV2Command,
+  { readonly type: T }
+>;
+
+const CREATION = { createdBy: "user", creationSource: "web" } as const;
+
+const makeMessageId = Effect.fn("makeMessageId")(function* () {
+  const crypto = yield* Crypto.Crypto;
+  return MessageId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie));
+});
+
+export const makeThreadLaunchInput = Effect.fn("makeThreadLaunchInput")(function* (input: {
   readonly start: StartThreadInput;
   readonly project: OrchestrationProjectShell;
-  readonly serverConfig: ServerConfigForCli;
+  readonly serverConfig: ServerConfig;
 }) {
   const crypto = yield* Crypto.Crypto;
-  const threadId = ThreadId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie));
-  const createdAt = DateTime.formatIso(yield* DateTime.now);
   const modelSelection = yield* resolveModelSelection(input);
   const inputTitle = input.start.title?.trim();
+  const hasTitle = inputTitle !== undefined && inputTitle.length > 0;
   const messageTitle = input.start.message.trim().split(/\s+/).slice(0, 8).join(" ");
-  const title = inputTitle !== undefined && inputTitle.length > 0 ? inputTitle : messageTitle;
-  const createCommand = {
-    type: "thread.create",
-    commandId: CommandId.make(
-      `t3cli:thread-create:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-    ),
-    threadId,
+  const worktreePath = input.start.worktreePath;
+  return {
+    commandId: yield* makeCommandId("thread-launch"),
+    creationSource: CREATION.creationSource,
+    threadId: ThreadId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie)),
     projectId: input.project.id,
-    title: title.length > 0 ? title : "New thread",
+    title: hasTitle ? inputTitle : messageTitle.length > 0 ? messageTitle : "New thread",
+    generateTitle: !hasTitle,
     modelSelection,
     runtimeMode: "full-access",
     interactionMode: "default",
-    branch: null,
-    worktreePath: input.start.worktreePath ?? null,
-    createdAt,
-  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.create" }>;
-  const turnCommand = {
-    type: "thread.turn.start",
-    commandId: CommandId.make(
-      `t3cli:thread-start:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-    ),
-    threadId,
-    message: {
-      messageId: MessageId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie)),
-      role: "user",
+    workspaceStrategy:
+      worktreePath === undefined ? { type: "root" } : { type: "existing_worktree", worktreePath },
+    initialMessage: {
+      messageId: yield* makeMessageId(),
       text: input.start.message,
       attachments: [],
     },
-    modelSelection,
-    titleSeed: title,
-    runtimeMode: "full-access",
-    interactionMode: "default",
-    createdAt,
-  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.turn.start" }>;
-  return { createCommand, turnCommand, threadId };
+  } satisfies OrchestrationV2ThreadLaunchInput;
 });
 
-export const makeThreadTurnContinueCommand = Effect.fn("makeThreadTurnContinueCommand")(function* (
-  input: SendThreadInput & { readonly modelSelection?: ModelSelection },
+export const makeMessageDispatchCommand = Effect.fn("makeMessageDispatchCommand")(function* (
+  input: Omit<SendThreadInput, "author"> & {
+    readonly modelSelection?: ModelSelection;
+    /** Already checked to exist in the target environment. */
+    readonly author: MessageAuthor;
+  },
 ) {
-  const crypto = yield* Crypto.Crypto;
-  const createdAt = DateTime.formatIso(yield* DateTime.now);
+  const mode: SendMode = input.mode ?? "auto";
   return {
-    type: "thread.turn.start",
-    commandId: CommandId.make(
-      `t3cli:thread-start:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-    ),
+    type: "message.dispatch",
+    // Servers currently restamp websocket commands as user-created; senderThreadId is kept.
+    createdBy: input.author.kind,
+    creationSource: CREATION.creationSource,
+    ...(input.author.kind === "agent" && input.author.senderThreadId !== undefined
+      ? { senderThreadId: ThreadId.make(input.author.senderThreadId) }
+      : {}),
+    commandId: yield* makeCommandId("message-dispatch"),
     threadId: ThreadId.make(input.threadId),
-    message: {
-      messageId: MessageId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie)),
-      role: "user",
-      text: input.message,
-      attachments: [],
-    },
-    runtimeMode: "full-access",
-    interactionMode: "default",
+    messageId: yield* makeMessageId(),
+    text: input.message,
+    attachments: [],
     ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
-    createdAt,
-  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.turn.start" }>;
+    // The server resolves the target run for steer and restart against its serialized state.
+    ...(mode === "queue" ? {} : { deliveryIntent: mode }),
+    dispatchMode: mode === "queue" ? { type: "queue_after_active" } : { type: "start_immediately" },
+  } satisfies Command<"message.dispatch">;
 });
 
 export const makeThreadArchiveCommand = Effect.fn("makeThreadArchiveCommand")(function* (
   threadId: string,
 ) {
-  const crypto = yield* Crypto.Crypto;
   return {
     type: "thread.archive",
-    commandId: CommandId.make(
-      `t3cli:thread-archive:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-    ),
+    commandId: yield* makeCommandId("thread.archive"),
     threadId: ThreadId.make(threadId),
-  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.archive" }>;
+  } satisfies Command<"thread.archive">;
 });
 
 export const makeThreadUnarchiveCommand = Effect.fn("makeThreadUnarchiveCommand")(function* (
   threadId: string,
 ) {
-  const crypto = yield* Crypto.Crypto;
   return {
     type: "thread.unarchive",
-    commandId: CommandId.make(
-      `t3cli:thread-unarchive:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-    ),
+    commandId: yield* makeCommandId("thread.unarchive"),
     threadId: ThreadId.make(threadId),
-  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.unarchive" }>;
+  } satisfies Command<"thread.unarchive">;
 });
 
 export const makeThreadSettleCommand = Effect.fn("makeThreadSettleCommand")(function* (
   threadId: string,
 ) {
-  const crypto = yield* Crypto.Crypto;
   return {
     type: "thread.settle",
-    commandId: CommandId.make(
-      `t3cli:thread-settle:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-    ),
+    commandId: yield* makeCommandId("thread.settle"),
     threadId: ThreadId.make(threadId),
-  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.settle" }>;
+  } satisfies Command<"thread.settle">;
+});
+
+export const makeThreadPinCommand = Effect.fn("makeThreadPinCommand")(function* (threadId: string) {
+  return {
+    type: "thread.pin",
+    commandId: yield* makeCommandId("thread.pin"),
+    threadId: ThreadId.make(threadId),
+  } satisfies Command<"thread.pin">;
+});
+
+export const makeThreadUnpinCommand = Effect.fn("makeThreadUnpinCommand")(function* (
+  threadId: string,
+) {
+  return {
+    type: "thread.unpin",
+    commandId: yield* makeCommandId("thread.unpin"),
+    threadId: ThreadId.make(threadId),
+  } satisfies Command<"thread.unpin">;
+});
+
+export const makeThreadDeleteCommand = Effect.fn("makeThreadDeleteCommand")(function* (
+  threadId: string,
+) {
+  return {
+    type: "thread.delete",
+    commandId: yield* makeCommandId("thread.delete"),
+    threadId: ThreadId.make(threadId),
+  } satisfies Command<"thread.delete">;
 });
 
 export const makeThreadUnsettleCommand = Effect.fn("makeThreadUnsettleCommand")(function* (
   threadId: string,
 ) {
-  const crypto = yield* Crypto.Crypto;
   return {
     type: "thread.unsettle",
-    commandId: CommandId.make(
-      `t3cli:thread-unsettle:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-    ),
+    commandId: yield* makeCommandId("thread.unsettle"),
     threadId: ThreadId.make(threadId),
     reason: "user",
-  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.unsettle" }>;
+  } satisfies Command<"thread.unsettle">;
 });
 
 export const makeThreadSnoozeCommand = Effect.fn("makeThreadSnoozeCommand")(function* (input: {
   readonly threadId: string;
   readonly snoozedUntil: string;
 }) {
-  const crypto = yield* Crypto.Crypto;
   return {
     type: "thread.snooze",
-    commandId: CommandId.make(
-      `t3cli:thread-snooze:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-    ),
+    commandId: yield* makeCommandId("thread.snooze"),
     threadId: ThreadId.make(input.threadId),
     snoozedUntil: input.snoozedUntil,
-  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.snooze" }>;
+  } satisfies Command<"thread.snooze">;
 });
 
 export const makeThreadUnsnoozeCommand = Effect.fn("makeThreadUnsnoozeCommand")(function* (
   threadId: string,
 ) {
-  const crypto = yield* Crypto.Crypto;
   return {
     type: "thread.unsnooze",
-    commandId: CommandId.make(
-      `t3cli:thread-unsnooze:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-    ),
+    commandId: yield* makeCommandId("thread.unsnooze"),
     threadId: ThreadId.make(threadId),
     reason: "user",
-  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.unsnooze" }>;
+  } satisfies Command<"thread.unsnooze">;
 });
 
-export const makeThreadPinCommand = Effect.fn("makeThreadPinCommand")(function* (threadId: string) {
-  const crypto = yield* Crypto.Crypto;
+export const makeRunInterruptCommand = Effect.fn("makeRunInterruptCommand")(function* (input: {
+  readonly threadId: string;
+  readonly runId: string;
+}) {
   return {
-    type: "thread.pin",
-    commandId: CommandId.make(`t3cli:thread-pin:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`),
-    threadId: ThreadId.make(threadId),
-  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.pin" }>;
+    type: "run.interrupt",
+    commandId: yield* makeCommandId("run.interrupt"),
+    threadId: ThreadId.make(input.threadId),
+    runId: RunId.make(input.runId),
+  } satisfies Command<"run.interrupt">;
 });
 
-export const makeThreadUnpinCommand = Effect.fn("makeThreadUnpinCommand")(function* (
-  threadId: string,
-) {
-  const crypto = yield* Crypto.Crypto;
-  return {
-    type: "thread.unpin",
-    commandId: CommandId.make(
-      `t3cli:thread-unpin:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
+export const makeRuntimeRequestRespondCommand = Effect.fn("makeRuntimeRequestRespondCommand")(
+  function* (
+    input: {
+      readonly threadId: string;
+      readonly requestId: string;
+    } & (
+      | { readonly decision: ProviderApprovalDecision }
+      | { readonly answers: ProviderUserInputAnswers }
     ),
-    threadId: ThreadId.make(threadId),
-  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.unpin" }>;
-});
-
-export const makeThreadSessionStopCommand = Effect.fn("makeThreadSessionStopCommand")(function* (
-  threadId: string,
-) {
-  const crypto = yield* Crypto.Crypto;
-  const createdAt = DateTime.formatIso(yield* DateTime.now);
-  return {
-    type: "thread.session.stop",
-    commandId: CommandId.make(
-      `t3cli:thread-session-stop:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-    ),
-    threadId: ThreadId.make(threadId),
-    createdAt,
-  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.session.stop" }>;
-});
-
-export const makeThreadDeleteCommand = Effect.fn("makeThreadDeleteCommand")(function* (
-  threadId: string,
-) {
-  const crypto = yield* Crypto.Crypto;
-  return {
-    type: "thread.delete",
-    commandId: CommandId.make(
-      `t3cli:thread-delete:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-    ),
-    threadId: ThreadId.make(threadId),
-  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.delete" }>;
-});
-
-export const makeThreadInterruptCommand = Effect.fn("makeThreadInterruptCommand")(
-  function* (input: { readonly threadId: string; readonly turnId?: string }) {
-    const crypto = yield* Crypto.Crypto;
-    const createdAt = DateTime.formatIso(yield* DateTime.now);
+  ) {
     return {
-      type: "thread.turn.interrupt",
-      commandId: CommandId.make(
-        `t3cli:thread-interrupt:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-      ),
+      type: "runtime-request.respond",
+      commandId: yield* makeCommandId("runtime-request.respond"),
       threadId: ThreadId.make(input.threadId),
-      ...(input.turnId !== undefined ? { turnId: TurnId.make(input.turnId) } : {}),
-      createdAt,
-    } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.turn.interrupt" }>;
+      requestId: RuntimeRequestId.make(input.requestId),
+      ...("decision" in input ? { decision: input.decision } : { answers: input.answers }),
+    } satisfies Command<"runtime-request.respond">;
   },
 );
 
-export const makeThreadApprovalRespondCommand = Effect.fn("makeThreadApprovalRespondCommand")(
+export const makeThreadMetadataUpdateCommand = Effect.fn("makeThreadMetadataUpdateCommand")(
+  function* (
+    threadId: string,
+    input: {
+      readonly title?: string;
+      readonly branch?: string | null;
+      readonly worktreePath?: string | null;
+    },
+  ) {
+    return {
+      type: "thread.metadata.update",
+      commandId: yield* makeCommandId("thread.metadata.update"),
+      threadId: ThreadId.make(threadId),
+      ...(input.title !== undefined ? { title: input.title } : {}),
+      ...(input.branch !== undefined ? { branch: input.branch } : {}),
+      ...(input.worktreePath !== undefined ? { worktreePath: input.worktreePath } : {}),
+    } satisfies Command<"thread.metadata.update">;
+  },
+);
+
+export const makeThreadModelSelectionCommand = Effect.fn("makeThreadModelSelectionCommand")(
+  function* (threadId: string, modelSelection: ModelSelection) {
+    return {
+      type: "thread.model-selection.set",
+      commandId: yield* makeCommandId("thread.model-selection.set"),
+      threadId: ThreadId.make(threadId),
+      modelSelection,
+    } satisfies Command<"thread.model-selection.set">;
+  },
+);
+
+export const makeQueuedRunCancelCommand = Effect.fn("makeQueuedRunCancelCommand")(
+  function* (input: { readonly threadId: string; readonly runId: string }) {
+    return {
+      type: "queued-run.cancel",
+      commandId: yield* makeCommandId("queued-run.cancel"),
+      threadId: ThreadId.make(input.threadId),
+      runId: RunId.make(input.runId),
+    } satisfies Command<"queued-run.cancel">;
+  },
+);
+
+export const makeQueuedRunEditCommand = Effect.fn("makeQueuedRunEditCommand")(function* (input: {
+  readonly threadId: string;
+  readonly runId: string;
+  readonly text: string;
+}) {
+  return {
+    type: "queued-run.edit",
+    commandId: yield* makeCommandId("queued-run.edit"),
+    threadId: ThreadId.make(input.threadId),
+    runId: RunId.make(input.runId),
+    text: input.text,
+  } satisfies Command<"queued-run.edit">;
+});
+
+export const makeQueuedRunReorderCommand = Effect.fn("makeQueuedRunReorderCommand")(
   function* (input: {
     readonly threadId: string;
-    readonly requestId: string;
-    readonly decision: ProviderApprovalDecision;
+    readonly runId: string;
+    readonly beforeRunId: string | null;
   }) {
-    const crypto = yield* Crypto.Crypto;
-    const createdAt = DateTime.formatIso(yield* DateTime.now);
     return {
-      type: "thread.approval.respond",
-      commandId: CommandId.make(
-        `t3cli:thread-approve:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-      ),
+      type: "queued-run.reorder",
+      commandId: yield* makeCommandId("queued-run.reorder"),
       threadId: ThreadId.make(input.threadId),
-      requestId: ApprovalRequestId.make(input.requestId),
-      decision: input.decision,
-      createdAt,
-    } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.approval.respond" }>;
+      runId: RunId.make(input.runId),
+      beforeRunId: input.beforeRunId === null ? null : RunId.make(input.beforeRunId),
+    } satisfies Command<"queued-run.reorder">;
   },
 );
 
-export const makeThreadUserInputRespondCommand = Effect.fn("makeThreadUserInputRespondCommand")(
-  function* (input: {
-    readonly threadId: string;
-    readonly requestId: string;
-    readonly answers: ProviderUserInputAnswers;
-  }) {
-    const crypto = yield* Crypto.Crypto;
-    const createdAt = DateTime.formatIso(yield* DateTime.now);
-    return {
-      type: "thread.user-input.respond",
-      commandId: CommandId.make(
-        `t3cli:thread-respond:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-      ),
-      threadId: ThreadId.make(input.threadId),
-      requestId: ApprovalRequestId.make(input.requestId),
-      answers: input.answers,
-      createdAt,
-    } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.user-input.respond" }>;
-  },
-);
-
-export const makeThreadMetaUpdateCommand = Effect.fn("makeThreadMetaUpdateCommand")(function* (
-  threadId: string,
-  input: {
-    readonly title?: string;
-    readonly modelSelection?: ModelSelection;
-    readonly branch?: string | null;
-    readonly worktreePath?: string | null;
-  },
-) {
-  const crypto = yield* Crypto.Crypto;
+export const makeQueuedRunSteerCommand = Effect.fn("makeQueuedRunSteerCommand")(function* (input: {
+  readonly threadId: string;
+  readonly queuedRunId: string;
+  readonly targetRunId: string;
+}) {
   return {
-    type: "thread.meta.update",
-    commandId: CommandId.make(
-      `t3cli:thread-meta-update:${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`,
-    ),
+    type: "queued-message.promote-to-steer",
+    commandId: yield* makeCommandId("queued-message.promote-to-steer"),
+    threadId: ThreadId.make(input.threadId),
+    queuedRunId: RunId.make(input.queuedRunId),
+    targetRunId: RunId.make(input.targetRunId),
+  } satisfies Command<"queued-message.promote-to-steer">;
+});
+
+export const makeQueueResumeCommand = Effect.fn("makeQueueResumeCommand")(function* (
+  threadId: string,
+) {
+  return {
+    type: "queue.resume",
+    commandId: yield* makeCommandId("queue.resume"),
     threadId: ThreadId.make(threadId),
-    ...(input.title !== undefined ? { title: input.title } : {}),
-    ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
-    ...(input.branch !== undefined ? { branch: input.branch } : {}),
-    ...(input.worktreePath !== undefined ? { worktreePath: input.worktreePath } : {}),
-  } satisfies Extract<ClientOrchestrationCommand, { readonly type: "thread.meta.update" }>;
+  } satisfies Command<"queue.resume">;
 });

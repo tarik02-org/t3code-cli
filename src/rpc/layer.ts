@@ -13,7 +13,7 @@ import { T3CodeConnectionError } from "../connection/error.ts";
 import { T3PreparedConnectionProvider } from "../connection/prepared.ts";
 import { RpcError } from "./error.ts";
 import { T3RpcSessionFactory } from "./session.ts";
-import { T3Rpc, type WsClient } from "./service.ts";
+import { T3Rpc, type T3RpcService, type WsClient } from "./service.ts";
 
 const connectionRetrySchedule = Schedule.exponential("100 millis").pipe(
   Schedule.setInputType<ConnectionAttemptError | T3CodeConnectionError>(),
@@ -26,7 +26,11 @@ type Connection = {
   readonly client: WsClient;
 };
 
-export const makeT3RpcLayer = Effect.fn("makeT3RpcLayer")(function* () {
+export const makeT3RpcLayer: () => Effect.Effect<
+  T3RpcService,
+  never,
+  T3PreparedConnectionProvider | T3RpcSessionFactory | Scope.Scope
+> = Effect.fn("makeT3RpcLayer")(function* () {
   const preparedConnectionProvider = yield* T3PreparedConnectionProvider;
   const sessions = yield* T3RpcSessionFactory;
   const parentScope = yield* Scope.Scope;

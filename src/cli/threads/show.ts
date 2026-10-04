@@ -6,7 +6,7 @@ import { extraArgsConfig } from "../extra-args.ts";
 import { formatFlag, threadFlag } from "../flags.ts";
 import { MissingThreadError } from "../error.ts";
 import { resolveThreadId } from "../scope/index.ts";
-import { formatThreadShowHuman, formatThreadShowJson } from "../format/thread.ts";
+import { formatThreadShowHuman } from "../format/thread.ts";
 import { T3Application } from "../../application/service.ts";
 import { CliRuntime } from "../../cli/runtime/service.ts";
 import { loadT3CliEnv } from "../../config/env/env.ts";
@@ -40,7 +40,7 @@ export const showThreadCommand = Command.make(
       const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
       const detail = yield* application.showThread(threadId);
       if (resolvedFormat === "json") {
-        return yield* output.printJson(formatThreadShowJson(detail));
+        return yield* output.printJson(detail);
       }
       return yield* output.writeStdout(formatThreadShowHuman(detail));
     }),

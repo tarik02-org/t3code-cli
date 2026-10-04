@@ -3,7 +3,7 @@ import * as Schema from "effect/Schema";
 import { ConfigError } from "../config/error.ts";
 import { UrlError } from "../config/url/error.ts";
 
-export class T3CodeConnectionError extends Schema.TaggedErrorClass<T3CodeConnectionError>()(
+export class T3CodeConnectionError extends Schema.TaggedError<T3CodeConnectionError>()(
   "T3CodeConnectionError",
   {
     message: Schema.String,

@@ -3,10 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { Argument, Command, Flag } from "effect/unstable/cli";
-import type { DispatchResult } from "@t3tools/contracts";
-
 import { T3Application } from "../application/service.ts";
-import { isThreadActive } from "../domain/thread-lifecycle.ts";
+import { isThreadActive, runAnswer } from "../domain/thread-lifecycle.ts";
 import { ThreadSessionError } from "../domain/error.ts";
 import { loadT3CliEnv } from "../config/env/env.ts";
 import {
@@ -15,9 +13,8 @@ import {
   ensureAskTargetAvailable,
   ensureTrailingNewline,
   finalizeArchive,
-  inspectAskTurn,
+  inspectAskRun,
   resolveAskFormat,
-  selectAskAnswer,
   waitForAskThread,
 } from "./ask-lifecycle.ts";
 import type { AskExecutionState } from "./ask-lifecycle.ts";
@@ -31,42 +28,41 @@ import {
   InvalidFlagCombinationError,
 } from "./error.ts";
 import { humanJsonNdjsonFormatChoices } from "./format/output.ts";
-import { modelFlags, projectFlag, selfActionForceFlag, worktreeFlag } from "./flags.ts";
+import { asUserFlag, modelFlags, projectFlag, selfActionForceFlag, worktreeFlag } from "./flags.ts";
 import { T3Input } from "./input/service.ts";
 import { requireSelfActionConfirmation } from "./interaction/self-action.ts";
 import { readInitialMessage } from "./message-input.ts";
 import { buildModelOptions } from "./model-options.ts";
 import { T3Output } from "./output/service.ts";
 import { requireCommandProjectRef } from "./require.ts";
-import { resolveWorktreePath } from "./scope/index.ts";
+import { resolveMessageAuthor, resolveWorktreePath } from "./scope/index.ts";
 import { CliRuntime } from "./runtime/service.ts";
 
 interface AskResponse {
   readonly answer: string;
   readonly threadId: string;
-  readonly turnId: string | null;
+  readonly runId: string;
   readonly created: boolean;
-  readonly dispatch: DispatchResult;
 }
 
-const askThreadFlag = Flag.string("thread").pipe(
+const askThreadFlag = Flag.String("thread").pipe(
   Flag.withDescription("Existing thread id; T3CODE_THREAD_ID is not used"),
   Flag.optional,
 );
 
-const archivePolicyFlag = Flag.choice("archive", archivePolicyChoices).pipe(
+const archivePolicyFlag = Flag.Literals("archive", archivePolicyChoices).pipe(
   Flag.withDescription(
     "Archive policy (default: on-success for created threads, never for existing threads)",
   ),
   Flag.optional,
 );
 
-const timeoutFlag = Flag.string("timeout").pipe(
+const timeoutFlag = Flag.String("timeout").pipe(
   Flag.withDescription("Response timeout, such as 30s, 5m, or 1h"),
   Flag.optional,
 );
 
-const askFormatFlag = Flag.choice("format", humanJsonNdjsonFormatChoices).pipe(
+const askFormatFlag = Flag.Literals("format", humanJsonNdjsonFormatChoices).pipe(
   Flag.withDefault("human"),
 );
 
@@ -76,13 +72,14 @@ export const askCommand = Command.make(
     project: projectFlag,
     thread: askThreadFlag,
     force: selfActionForceFlag,
-    message: Argument.string("message").pipe(Argument.optional),
-    stdin: Flag.boolean("stdin"),
-    title: Flag.string("title").pipe(Flag.optional),
+    message: Argument.String("message").pipe(Argument.optional),
+    stdin: Flag.Boolean("stdin").pipe(Flag.withDefault(false)),
+    title: Flag.String("title").pipe(Flag.optional),
     worktree: worktreeFlag,
-    provider: Flag.string("provider").pipe(Flag.optional),
-    model: Flag.string("model").pipe(Flag.optional),
+    provider: Flag.String("provider").pipe(Flag.optional),
+    model: Flag.String("model").pipe(Flag.optional),
     ...modelFlags,
+    asUser: asUserFlag,
     archive: archivePolicyFlag,
     timeout: timeoutFlag,
     format: askFormatFlag,
@@ -103,6 +100,7 @@ export const askCommand = Command.make(
     effort,
     fastMode,
     thinking,
+    asUser,
     archive,
     timeout,
     format,
@@ -157,7 +155,7 @@ export const askCommand = Command.make(
         threadId: explicitThreadId,
         createdThread: false,
         dispatched: false,
-        askTurnId: null,
+        askRunId: null,
         archiveResult: undefined,
       };
 
@@ -167,7 +165,6 @@ export const askCommand = Command.make(
           fromStdin: stdin,
           readStdin: input.readStdin,
         });
-        let dispatch: DispatchResult;
         let askMessageId: string;
 
         if (explicitThreadId === undefined) {
@@ -197,7 +194,6 @@ export const askCommand = Command.make(
             },
           );
           state.dispatched = true;
-          dispatch = result.dispatch;
           askMessageId = result.messageId;
         } else {
           const summary = yield* application.getThreadSummary(explicitThreadId);
@@ -225,10 +221,7 @@ export const askCommand = Command.make(
             action: "ask",
           });
 
-          const targetThread = (yield* application.getThreadMessages({
-            threadId: explicitThreadId,
-          })).thread;
-          if (isThreadActive(targetThread)) {
+          if (isThreadActive(yield* application.getThreadProjection(explicitThreadId))) {
             return yield* Effect.fail(
               new AskThreadBusyError({
                 message: `thread is busy: ${explicitThreadId}`,
@@ -241,13 +234,18 @@ export const askCommand = Command.make(
             {
               threadId: explicitThreadId,
               message: text,
+              author: resolveMessageAuthor({
+                asUser,
+                scope: t3CliEnv.scope,
+                targetThreadId: explicitThreadId,
+              }),
               ...(options.length > 0 ? { options } : {}),
             },
             { until: "dispatch" },
           );
           state.dispatched = true;
-          dispatch = result.dispatch;
           askMessageId = result.messageId;
+          yield* application.awaitShellSequence(result.dispatch.sequence);
         }
 
         const threadId = state.threadId;
@@ -261,9 +259,8 @@ export const askCommand = Command.make(
         }
 
         if (resolvedFormat === "ndjson") {
-          yield* output.printNdjson({ type: "dispatch", sequence: dispatch.sequence });
+          yield* output.printNdjson({ type: "dispatched", threadId, messageId: askMessageId });
         }
-        yield* application.awaitShellSequence(dispatch.sequence);
         yield* waitForAskThread(application, output, {
           threadId,
           format: resolvedFormat,
@@ -271,8 +268,8 @@ export const askCommand = Command.make(
           state,
         });
 
-        const finalSnapshot = yield* application.getThreadMessages({ threadId });
-        const observation = inspectAskTurn(finalSnapshot.thread, askMessageId, state.askTurnId);
+        const finalProjection = yield* application.getThreadProjection(threadId);
+        const observation = inspectAskRun(finalProjection, askMessageId);
         if (observation.status === "failed") {
           return yield* Effect.fail(
             new ThreadSessionError({
@@ -281,8 +278,11 @@ export const askCommand = Command.make(
             }),
           );
         }
-        const answer = selectAskAnswer(finalSnapshot.thread, askMessageId, observation.turnId);
-        if (answer === undefined) {
+        const answer =
+          observation.status === "complete"
+            ? runAnswer(finalProjection, observation.runId)
+            : undefined;
+        if (observation.status !== "complete" || answer === undefined) {
           return yield* Effect.fail(
             new AskNoAnswerError({
               message: `thread completed without a new final answer: ${threadId}`,
@@ -293,9 +293,8 @@ export const askCommand = Command.make(
         return {
           answer: answer.text,
           threadId,
-          turnId: answer.turnId,
+          runId: observation.runId,
           created,
-          dispatch,
         } satisfies AskResponse;
       });
 
@@ -330,9 +329,8 @@ export const askCommand = Command.make(
               const formatted = {
                 answer: result.answer,
                 threadId: result.threadId,
-                turnId: result.turnId,
+                runId: result.runId,
                 created: result.created,
-                dispatch: result.dispatch,
                 archive: archiveResult,
               };
               if (resolvedFormat === "json") {

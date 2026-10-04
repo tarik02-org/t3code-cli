@@ -24,9 +24,6 @@ export function formatProjectAddedHuman(project: OrchestrationProjectShell) {
   ])}`;
 }
 
-export function formatProjectDeletedHuman(input: {
-  readonly projectId: string;
-  readonly dispatch: { readonly sequence: number };
-}) {
-  return `project deleted: ${input.projectId} (sequence ${input.dispatch.sequence})`;
+export function formatProjectDeletedHuman(input: { readonly projectId: string }) {
+  return `project deleted: ${input.projectId}`;
 }
