@@ -47,6 +47,18 @@ restart.
 Waits for the `--from` thread to idle, then sends `--prompt` to `--thread` (or
 `T3CODE_THREAD_ID`). `--background` detaches a watcher process and returns at once.
 
+## thread handoff
+
+Switches a thread's worktree, which detaches its provider session. It stops the live run first,
+switches once the run has ended, then sends `--continue` as the next message; the conversation
+carries over. `thread update --worktree` refuses a thread with a live run for this reason.
+
+- On your own thread it detaches and returns at once: end your turn. The stop cuts your current
+  tool call short, so `--continue` carries the remaining work.
+- Messages already queued run first, in the new worktree; a queue that was held stays held.
+- Progress goes to the log file it prints. A failure after the stop is sent to the thread as a
+  message.
+
 ## transcript
 
 Loads the most recent window of the timeline; the server sizes pages. Pass the returned

@@ -67,12 +67,21 @@ export class ProjectActionValidationError extends Schema.TaggedError<ProjectActi
   },
 ) {}
 
+export class ThreadWorktreeError extends Schema.TaggedError<ThreadWorktreeError>()(
+  "ThreadWorktreeError",
+  {
+    message: Schema.String,
+    threadId: Schema.String,
+  },
+) {}
+
 export type DomainError =
   | ProjectLookupError
   | ModelSelectionError
   | ThreadEventError
   | ThreadSessionError
   | ThreadLookupError
+  | ThreadWorktreeError
   | QueuedRunError
   | TerminalLookupError
   | ProjectActionLookupError
