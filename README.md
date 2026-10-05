@@ -267,6 +267,7 @@ t3cli thread unpin [--thread <id>]          # Unpin thread
 t3cli thread unsnooze [--thread <id>]       # Wake snoozed thread
 t3cli thread unsettle [--thread <id>]       # Unsettle thread
 t3cli thread update [--thread <id>]         # Update thread metadata
+t3cli thread handoff (--worktree <path> --branch <name> | --clear-worktree) [--continue <prompt>]  # Stop the run, switch the worktree, continue there
 t3cli thread unarchive [--thread <id>]      # Unarchive thread
 t3cli thread delete [--thread <id>] [--yes] # Delete thread
 t3cli thread callback --from <id>           # Notify another thread on completion

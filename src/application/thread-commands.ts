@@ -183,12 +183,15 @@ export const makeThreadUnsnoozeCommand = Effect.fn("makeThreadUnsnoozeCommand")(
 export const makeRunInterruptCommand = Effect.fn("makeRunInterruptCommand")(function* (input: {
   readonly threadId: string;
   readonly runId: string;
+  /** Keeps queued runs from starting once the run stops. */
+  readonly holdQueue?: boolean;
 }) {
   return {
     type: "run.interrupt",
     commandId: yield* makeCommandId("run.interrupt"),
     threadId: ThreadId.make(input.threadId),
     runId: RunId.make(input.runId),
+    ...(input.holdQueue !== undefined ? { holdQueue: input.holdQueue } : {}),
   } satisfies Command<"run.interrupt">;
 });
 
@@ -219,6 +222,8 @@ export const makeThreadMetadataUpdateCommand = Effect.fn("makeThreadMetadataUpda
       readonly title?: string;
       readonly branch?: string | null;
       readonly worktreePath?: string | null;
+      /** Rejects the update when the binding changed since it was read. */
+      readonly expectedWorktreePath?: string | null;
     },
   ) {
     return {
@@ -228,6 +233,9 @@ export const makeThreadMetadataUpdateCommand = Effect.fn("makeThreadMetadataUpda
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.branch !== undefined ? { branch: input.branch } : {}),
       ...(input.worktreePath !== undefined ? { worktreePath: input.worktreePath } : {}),
+      ...(input.expectedWorktreePath !== undefined
+        ? { expectedWorktreePath: input.expectedWorktreePath }
+        : {}),
     } satisfies Command<"thread.metadata.update">;
   },
 );

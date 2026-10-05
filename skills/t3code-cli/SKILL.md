@@ -50,12 +50,13 @@ Spawn threads on your own provider and model unless the user asks otherwise: rea
 them as `--provider` and `--model`.
 
 Reach for [reference/behavior.md](reference/behavior.md) when using `ask`, `send --mode`,
-`thread queue`, `thread callback`, `transcript` paging, or `action`.
+`thread queue`, `thread callback`, `thread handoff`, `transcript` paging, or `action`.
 
-| To…                                                | Use                                          |
-| -------------------------------------------------- | -------------------------------------------- |
-| block until a thread idles, then act on its result | `wait`, or `--wait` on `start`/`send`        |
-| get notified later in another thread               | `thread callback --from <id> [--background]` |
+| To…                                                | Use                                                                    |
+| -------------------------------------------------- | ---------------------------------------------------------------------- |
+| block until a thread idles, then act on its result | `wait`, or `--wait` on `start`/`send`                                  |
+| get notified later in another thread               | `thread callback --from <id> [--background]`                           |
+| move your own thread into another worktree         | `thread handoff --worktree <path> --branch <name> --continue <prompt>` |
 
 ## Terminals
 

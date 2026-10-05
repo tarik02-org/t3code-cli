@@ -4,6 +4,7 @@ import { approveThreadCommand } from "./threads/approve.ts";
 import { archiveThreadCommand } from "./threads/archive.ts";
 import { callbackThreadCommand } from "./threads/callback.ts";
 import { deleteThreadCommand } from "./threads/delete.ts";
+import { handoffThreadCommand } from "./threads/handoff.ts";
 import { interruptThreadCommand } from "./threads/interrupt.ts";
 import { pinThreadCommand } from "./threads/pin.ts";
 import { queueThreadCommand } from "./threads/queue.ts";
@@ -33,6 +34,7 @@ export function createThreadCommand() {
       unpinThreadCommand,
       unarchiveThreadCommand,
       updateThreadCommand,
+      handoffThreadCommand,
       deleteThreadCommand,
       callbackThreadCommand,
     ]),

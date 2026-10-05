@@ -59,6 +59,7 @@ import {
   makeThreadUnsnoozeCommand,
 } from "./thread-commands.ts";
 import { makeThreadQueue } from "./thread-queue.ts";
+import { makeHandoffThread } from "./thread-handoff.ts";
 import { makeUpdateThread } from "./thread-update.ts";
 import {
   waitForThread as waitForThreadUntilComplete,
@@ -331,6 +332,11 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     yield* failIfThreadError(projection);
     return { dispatch, messageId, threadId: input.threadId, projection };
   });
+  const handoffThread: T3ThreadApplicationService["handoffThread"] = (input) =>
+    makeHandoffThread((message) => sendThread(message, { until: "dispatch" }))(input).pipe(
+      Effect.provideService(T3Orchestration, orchestration),
+      withCrypto,
+    );
   const queue = yield* makeThreadQueue().pipe(
     Effect.provideService(T3Orchestration, orchestration),
     withCrypto,
@@ -387,6 +393,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     settleThread,
     snoozeThread,
     updateThread,
+    handoffThread,
     unarchiveThread,
     unpinThread,
     unsnoozeThread,

@@ -4,7 +4,7 @@ language: TypeScript
 files:
   - upstream-t3code/packages/contracts/src/rpc.ts
 rule:
-  pattern: export const WsRpcGroup = RpcGroup.make($$$RPCS)
+  pattern: export const WsRpcGroup = RpcGroup.make($$$RPCS).middleware($MIDDLEWARE)
 rewriters:
   - id: typeof-rpc
     rule:
@@ -18,4 +18,4 @@ transform:
       rewriters: [typeof-rpc]
       joinBy: " | "
 fix: |-
-  export const WsRpcGroup: RpcGroup.RpcGroup<$RPC_UNION> = RpcGroup.make($$$RPCS)
+  export const WsRpcGroup: RpcGroup.RpcGroup<Rpc.AddMiddleware<$RPC_UNION, typeof $MIDDLEWARE>> = RpcGroup.make($$$RPCS).middleware($MIDDLEWARE)

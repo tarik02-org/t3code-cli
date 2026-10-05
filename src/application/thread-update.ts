@@ -2,7 +2,8 @@ import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import type { ModelSelection } from "@t3tools/contracts";
 
-import { ThreadEventError } from "../domain/error.ts";
+import { ThreadEventError, ThreadWorktreeError } from "../domain/error.ts";
+import { liveRun } from "../domain/thread-lifecycle.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import { mergeModelOptions, resolveUpdateModelSelection } from "./model-selection.ts";
 import type { DispatchResult, UpdateThreadInput } from "./service.ts";
@@ -43,6 +44,22 @@ export function makeUpdateThread() {
         });
       } else if (hasOptions) {
         modelSelection = mergeModelOptions(thread.modelSelection, options);
+      }
+    }
+
+    if (input.worktreePath !== undefined) {
+      const projection = yield* orchestration.getThreadProjection(input.threadId);
+      // The server detaches the provider session when the workspace changes. Under a live run
+      // that ends the run as a provider error and holds the queue, so the switch has to wait
+      // for the run to stop; `thread handoff` does that.
+      if (
+        input.worktreePath !== projection.thread.worktreePath &&
+        liveRun(projection) !== undefined
+      ) {
+        return yield* new ThreadWorktreeError({
+          message: `thread ${input.threadId} has an active run; use \`t3cli thread handoff\` to stop it and switch the worktree`,
+          threadId: input.threadId,
+        });
       }
     }
 
