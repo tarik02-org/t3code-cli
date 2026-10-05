@@ -7,7 +7,12 @@ import { ThreadWorktreeError } from "../domain/error.ts";
 import { isRunTerminal, liveRun } from "../domain/thread-lifecycle.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import type { ApplicationError } from "./error.ts";
-import type { HandoffThreadInput, HandoffThreadResult, SendThreadInput } from "./service.ts";
+import type {
+  HandoffTargetInput,
+  HandoffThreadInput,
+  HandoffThreadResult,
+  SendThreadInput,
+} from "./service.ts";
 import {
   makeQueueResumeCommand,
   makeRunInterruptCommand,
@@ -20,6 +25,26 @@ const RUN_STOP_TIMEOUT = "2 minutes";
 type SendMessage = (
   input: SendThreadInput,
 ) => Effect.Effect<{ readonly messageId: string }, ApplicationError>;
+
+/** Resolves where a handoff lands; the project's main checkout is recorded as no worktree. */
+export const resolveHandoffTarget = Effect.fn("T3ApplicationLive.resolveHandoffTarget")(function* (
+  input: HandoffTargetInput,
+) {
+  const orchestration = yield* T3Orchestration;
+  const projection = yield* orchestration.getThreadProjection(input.threadId);
+  const project = (yield* orchestration.getShellSnapshot()).projects.find(
+    (entry) => entry.id === projection.thread.projectId,
+  );
+  const worktreePath =
+    input.worktreePath !== null && input.worktreePath === project?.workspaceRoot
+      ? null
+      : input.worktreePath;
+  return {
+    projection,
+    worktreePath,
+    alreadyThere: worktreePath === projection.thread.worktreePath,
+  };
+});
 
 /**
  * Moves a thread into another worktree and continues there. The server detaches the provider
@@ -37,21 +62,22 @@ export function makeHandoffThread(sendMessage: SendMessage) {
     const threadId = input.threadId;
     const fail = (message: string) => new ThreadWorktreeError({ message, threadId });
 
-    const projection = yield* orchestration.getThreadProjection(threadId);
+    const { projection, worktreePath, alreadyThere } = yield* resolveHandoffTarget(input);
     const thread = projection.thread;
     if (thread.archivedAt !== null) {
       return yield* fail(`thread ${threadId} is archived`);
     }
-    const project = (yield* orchestration.getShellSnapshot()).projects.find(
-      (entry) => entry.id === thread.projectId,
-    );
-    // Threads record the project's main checkout as no worktree binding.
-    const worktreePath =
-      input.worktreePath !== null && input.worktreePath === project?.workspaceRoot
-        ? null
-        : input.worktreePath;
-    if (worktreePath === thread.worktreePath) {
-      return yield* fail(`thread ${threadId} is already in ${worktreePath ?? "the project root"}`);
+    // Switching to the current worktree is a no-op, so the run keeps going.
+    if (alreadyThere) {
+      return {
+        threadId,
+        worktreePath,
+        moved: false,
+        stoppedRunId: null,
+        dispatch: null,
+        resumedQueue: false,
+        messageId: null,
+      } satisfies HandoffThreadResult;
     }
     // Without a hold, a queued run starts the moment the stopped run ends and the switch kills
     // it as a provider error. Resume afterwards only when the queue was not already held, so a
@@ -123,6 +149,7 @@ export function makeHandoffThread(sendMessage: SendMessage) {
       return {
         threadId,
         worktreePath,
+        moved: true,
         stoppedRunId: run?.id ?? null,
         dispatch,
         resumedQueue,

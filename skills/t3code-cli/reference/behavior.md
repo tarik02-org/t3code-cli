@@ -56,6 +56,7 @@ carries over. `thread update --worktree` refuses a thread with a live run for th
 - On your own thread it detaches and returns at once: end your turn. The stop cuts your current
   tool call short, so `--continue` carries the remaining work.
 - Messages already queued run first, in the new worktree; a queue that was held stays held.
+- A target the thread is already in does nothing and leaves the run going.
 - Progress goes to the log file it prints. A failure after the stop is sent to the thread as a
   message.
 

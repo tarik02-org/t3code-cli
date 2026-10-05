@@ -59,7 +59,7 @@ import {
   makeThreadUnsnoozeCommand,
 } from "./thread-commands.ts";
 import { makeThreadQueue } from "./thread-queue.ts";
-import { makeHandoffThread } from "./thread-handoff.ts";
+import { makeHandoffThread, resolveHandoffTarget } from "./thread-handoff.ts";
 import { makeUpdateThread } from "./thread-update.ts";
 import {
   waitForThread as waitForThreadUntilComplete,
@@ -337,6 +337,8 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
       Effect.provideService(T3Orchestration, orchestration),
       withCrypto,
     );
+  const resolveHandoff: T3ThreadApplicationService["resolveHandoffTarget"] = (input) =>
+    resolveHandoffTarget(input).pipe(Effect.provideService(T3Orchestration, orchestration));
   const queue = yield* makeThreadQueue().pipe(
     Effect.provideService(T3Orchestration, orchestration),
     withCrypto,
@@ -394,6 +396,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     snoozeThread,
     updateThread,
     handoffThread,
+    resolveHandoffTarget: resolveHandoff,
     unarchiveThread,
     unpinThread,
     unsnoozeThread,

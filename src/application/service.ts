@@ -115,10 +115,7 @@ export type UpdateThreadInput = {
   readonly worktreePath?: string | null;
 };
 
-export type HandoffThreadInput = {
-  readonly threadId: string;
-  /** `null` moves the thread to the project root. */
-  readonly worktreePath: string | null;
+export type HandoffThreadInput = HandoffTargetInput & {
   readonly branch?: string | null;
   /** Sent once the thread is in the new worktree; starts its next turn there. */
   readonly prompt?: string;
@@ -126,11 +123,19 @@ export type HandoffThreadInput = {
   readonly onStep?: (message: string) => Effect.Effect<void>;
 };
 
+export type HandoffTargetInput = {
+  readonly threadId: string;
+  /** `null` is the project root. */
+  readonly worktreePath: string | null;
+};
+
 export type HandoffThreadResult = {
   readonly threadId: string;
   readonly worktreePath: string | null;
+  /** False when the thread was already there; nothing was stopped or sent. */
+  readonly moved: boolean;
   readonly stoppedRunId: string | null;
-  readonly dispatch: DispatchResult;
+  readonly dispatch: DispatchResult | null;
   readonly resumedQueue: boolean;
   readonly messageId: string | null;
 };
@@ -345,6 +350,13 @@ export type T3ThreadApplicationService = {
   readonly updateThread: (
     input: UpdateThreadInput,
   ) => Effect.Effect<DispatchResult, ApplicationError>;
+  /** Whether a handoff to `worktreePath` would move the thread at all. */
+  readonly resolveHandoffTarget: (
+    input: HandoffTargetInput,
+  ) => Effect.Effect<
+    { readonly worktreePath: string | null; readonly alreadyThere: boolean },
+    ApplicationError
+  >;
   /** Stops the live run, switches the worktree once it is terminal, then sends the prompt. */
   readonly handoffThread: (
     input: HandoffThreadInput,

@@ -116,6 +116,25 @@ export const handoffThreadCommand = Command.make(
       const prompt = Option.getOrUndefined(continuation);
       const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
 
+      const target = yield* application.resolveHandoffTarget({
+        threadId,
+        worktreePath: worktreeValue ?? null,
+      });
+      // Checked before detaching: a switch hook runs this on every switch, and one that lands
+      // where the thread already is must leave the run going.
+      if (target.alreadyThere) {
+        if (resolvedFormat === "json") {
+          return yield* output.printJson({
+            threadId,
+            worktreePath: target.worktreePath,
+            moved: false,
+          });
+        }
+        return yield* output.printInfo(
+          `thread ${threadId} is already in ${target.worktreePath ?? "the project root"}`,
+        );
+      }
+
       const callerThreadId = t3CliEnv.scope.t3codeThreadId;
       if (!foreground && callerThreadId === threadId) {
         const cliPath = yield* CliPath;
@@ -192,7 +211,9 @@ export const handoffThreadCommand = Command.make(
         return yield* output.printJson(result);
       }
       return yield* output.printInfo(
-        `thread ${threadId} moved to ${result.worktreePath ?? "the project root"}`,
+        result.moved
+          ? `thread ${threadId} moved to ${result.worktreePath ?? "the project root"}`
+          : `thread ${threadId} is already in ${result.worktreePath ?? "the project root"}`,
       );
     }),
 ).pipe(
