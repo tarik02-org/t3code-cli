@@ -1,5 +1,11 @@
 # t3code-cli
 
+## 0.17.0
+
+### Minor Changes
+
+- 38195ab: add `thread handoff` to switch a thread's worktree mid-run and continue there; `thread update --worktree` now refuses a thread with a live run
+
 ## 0.16.0
 
 ### Minor Changes
