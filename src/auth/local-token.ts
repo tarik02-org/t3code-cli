@@ -101,17 +101,39 @@ export const makeT3LocalAuthToken = Effect.fn("makeT3LocalAuthToken")(function* 
     );
 
   function openAuthDatabase(dbPath: string) {
-    return sqlClientFactory.sqliteClient({ filename: dbPath }).pipe(
-      Effect.catchTags({
-        SqlError: (error) =>
-          Effect.fail(
+    return Effect.gen(function* () {
+      // SQLite creates a missing file on open. The server owns this database: an empty file left
+      // behind here makes the server skip its one-time import of the previous state database.
+      const exists = yield* fs.exists(dbPath).pipe(
+        Effect.mapError(
+          (error) =>
             new AuthLocalDatabaseError({
               operation: "connect",
-              message: error.message,
+              message: `failed to check local auth database: ${error.message}`,
             }),
-          ),
-      }),
-    );
+        ),
+      );
+      if (!exists) {
+        return yield* Effect.fail(
+          new AuthLocalDatabaseError({
+            operation: "connect",
+            message: `local auth database does not exist: ${dbPath}; start the T3 Code server to initialize it`,
+          }),
+        );
+      }
+
+      return yield* sqlClientFactory.sqliteClient({ filename: dbPath }).pipe(
+        Effect.catchTags({
+          SqlError: (error) =>
+            Effect.fail(
+              new AuthLocalDatabaseError({
+                operation: "connect",
+                message: error.message,
+              }),
+            ),
+        }),
+      );
+    });
   }
 
   const provideAuthDatabase =
