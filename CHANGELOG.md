@@ -1,5 +1,11 @@
 # t3code-cli
 
+## 0.17.1
+
+### Patch Changes
+
+- bfef73f: Fail local auth when the server state database does not exist instead of creating an empty one.
+
 ## 0.17.0
 
 ### Minor Changes
