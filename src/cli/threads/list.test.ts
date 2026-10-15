@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Option from "effect/Option";
 import { assert, describe, it } from "@effect/vitest";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { fromPartial } from "@total-typescript/shoehorn";
 
 import { T3Application } from "../../application/service.ts";

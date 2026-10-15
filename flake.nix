@@ -12,7 +12,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     upstream-t3code = {
-      url = "github:pingdotgg/t3code/cf3e714b0f58e29c8fa8660db50d2187e3263b65";
+      url = "github:pingdotgg/t3code/339179f50a84dc599cce373dbb48f172f182f44e";
       flake = false;
     };
   };

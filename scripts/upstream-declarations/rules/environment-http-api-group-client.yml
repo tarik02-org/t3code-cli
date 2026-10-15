@@ -9,8 +9,8 @@ fix: |-
     $$$PARAMS
   ): Effect.Effect<
     HttpApiClient.Client.Group<
-      import("effect/unstable/httpapi/HttpApiGroup").WithIdentifier<
-        typeof EnvironmentHttpApi extends import("effect/unstable/httpapi/HttpApi").HttpApi<string, infer Groups> ? Groups : never,
+      import("effect/http-api/HttpApiGroup").WithIdentifier<
+        typeof EnvironmentHttpApi extends import("effect/http-api/HttpApi").HttpApi<string, infer Groups> ? Groups : never,
         Group
       >,
       HttpClientError.HttpClientError,
@@ -18,9 +18,9 @@ fix: |-
     >,
     never,
     | HttpClient.HttpClient
-    | import("effect/unstable/httpapi/HttpApiGroup").MiddlewareClient<
-        import("effect/unstable/httpapi/HttpApiGroup").WithIdentifier<
-          typeof EnvironmentHttpApi extends import("effect/unstable/httpapi/HttpApi").HttpApi<string, infer Groups> ? Groups : never,
+    | import("effect/http-api/HttpApiGroup").MiddlewareClient<
+        import("effect/http-api/HttpApiGroup").WithIdentifier<
+          typeof EnvironmentHttpApi extends import("effect/http-api/HttpApi").HttpApi<string, infer Groups> ? Groups : never,
           Group
         >
       >

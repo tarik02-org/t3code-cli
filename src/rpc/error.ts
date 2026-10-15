@@ -16,7 +16,7 @@ import {
   TerminalError,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
-import { RpcClientError } from "effect/unstable/rpc";
+import { RpcClientError } from "effect/rpc";
 
 import { T3CodeConnectionError } from "../connection/error.ts";
 

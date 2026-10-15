@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import { assert, describe, it } from "@effect/vitest";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 
 import { InvalidFlagCombinationError } from "../error.ts";
 import { readTerminalCommand } from "./read.ts";

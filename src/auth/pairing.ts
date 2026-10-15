@@ -1,7 +1,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Url } from "effect/unstable/http";
+import { Url } from "effect/http";
 
 import { AuthPairingUrlError, AuthTransportError } from "./error.ts";
 import { T3AuthTransport } from "./transport.ts";
@@ -33,7 +33,7 @@ export const makeT3AuthPairing = Effect.fn("makeT3AuthPairing")(function* () {
     };
   });
 
-  return { pair };
+  return T3AuthPairing.of({ pair });
 });
 
 export const T3AuthPairingLive = Layer.effect(T3AuthPairing, makeT3AuthPairing());

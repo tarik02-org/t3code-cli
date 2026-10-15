@@ -68,11 +68,11 @@ export const makeT3RpcLayer: () => Effect.Effect<
     });
   });
 
-  return {
+  return T3Rpc.of({
     getClient: getClient(),
     disconnect: disconnect(),
     reconnect: disconnect().pipe(Effect.andThen(getClient())),
-  };
+  });
 });
 
 export const T3RpcLive = Layer.effectContext(

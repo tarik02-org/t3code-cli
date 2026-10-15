@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 
 import { cliEnvironmentSetting } from "../cli/env/flag.ts";
 import type { ResolvedConfig } from "../config/types.ts";

@@ -1,8 +1,8 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as ChildProcess from "effect/unstable/process/ChildProcess";
-import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner";
-import { Command, Flag } from "effect/unstable/cli";
+import * as ChildProcess from "effect/process/ChildProcess";
+import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
+import { Command, Flag } from "effect/cli";
 
 import { extraArgsConfig } from "../extra-args.ts";
 import { asUserFlag, threadFlag } from "../flags.ts";

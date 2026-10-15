@@ -21,58 +21,61 @@ const requireInteractiveTty = Effect.gen(function* () {
   };
 });
 
-export const NodeTerminalIoLive = Layer.succeed(TerminalIo, {
-  getWindowSize: requireInteractiveTty.pipe(Effect.map(readWindowSize)),
-  writeOutput: (text: string) =>
-    Effect.sync(() => {
-      process.stdout.write(text);
-    }),
-  openRawSession: Effect.acquireRelease(
-    Effect.gen(function* () {
-      const tty = yield* requireInteractiveTty;
-      const input = yield* Queue.unbounded<Uint8Array>();
-      const resize = yield* Queue.unbounded<TerminalWindowSize>();
-
-      const onResize = () => {
-        Effect.runFork(Queue.offer(resize, readWindowSize(tty)).pipe(Effect.ignore));
-      };
-
-      const onData = (chunk: Buffer | string) => {
-        Effect.runFork(
-          Queue.offer(input, typeof chunk === "string" ? Buffer.from(chunk) : chunk).pipe(
-            Effect.ignore,
-          ),
-        );
-      };
-
-      tty.stdin.resume();
-      tty.stdin.setRawMode(true);
-      process.on("SIGWINCH", onResize);
-      tty.stdin.on("data", onData);
-
-      return {
-        tty,
-        input,
-        resize,
-        onData,
-        onResize,
-        session: {
-          input: Stream.fromQueue(input),
-          resize: Stream.fromQueue(resize),
-        } satisfies RawTerminalIoSession,
-      };
-    }),
-    ({ tty, input, resize, onData, onResize }) =>
-      Effect.gen(function* () {
-        tty.stdin.off("data", onData);
-        process.off("SIGWINCH", onResize);
-        tty.stdin.setRawMode(false);
-        tty.stdin.pause();
-        yield* Queue.shutdown(input);
-        yield* Queue.shutdown(resize);
+export const NodeTerminalIoLive = Layer.succeed(
+  TerminalIo,
+  TerminalIo.of({
+    getWindowSize: requireInteractiveTty.pipe(Effect.map(readWindowSize)),
+    writeOutput: (text: string) =>
+      Effect.sync(() => {
+        process.stdout.write(text);
       }),
-  ).pipe(Effect.map(({ session }) => session)),
-});
+    openRawSession: Effect.acquireRelease(
+      Effect.gen(function* () {
+        const tty = yield* requireInteractiveTty;
+        const input = yield* Queue.unbounded<Uint8Array>();
+        const resize = yield* Queue.unbounded<TerminalWindowSize>();
+
+        const onResize = () => {
+          Effect.runFork(Queue.offer(resize, readWindowSize(tty)).pipe(Effect.ignore));
+        };
+
+        const onData = (chunk: Buffer | string) => {
+          Effect.runFork(
+            Queue.offer(input, typeof chunk === "string" ? Buffer.from(chunk) : chunk).pipe(
+              Effect.ignore,
+            ),
+          );
+        };
+
+        tty.stdin.resume();
+        tty.stdin.setRawMode(true);
+        process.on("SIGWINCH", onResize);
+        tty.stdin.on("data", onData);
+
+        return {
+          tty,
+          input,
+          resize,
+          onData,
+          onResize,
+          session: {
+            input: Stream.fromQueue(input),
+            resize: Stream.fromQueue(resize),
+          } satisfies RawTerminalIoSession,
+        };
+      }),
+      ({ tty, input, resize, onData, onResize }) =>
+        Effect.gen(function* () {
+          tty.stdin.off("data", onData);
+          process.off("SIGWINCH", onResize);
+          tty.stdin.setRawMode(false);
+          tty.stdin.pause();
+          yield* Queue.shutdown(input);
+          yield* Queue.shutdown(resize);
+        }),
+    ).pipe(Effect.map(({ session }) => session)),
+  }),
+);
 
 function readWindowSize(tty: { readonly stdout: NodeJS.WriteStream }): TerminalWindowSize {
   return {

@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Encoding from "effect/Encoding";
+import * as Base64 from "effect/encoding/Base64";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
@@ -33,7 +33,7 @@ export const makeFileKeystore = Effect.fn("makeFileKeystore")(function* () {
       if (raw === undefined) {
         return { kind: "missing" };
       }
-      const key = yield* Effect.fromResult(Encoding.decodeBase64(raw.trim())).pipe(
+      const key = yield* Effect.fromResult(Base64.decode(raw.trim())).pipe(
         Effect.catchTags({
           EncodingError: (error) =>
             Effect.fail(
@@ -72,7 +72,7 @@ export const makeFileKeystore = Effect.fn("makeFileKeystore")(function* () {
         }),
       );
       yield* fs
-        .writeFileString(keyFilePath, `${Encoding.encodeBase64(key)}\n`, { mode: privateFileMode })
+        .writeFileString(keyFilePath, `${Base64.encode(key)}\n`, { mode: privateFileMode })
         .pipe(
           Effect.catchTags({
             PlatformError: (error) =>

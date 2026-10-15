@@ -10,7 +10,9 @@ declare const T3CLI_VERSION: string;
 
 const PackageJsonSchema = Schema.fromJsonString(Schema.Struct({ version: Schema.String }));
 
-export const T3VersionBundledLive = Layer.sync(T3Version, () => ({ version: T3CLI_VERSION }));
+export const T3VersionBundledLive = Layer.sync(T3Version, () =>
+  T3Version.of({ version: T3CLI_VERSION }),
+);
 
 export const T3VersionPackageJsonLive = Layer.effect(
   T3Version,
@@ -20,6 +22,6 @@ export const T3VersionPackageJsonLive = Layer.effect(
       fileURLToPath(new URL("../../package.json", import.meta.url)),
     );
     const decoded = yield* Schema.decodeUnknownEffect(PackageJsonSchema)(packageJson);
-    return { version: decoded.version };
+    return T3Version.of({ version: decoded.version });
   }),
 );

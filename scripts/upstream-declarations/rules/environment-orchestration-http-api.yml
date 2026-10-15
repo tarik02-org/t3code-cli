@@ -1,0 +1,77 @@
+# Endpoint codecs expand every snapshot schema inline; naming them keeps the group's type small.
+# The annotation is checked against the group, so an upstream endpoint change fails the build.
+id: environment-orchestration-http-api
+language: TypeScript
+files:
+  - upstream-t3code/packages/contracts/src/environmentHttp.ts
+rule:
+  pattern: class EnvironmentOrchestrationHttpApi extends $BASE {}
+fix: |-
+  type EnvironmentOrchestrationEndpoint<
+    Identifier extends string,
+    Path extends string,
+    Params extends Schema.Top,
+    Query extends Schema.Top,
+    Success extends Schema.Top,
+    Error extends Schema.Top,
+  > = HttpApiEndpoint.HttpApiEndpoint<
+    Identifier,
+    "GET",
+    Path,
+    Params,
+    Query,
+    never,
+    Schema.toCodecStringTree<typeof OrchestrationProtocolHeaders>,
+    Schema.toCodecJson<Success>,
+    Schema.toCodecJson<Error>,
+    EnvironmentAuthenticatedAuth,
+    HttpApiMiddleware.ApplyServices<EnvironmentAuthenticatedAuth, never>
+  >;
+  type EnvironmentOrchestrationThreadParams = Schema.toCodecStringTree<
+    typeof EnvironmentOrchestrationThreadSnapshotParams
+  >;
+  const EnvironmentOrchestrationHttpApiBase: HttpApiGroup.HttpApiGroup<
+    "orchestration",
+    | EnvironmentOrchestrationEndpoint<
+        "shellSnapshot",
+        "/api/orchestration/shell",
+        never,
+        never,
+        typeof OrchestrationV2ShellSnapshot,
+        (typeof EnvironmentOrchestrationSnapshotErrors)[number]
+      >
+    | EnvironmentOrchestrationEndpoint<
+        "threadSnapshot",
+        "/api/orchestration/threads/:threadId",
+        EnvironmentOrchestrationThreadParams,
+        never,
+        typeof OrchestrationV2ThreadDetailSnapshot,
+        (typeof EnvironmentOrchestrationThreadSnapshotErrors)[number]
+      >
+    | EnvironmentOrchestrationEndpoint<
+        "threadTranscript",
+        "/api/orchestration/threads/:threadId/transcript",
+        EnvironmentOrchestrationThreadParams,
+        never,
+        typeof OrchestrationV2ThreadTranscript,
+        | typeof EnvironmentRequestInvalidError
+        | (typeof EnvironmentOrchestrationThreadSnapshotErrors)[number]
+      >
+    | EnvironmentOrchestrationEndpoint<
+        "threadBoundedSnapshot",
+        "/api/orchestration/threads/:threadId/bounded",
+        EnvironmentOrchestrationThreadParams,
+        Schema.toCodecStringTree<typeof EnvironmentOrchestrationThreadBoundedSnapshotQuery>,
+        typeof OrchestrationV2ThreadBoundedSnapshot,
+        (typeof EnvironmentOrchestrationThreadSnapshotErrors)[number]
+      >
+    | EnvironmentOrchestrationEndpoint<
+        "threadHistoryPage",
+        "/api/orchestration/threads/:threadId/history",
+        EnvironmentOrchestrationThreadParams,
+        Schema.toCodecStringTree<typeof EnvironmentOrchestrationThreadHistoryQuery>,
+        typeof OrchestrationV2ThreadHistoryPage,
+        (typeof EnvironmentOrchestrationThreadHistoryErrors)[number]
+      >
+  > = $BASE;
+  class EnvironmentOrchestrationHttpApi extends EnvironmentOrchestrationHttpApiBase {}

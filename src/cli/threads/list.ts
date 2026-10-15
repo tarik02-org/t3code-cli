@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { Command, Flag } from "effect/unstable/cli";
+import { Command, Flag } from "effect/cli";
 
 import type { ListThreadsInclude } from "../../application/service.ts";
 import { extraArgsConfig } from "../extra-args.ts";

@@ -2,29 +2,57 @@ packages:
   - .
   - upstream-t3code/packages/client-runtime
   - upstream-t3code/packages/contracts
+  - upstream-t3code/packages/provider-core
   - upstream-t3code/packages/shared
+  - upstream-t3code/packages/source-control-*
 
 catalog:
-  "@effect/platform-node": 4.0.0-rc.115
-  "@effect/platform-node-shared": 4.0.0-rc.115
-  "@effect/vitest": 4.0.0-rc.115
+  "@effect/platform-node": 4.0.4
+  "@effect/platform-node-shared": 4.0.4
+  "@effect/vitest": 4.0.4
   "@noble/curves": 1.9.1
   "@noble/hashes": 1.8.0
-  "@types/node": ^26.1.2
-  effect: 4.0.0-rc.115
+  "@pierre/diffs": 1.5.2
+  "@types/node": 24.12.4
+  effect: 4.0.4
   jose: 6.2.2
-  vite-plus: 0.2.6
-  vite: npm:@voidzero-dev/vite-plus-core@0.2.6
-  vitest: npm:@voidzero-dev/vite-plus-test@0.1.24
+  mdast-util-directive: 3.1.0
+  micromark-extension-directive: 4.0.0
+  micromark-util-character: 2.1.1
+  micromark-util-types: 2.0.2
+  rehype-raw: 7.0.0
+  rehype-sanitize: 6.0.0
+  remark-breaks: 4.0.0
+  remark-gfm: 4.0.1
+  remark-parse: 11.0.0
+  remark-rehype: 11.1.2
+  unified: 11.0.5
+  vite: npm:@voidzero-dev/vite-plus-core@1.2.0
+  vite-plus: 1.2.0
   yaml: ^2.9.0
-
-overrides:
-  # @effect/platform-node pins this with a caret range; stable 4.0.0 does not match effect rc.
-  "@effect/platform-node-shared": "catalog:"
-
-patchedDependencies:
-  "@effect/vitest@4.0.0-rc.115": upstream-t3code/patches/@effect__vitest@4.0.0-rc.115.patch
-  effect@4.0.0-rc.115: upstream-t3code/patches/effect@4.0.0-rc.115.patch
 
 onlyBuiltDependencies:
   - "@ast-grep/cli"
+
+overrides:
+  # @effect/platform-node pins this with a caret range; keep it on the same Effect release.
+  "@effect/platform-node-shared": "catalog:"
+  # The patched @effect/vitest imports vite-plus/test instead of vitest.
+  "@effect/vitest>vitest": "-"
+  vite: "catalog:"
+  # Resolves the vite-plus dependency added to @effect/vitest below.
+  vite-plus: "catalog:"
+
+packageExtensions:
+  "@effect/vitest@*":
+    dependencies:
+      vite-plus: "*"
+
+patchedDependencies:
+  "@effect/vitest@4.0.4": upstream-t3code/patches/@effect__vitest@4.0.4.patch
+  "@pierre/diffs@1.5.2": upstream-t3code/patches/@pierre%2Fdiffs@1.5.2.patch
+
+# vite resolves to vite-plus-core, whose version is outside the vite ranges vitest declares.
+peerDependencyRules:
+  allowAny:
+    - vite

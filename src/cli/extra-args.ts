@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { Argument, CliError } from "effect/unstable/cli";
+import { Argument, CliError } from "effect/cli";
 
 const rejectExtraArguments = Argument.String("extra").pipe(
   Argument.variadic(),

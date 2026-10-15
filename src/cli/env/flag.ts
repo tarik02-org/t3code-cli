@@ -1,4 +1,4 @@
-import { Flag, GlobalFlag } from "effect/unstable/cli";
+import { Flag, GlobalFlag } from "effect/cli";
 
 export const cliEnvironmentSetting = GlobalFlag.Setting("environment")({
   flag: Flag.String("environment").pipe(

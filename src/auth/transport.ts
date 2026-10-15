@@ -7,7 +7,7 @@ import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { HttpClient } from "effect/unstable/http";
+import { HttpClient } from "effect/http";
 
 import type { AuthClientPresentationMetadata } from "../contracts/index.ts";
 import { AuthTransportError } from "./error.ts";
@@ -107,11 +107,11 @@ const makeT3AuthTransport = Effect.fn("makeT3AuthTransport")(function* () {
     } satisfies AuthWebSocketTicketResult;
   });
 
-  return {
+  return T3AuthTransport.of({
     bootstrapBearer,
     getSession,
     issueWebSocketTicket,
-  };
+  });
 });
 
 export const T3AuthTransportLive = Layer.effect(T3AuthTransport, makeT3AuthTransport());

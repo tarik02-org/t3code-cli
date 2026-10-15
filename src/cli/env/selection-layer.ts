@@ -11,7 +11,7 @@ export const layer = Layer.effect(
   T3ConfigSelection,
   Effect.gen(function* () {
     const t3CliEnv = yield* loadT3CliEnv;
-    return {
+    return T3ConfigSelection.of({
       getSelectedEnvironment: () =>
         Effect.gen(function* () {
           const cliEnvironment = yield* Effect.serviceOption(cliEnvironmentSetting);
@@ -22,6 +22,6 @@ export const layer = Layer.effect(
             t3cliEnv: Option.getOrUndefined(t3CliEnv.t3cliEnv),
           });
         }),
-    };
+    });
   }),
 );

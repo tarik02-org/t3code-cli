@@ -56,7 +56,7 @@ export const makeT3LocalAuthOrigin = Effect.fn("makeT3LocalAuthOrigin")(function
     return yield* normalizeLocalOrigin(state.origin);
   });
 
-  return { resolve };
+  return T3LocalAuthOrigin.of({ resolve });
 });
 
 export const T3LocalAuthOriginLive = Layer.effect(T3LocalAuthOrigin, makeT3LocalAuthOrigin());

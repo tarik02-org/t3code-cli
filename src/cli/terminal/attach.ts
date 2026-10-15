@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { Argument, Command } from "effect/unstable/cli";
+import { Argument, Command } from "effect/cli";
 
 import { T3Application } from "../../application/service.ts";
 import { extraArgsConfig } from "../extra-args.ts";

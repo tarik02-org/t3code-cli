@@ -17,13 +17,13 @@ export const layer = Layer.effect(
   T3ConfigSelection,
   Effect.gen(function* () {
     const t3CliEnv = yield* loadT3CliEnv;
-    return {
+    return T3ConfigSelection.of({
       getSelectedEnvironment: () =>
         Effect.sync(() =>
           resolveConfiguredEnvironment({
             t3cliEnv: Option.getOrUndefined(t3CliEnv.t3cliEnv),
           }),
         ),
-    };
+    });
   }),
 );

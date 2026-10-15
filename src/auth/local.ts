@@ -34,7 +34,7 @@ export const makeT3LocalAuth = Effect.fn("makeT3LocalAuth")(function* () {
     };
   });
 
-  return { local };
+  return T3LocalAuth.of({ local });
 });
 
 export const T3LocalAuthLive = Layer.effect(T3LocalAuth, makeT3LocalAuth());

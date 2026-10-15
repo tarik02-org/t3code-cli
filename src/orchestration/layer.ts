@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import { HttpClient } from "effect/unstable/http";
+import { HttpClient } from "effect/http";
 import {
   ORCHESTRATION_PROTOCOL_HEADER,
   ORCHESTRATION_PROTOCOL_VERSION_TEXT,
@@ -215,7 +215,11 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
       path: `/api/orchestration/threads/${id}/bounded`,
       description: "thread snapshot",
       request: (client, headers) =>
-        client.orchestration.threadBoundedSnapshot({ params: { threadId: id }, headers }),
+        client.orchestration.threadBoundedSnapshot({
+          params: { threadId: id },
+          query: {},
+          headers,
+        }),
     });
   };
   const getThreadHistoryPage: Orchestration["getThreadHistoryPage"] = (input) => {
@@ -233,7 +237,7 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
     });
   };
 
-  return {
+  return T3Orchestration.of({
     dispatch,
     mutateProject,
     launchThread,
@@ -247,7 +251,7 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
     getThreadHistoryPage,
     watchShellSequence,
     watchThread,
-  } satisfies Orchestration;
+  });
 });
 
 export const T3OrchestrationLive = Layer.effect(T3Orchestration, makeT3Orchestration());

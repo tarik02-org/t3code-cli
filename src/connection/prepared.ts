@@ -14,7 +14,7 @@ import { fetchRemoteEnvironmentDescriptor } from "@t3tools/client-runtime/enviro
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { HttpClient } from "effect/unstable/http";
+import { HttpClient } from "effect/http";
 
 import { toWebSocketEndpointUrl } from "../config/url/url.ts";
 import { T3CodeConnectionError } from "./error.ts";
