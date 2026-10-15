@@ -43,6 +43,7 @@ import type {
   T3ThreadApplicationService,
   ThreadDispatchPolicy,
 } from "./service.ts";
+import { T3ThreadApplication } from "./service.ts";
 import {
   makeMessageDispatchCommand,
   makeRunInterruptCommand,
@@ -381,7 +382,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     return { threadId: input.threadId, requestId: input.requestId, dispatch };
   });
 
-  const service: T3ThreadApplicationService = {
+  return T3ThreadApplication.of({
     ...queue,
     approveThread,
     archiveThread,
@@ -410,8 +411,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     watchThread,
     waitForThread,
     callbackThread,
-  };
-  return service;
+  });
 });
 
 export type ThreadSearchResult = {
