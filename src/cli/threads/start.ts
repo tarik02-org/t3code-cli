@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 
 import { extraArgsConfig } from "../extra-args.ts";
 import { modelFlags, projectFlag, threadFormatFlag, worktreeFlag } from "../flags.ts";

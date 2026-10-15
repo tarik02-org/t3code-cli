@@ -4,18 +4,17 @@ import {
   ConnectionTransientError,
   type PreparedConnection,
 } from "@t3tools/client-runtime/connection";
-import { makeWsRpcProtocolClient } from "@t3tools/client-runtime/rpc";
-import { WS_METHODS, type ServerConfig } from "@t3tools/contracts";
+import { WS_METHODS, WsRpcGroup, type ServerConfig } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
-import * as RpcClient from "effect/unstable/rpc/RpcClient";
-import * as RpcSerialization from "effect/unstable/rpc/RpcSerialization";
-import * as Socket from "effect/unstable/socket/Socket";
+import * as RpcClient from "effect/rpc/RpcClient";
+import * as Socket from "effect/socket/Socket";
 
+import * as RpcSerializationJson from "./serialization.ts";
 import type { WsClient as CliWsClient } from "./service.ts";
 
 interface T3RpcSession {
@@ -81,7 +80,7 @@ const makeT3RpcSessionFactory = Effect.fn("makeT3RpcSessionFactory")(function* (
       Layer.provide(
         Layer.mergeAll(
           socketLayer,
-          RpcSerialization.layerJson,
+          RpcSerializationJson.layerJson,
           Layer.succeed(RpcClient.ConnectionHooks, hooks),
         ),
       ),
@@ -89,7 +88,7 @@ const makeT3RpcSessionFactory = Effect.fn("makeT3RpcSessionFactory")(function* (
     const protocolContext = yield* Layer.build(protocolLayer).pipe(
       Effect.withSpan("environment.websocket.connect"),
     );
-    const client = yield* makeWsRpcProtocolClient.pipe(Effect.provide(protocolContext));
+    const client = yield* RpcClient.make(WsRpcGroup).pipe(Effect.provide(protocolContext));
     const initialConfig = yield* Effect.cached(
       client[WS_METHODS.serverGetConfig]({}).pipe(
         catchSessionRpcErrors,

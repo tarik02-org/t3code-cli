@@ -36,7 +36,6 @@ export default defineConfig({
       contracts: "src/contracts/index.ts",
       node: "src/node/index.ts",
       orchestration: "src/orchestration/index.ts",
-      preview: "src/preview/index.ts",
       rpc: "src/rpc/index.ts",
       runtime: "src/runtime/index.ts",
       t3tools: "src/t3tools/index.ts",

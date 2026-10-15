@@ -1,6 +1,6 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import * as Encoding from "effect/Encoding";
+import * as Base64 from "effect/encoding/Base64";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
@@ -44,7 +44,7 @@ export function parseKeyringPassword(password: string | null): MasterKeyReadResu
   if (password === null || password.length === 0) {
     return { kind: "missing" };
   }
-  return Result.match(Encoding.decodeBase64(password.trim()), {
+  return Result.match(Base64.decode(password.trim()), {
     onFailure: () => ({
       kind: "corrupt" as const,
       message: "invalid base64 key",
@@ -78,7 +78,7 @@ function createKeyringKeystore(keyring: KeyringModule): MasterKeyKeystore {
     write: (key) =>
       Effect.try({
         try: () => {
-          entry.setPassword(Encoding.encodeBase64(key));
+          entry.setPassword(Base64.encode(key));
         },
         catch: (cause) =>
           new KeystoreUnavailableError({

@@ -17,7 +17,6 @@ import { T3CodeConnectionError } from "../connection/error.ts";
 import { T3PreparedConnectionProviderLive } from "../connection/prepared.ts";
 import { T3CodeConnectionProvider, makeT3CodeConnectionProvider } from "../connection/service.ts";
 import { T3OrchestrationLive } from "../orchestration/layer.ts";
-import { T3PreviewAutomationLive } from "../preview/service.ts";
 import { T3RpcLive } from "../rpc/layer.ts";
 import { T3RpcOperationsLive } from "../rpc/operation.ts";
 import { T3RpcSessionFactoryLive } from "../rpc/session.ts";
@@ -80,9 +79,6 @@ export const T3OrchestrationLayer = T3OrchestrationLive.pipe(
     Layer.mergeAll(T3RpcOperationsLayer, T3PreparedConnectionLayer, NodeHttpClient.layerUndici),
   ),
 );
-export const T3PreviewAutomationLayer = T3PreviewAutomationLive.pipe(
-  Layer.provide(T3RpcOperationsLayer),
-);
 const T3ApplicationLayer = T3ApplicationLive.pipe(
   Layer.provide(Layer.mergeAll(T3RpcOperationsLayer, T3OrchestrationLayer)),
 );
@@ -93,7 +89,6 @@ export const BaseAppLayer = Layer.mergeAll(
   T3RpcLayer,
   T3RpcOperationsLayer,
   T3OrchestrationLayer,
-  T3PreviewAutomationLayer,
   T3ApplicationLayer,
   NodeCliPathLayer,
 );

@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 
 import { T3Application } from "../../application/service.ts";
 import { loadT3CliEnv } from "../../config/env/env.ts";

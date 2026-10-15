@@ -1,4 +1,4 @@
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 
 import { approveThreadCommand } from "./threads/approve.ts";
 import { archiveThreadCommand } from "./threads/archive.ts";

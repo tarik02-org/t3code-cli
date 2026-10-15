@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 
 import { extraArgsConfig } from "../extra-args.ts";
 import { formatTerminalListHuman } from "../format/terminal.ts";

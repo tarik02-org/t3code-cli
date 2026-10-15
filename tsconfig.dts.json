@@ -11,7 +11,10 @@
       ],
       "@t3tools/contracts": ["./upstream-t3code/packages/contracts/src/index.ts"],
       "@t3tools/contracts/*": ["./upstream-t3code/packages/contracts/src/*.ts"],
-      "@t3tools/shared/*": ["./upstream-t3code/packages/shared/src/*.ts"]
+      "@t3tools/shared/*": ["./upstream-t3code/packages/shared/src/*.ts"],
+      "@t3tools/source-control-*/client/definition": [
+        "./upstream-t3code/packages/source-control-*/src/client/definition.ts"
+      ]
     },
     "rootDir": "."
   },
@@ -26,12 +29,12 @@
     "src/contracts/index.ts",
     "src/node/index.ts",
     "src/orchestration/index.ts",
-    "src/preview/index.ts",
     "src/rpc/index.ts",
     "src/runtime/index.ts",
     "src/t3tools/index.ts",
     "upstream-t3code/packages/client-runtime/src/**/*.ts",
-    "upstream-t3code/packages/shared/src/**/*.ts"
+    "upstream-t3code/packages/shared/src/**/*.ts",
+    "upstream-t3code/packages/source-control-*/src/client/**/*.ts"
   ],
   "exclude": ["upstream-t3code/**/*.test.ts", "upstream-t3code/**/*.bench.ts"]
 }

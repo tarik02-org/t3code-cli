@@ -8,7 +8,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { assert, describe, expect, it } from "@effect/vitest";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { fromPartial } from "@total-typescript/shoehorn";
 
 import { T3Application } from "../../application/service.ts";

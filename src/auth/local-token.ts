@@ -7,13 +7,13 @@ import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import * as Encoding from "effect/Encoding";
+import * as Base64Url from "effect/encoding/Base64Url";
 import * as Filter from "effect/Filter";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import * as SqlClient from "effect/sql/SqlClient";
 
 import { loadT3CliEnv } from "../config/env/env.ts";
 import { CliRuntime } from "../cli/runtime/service.ts";
@@ -89,7 +89,7 @@ export const makeT3LocalAuthToken = Effect.fn("makeT3LocalAuthToken")(function* 
 
   const signPayload = (payload: string, secret: Uint8Array) =>
     hmacSha256(secret, new TextEncoder().encode(payload)).pipe(
-      Effect.map(Encoding.encodeBase64Url),
+      Effect.map(Base64Url.encode),
       Effect.mapError(
         (error) =>
           new AuthLocalSigningError({
@@ -150,7 +150,7 @@ export const makeT3LocalAuthToken = Effect.fn("makeT3LocalAuthToken")(function* 
     const secret = yield* readRequiredSigningSecret(input.secretsDir);
     const issuedAt = yield* DateTime.now;
     const expiresAt = DateTime.add(issuedAt, { milliseconds: defaultSessionTtlMs });
-    const sessionId = yield* crypto.randomUUIDv4.pipe(
+    const sessionId = yield* crypto.randomUUIDv4().pipe(
       Effect.map((id) => AuthSessionId.make(id)),
       Effect.mapError(
         (error) =>
@@ -171,7 +171,7 @@ export const makeT3LocalAuthToken = Effect.fn("makeT3LocalAuthToken")(function* 
       iat: DateTime.toEpochMillis(issuedAt),
       exp: DateTime.toEpochMillis(expiresAt),
     };
-    const encodedPayload = Encoding.encodeBase64Url(JSON.stringify(claims));
+    const encodedPayload = Base64Url.encode(JSON.stringify(claims));
     const token = `${encodedPayload}.${yield* signPayload(encodedPayload, secret)}`;
     yield* insertAuthSession({
       sessionId,

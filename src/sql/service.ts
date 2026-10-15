@@ -1,8 +1,8 @@
 import type * as Effect from "effect/Effect";
 import * as Context from "effect/Context";
 import type * as Scope from "effect/Scope";
-import type * as SqlClient from "effect/unstable/sql/SqlClient";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+import type * as SqlClient from "effect/sql/SqlClient";
+import type { SqlError } from "effect/sql/SqlError";
 
 export type SqliteClientConfig = {
   readonly filename: string;

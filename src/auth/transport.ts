@@ -7,7 +7,7 @@ import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { HttpClient } from "effect/unstable/http";
+import { HttpClient } from "effect/http";
 
 import type { AuthClientPresentationMetadata } from "../contracts/index.ts";
 import { AuthTransportError } from "./error.ts";

@@ -1,0 +1,11 @@
+id: authenticated-environment-http-request-export
+language: TypeScript
+files:
+  - upstream-t3code/packages/client-runtime/src/state/environmentHttpAuth.ts
+rule:
+  pattern: |-
+    export const executeAuthenticatedEnvironmentHttpRequest = <$$$TYPES>($INPUT: $INPUT_TYPE) => $BODY
+fix: |-
+  export const executeAuthenticatedEnvironmentHttpRequest = <$$$TYPES>(
+    $INPUT: $INPUT_TYPE,
+  ): ReturnType<typeof executeEnvironmentRequest<Group, A, E, R>> => $BODY

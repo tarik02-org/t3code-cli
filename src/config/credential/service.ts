@@ -2,7 +2,7 @@ import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as ConfigProvider from "effect/ConfigProvider";
-import * as Encoding from "effect/Encoding";
+import * as Base64 from "effect/encoding/Base64";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -137,9 +137,9 @@ export const make = Effect.fn("makeT3CredentialCrypto")(function* () {
         kind: "encrypted" as const,
         alg: "aes-256-gcm" as const,
         key: "default" as const,
-        nonce: Encoding.encodeBase64(nonce),
-        ciphertext: Encoding.encodeBase64(encrypted.ciphertext),
-        tag: Encoding.encodeBase64(encrypted.tag),
+        nonce: Base64.encode(nonce),
+        ciphertext: Base64.encode(encrypted.ciphertext),
+        tag: Base64.encode(encrypted.tag),
       };
     });
 
@@ -186,7 +186,7 @@ function decodeUtf8(value: Uint8Array) {
 }
 
 function decodeBase64Field(value: string, field: string) {
-  return Effect.fromResult(Encoding.decodeBase64(value)).pipe(
+  return Effect.fromResult(Base64.decode(value)).pipe(
     Effect.catchTags({
       EncodingError: (error) =>
         Effect.fail(new ConfigError({ message: `invalid encrypted token ${field}`, cause: error })),

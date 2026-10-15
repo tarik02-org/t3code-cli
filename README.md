@@ -116,39 +116,6 @@ const pair = Effect.gen(function* () {
 }).pipe(Effect.provide(T3AuthPairingLayer));
 ```
 
-`T3PreviewAutomation` registers a preview host and exposes T3's request stream, response RPC, and
-focus RPC. Compose its live layer with the existing connection layers when supplying credentials
-directly:
-
-```ts
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
-import { T3CodeConnectionProviderLive } from "t3code-cli/connection";
-import { T3CodeNodeRpcLayer } from "t3code-cli/node";
-import { T3PreviewAutomation, T3PreviewAutomationLive } from "t3code-cli/preview";
-import { T3RpcOperationsLive } from "t3code-cli/rpc";
-
-const connectionLayer = T3CodeConnectionProviderLive({
-  origin: { url },
-  auth: { token },
-});
-const rpcLayer = T3CodeNodeRpcLayer.pipe(Layer.provide(connectionLayer));
-const previewLayer = T3PreviewAutomationLive.pipe(
-  Layer.provide(T3RpcOperationsLive.pipe(Layer.provide(rpcLayer))),
-);
-
-const runHost = Effect.gen(function* () {
-  const preview = yield* T3PreviewAutomation;
-  yield* preview
-    .connect({ clientId, environmentId, supportedOperations })
-    .pipe(Stream.runForEach(handlePreviewEvent));
-}).pipe(Effect.scoped, Effect.provide(previewLayer));
-```
-
-`T3PreviewAutomationLayer` is the shorter CLI-config-backed layer for callers that use a selected
-`t3cli` environment.
-
 `T3Orchestration.watchShellSnapshots()` emits the initial shell snapshot and a reduced snapshot for
 each later project or thread event. A new full snapshot resets the reducer after reconnects.
 

@@ -116,7 +116,8 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
       );
     }
 
-    const terminalId = input.terminalId ?? `t3cli-${yield* crypto.randomUUIDv4.pipe(Effect.orDie)}`;
+    const terminalId =
+      input.terminalId ?? `t3cli-${yield* crypto.randomUUIDv4().pipe(Effect.orDie)}`;
     const cwd = thread.worktreePath ?? project.workspaceRoot;
     const opened = yield* rpc.run(WS_METHODS.terminalOpen, (client) =>
       client[WS_METHODS.terminalOpen]({

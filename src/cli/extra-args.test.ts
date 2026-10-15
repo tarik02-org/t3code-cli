@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import { assert, describe, it } from "@effect/vitest";
-import { CliError } from "effect/unstable/cli";
+import { CliError } from "effect/cli";
 
 import { extraArgsConfig } from "./extra-args.ts";
 

@@ -381,7 +381,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     return { threadId: input.threadId, requestId: input.requestId, dispatch };
   });
 
-  return {
+  const service: T3ThreadApplicationService = {
     ...queue,
     approveThread,
     archiveThread,
@@ -410,7 +410,8 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     watchThread,
     waitForThread,
     callbackThread,
-  } satisfies T3ThreadApplicationService;
+  };
+  return service;
 });
 
 export type ThreadSearchResult = {

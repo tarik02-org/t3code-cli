@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import { Url } from "effect/unstable/http";
+import { Url } from "effect/http";
 
 import { UrlError } from "./error.ts";
 

@@ -5,11 +5,7 @@ export type {
   OrchestrationV2ShellSnapshot,
   OrchestrationV2ThreadProjection,
   OrchestrationV2ThreadShell,
-  PreviewAutomationHost,
-  PreviewAutomationHostFocus,
   PreviewAutomationResizeInput,
-  PreviewAutomationResponse,
-  PreviewAutomationStreamEvent,
   PreviewViewportPresetId,
   ServerProvider,
 } from "@t3tools/contracts";

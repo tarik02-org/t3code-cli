@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Prompt from "effect/unstable/cli/Prompt";
+import * as Prompt from "effect/cli/Prompt";
 
 import { DestructiveConfirmationRequiredError } from "../error.ts";
 import { isInteractiveHumanTerminal } from "../format/output.ts";

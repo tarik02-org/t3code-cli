@@ -78,11 +78,6 @@
       "import": "./dist/orchestration.js",
       "default": "./dist/orchestration.js"
     },
-    "./preview": {
-      "types": "./dist/preview.d.ts",
-      "import": "./dist/preview.js",
-      "default": "./dist/preview.js"
-    },
     "./rpc": {
       "types": "./dist/rpc.d.ts",
       "import": "./dist/rpc.js",
@@ -122,30 +117,30 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@effect/platform-node": "4.0.0-rc.115",
-    "@napi-rs/keyring": "^1.3.0",
-    "effect": "4.0.0-rc.115",
+    "@effect/platform-node": "4.0.4",
+    "@napi-rs/keyring": "^2.1.1",
+    "effect": "4.0.4",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
-    "string-width": "^8.2.2",
-    "undici": "^8.11.2",
-    "wrap-ansi": "^10.0.0"
+    "string-width": "^8.3.0",
+    "undici": "^8.12.1",
+    "wrap-ansi": "^10.0.2"
   },
   "devDependencies": {
-    "@ast-grep/cli": "^0.45.3",
-    "@changesets/cli": "^2.31.1",
+    "@ast-grep/cli": "^0.50.0",
+    "@changesets/cli": "^3.0.3",
     "@effect/vitest": "catalog:",
     "@t3tools/client-runtime": "link:upstream-t3code/packages/client-runtime",
     "@t3tools/contracts": "workspace:*",
     "@t3tools/shared": "link:upstream-t3code/packages/shared",
     "@total-typescript/shoehorn": "^0.1.2",
-    "@types/node": "^26.1.2",
+    "@types/node": "catalog:",
     "typescript": "^7.0.2",
-    "vite-plus": "^0.2.6",
+    "vite-plus": "catalog:",
     "yaml": "catalog:"
   },
   "engines": {
     "node": ">=24.0.0"
   },
-  "packageManager": "pnpm@10.33.2"
+  "packageManager": "pnpm@10.34.7"
 }

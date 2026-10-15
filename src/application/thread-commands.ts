@@ -26,7 +26,7 @@ const CREATION = { createdBy: "user", creationSource: "web" } as const;
 
 const makeMessageId = Effect.fn("makeMessageId")(function* () {
   const crypto = yield* Crypto.Crypto;
-  return MessageId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie));
+  return MessageId.make(yield* crypto.randomUUIDv4().pipe(Effect.orDie));
 });
 
 export const makeThreadLaunchInput = Effect.fn("makeThreadLaunchInput")(function* (input: {
@@ -43,7 +43,7 @@ export const makeThreadLaunchInput = Effect.fn("makeThreadLaunchInput")(function
   return {
     commandId: yield* makeCommandId("thread-launch"),
     creationSource: CREATION.creationSource,
-    threadId: ThreadId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie)),
+    threadId: ThreadId.make(yield* crypto.randomUUIDv4().pipe(Effect.orDie)),
     projectId: input.project.id,
     title: hasTitle ? inputTitle : messageTitle.length > 0 ? messageTitle : "New thread",
     generateTitle: !hasTitle,

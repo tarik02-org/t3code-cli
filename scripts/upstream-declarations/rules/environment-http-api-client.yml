@@ -1,0 +1,19 @@
+id: environment-http-api-client
+language: TypeScript
+files:
+  - upstream-t3code/packages/client-runtime/src/rpc/http.ts
+rule:
+  pattern: export const makeEnvironmentHttpApiClient = ($$$PARAMS) => $BODY
+fix: |-
+  export const makeEnvironmentHttpApiClient = (
+    $$$PARAMS
+  ): Effect.Effect<
+    HttpApiClient.Client<
+      typeof EnvironmentHttpApi extends import("effect/http-api/HttpApi").HttpApi<string, infer Groups extends import("effect/http-api/HttpApiGroup").Constraint> ? Groups : never
+    >,
+    never,
+    | HttpClient.HttpClient
+    | import("effect/http-api/HttpApiGroup").MiddlewareClient<
+        typeof EnvironmentHttpApi extends import("effect/http-api/HttpApi").HttpApi<string, infer Groups extends import("effect/http-api/HttpApiGroup").Constraint> ? Groups : never
+      >
+  > => $BODY

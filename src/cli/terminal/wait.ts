@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import type { TerminalMetadataStreamEvent, TerminalSummary } from "@t3tools/contracts";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 
 import { T3Application } from "../../application/service.ts";
 import { extraArgsConfig } from "../extra-args.ts";

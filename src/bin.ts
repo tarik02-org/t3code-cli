@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { createCliCommand } from "./cli/app.ts";
 import * as CliSelection from "./cli/env/selection-layer.ts";
 import * as CliRuntime from "./cli/runtime/service.ts";

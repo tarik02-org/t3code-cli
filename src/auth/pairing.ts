@@ -1,7 +1,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Url } from "effect/unstable/http";
+import { Url } from "effect/http";
 
 import { AuthPairingUrlError, AuthTransportError } from "./error.ts";
 import { T3AuthTransport } from "./transport.ts";

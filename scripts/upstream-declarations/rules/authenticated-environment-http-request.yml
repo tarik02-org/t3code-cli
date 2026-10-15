@@ -1,31 +1,16 @@
-# Mirrors the generator's input; an upstream change to it surfaces as a type error.
+# Restates the generator's own signature as the binding's type, so it is not inferred.
 id: authenticated-environment-http-request
 language: TypeScript
 files:
   - upstream-t3code/packages/client-runtime/src/state/environmentHttpAuth.ts
 rule:
-  pattern: export const executeAuthenticatedEnvironmentHttpRequest = Effect.fn($LABEL)($GENERATOR)
+  pattern: |-
+    const executeEnvironmentRequest = Effect.fnUntraced(function* <$$$TYPES>($INPUT: $INPUT_TYPE): Effect.fn.Return<$A, $E, $R> {
+      $$$BODY
+    })
 fix: |-
-  export const executeAuthenticatedEnvironmentHttpRequest: <
-    Group extends Parameters<typeof makeEnvironmentHttpApiGroupClient>[1],
-    A,
-    E,
-    R,
-  >(input: {
-    readonly prepared: PreparedConnection;
-    readonly signer: Option.Option<ManagedRelayDpopSigner["Service"]>;
-    readonly remoteAuthorization?: Option.Option<RemoteEnvironmentAuthorization["Service"]>;
-    readonly method: HttpMethod.HttpMethod;
-    readonly url: (httpBaseUrl: string) => string;
-    readonly timeoutMs: number;
-    readonly group: Group;
-    readonly request: (input: {
-      readonly client: Effect.Success<ReturnType<typeof makeEnvironmentHttpApiGroupClient<Group>>>;
-      readonly headers: EnvironmentHttpAuthHeaders;
-    }) => Effect.Effect<A, E, R>;
-    readonly isUnauthorizedResponse?: (response: NoInfer<A>) => boolean;
-  }) => Effect.Effect<
-    A,
-    RemoteEnvironmentRequestError,
-    Effect.Services<ReturnType<typeof makeEnvironmentHttpApiGroupClient<Group>>> | R
-  > = Effect.fn($LABEL)($GENERATOR)
+  const executeEnvironmentRequest: <$$$TYPES>(
+    $INPUT: $INPUT_TYPE,
+  ) => Effect.Effect<$A, $E, $R> = Effect.fnUntraced(function* <$$$TYPES>($INPUT: $INPUT_TYPE): Effect.fn.Return<$A, $E, $R> {
+    $$$BODY
+  })

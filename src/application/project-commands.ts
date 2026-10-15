@@ -17,7 +17,7 @@ export const makeProjectCreateMutation = Effect.fn("makeProjectCreateMutation")(
   return {
     type: "project.create",
     commandId: yield* makeCommandId("project-create"),
-    projectId: ProjectId.make(yield* crypto.randomUUIDv4.pipe(Effect.orDie)),
+    projectId: ProjectId.make(yield* crypto.randomUUIDv4().pipe(Effect.orDie)),
     title: title !== undefined && title.length > 0 ? title : path.basename(workspaceRoot),
     workspaceRoot,
   } satisfies Extract<ProjectMutation, { readonly type: "project.create" }>;
