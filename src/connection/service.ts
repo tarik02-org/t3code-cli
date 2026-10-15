@@ -14,8 +14,8 @@ export class T3CodeConnectionProvider extends Context.Service<
 
 export function makeT3CodeConnectionProvider(
   get: Effect.Effect<T3CodeConnection, T3CodeConnectionError>,
-): T3CodeConnectionProvider["Service"] {
-  return { get };
+) {
+  return T3CodeConnectionProvider.of({ get });
 }
 
 export function T3CodeConnectionProviderLive(connection: T3CodeConnection) {

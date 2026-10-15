@@ -237,7 +237,7 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
     });
   };
 
-  return {
+  return T3Orchestration.of({
     dispatch,
     mutateProject,
     launchThread,
@@ -251,7 +251,7 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
     getThreadHistoryPage,
     watchShellSequence,
     watchThread,
-  } satisfies Orchestration;
+  });
 });
 
 export const T3OrchestrationLive = Layer.effect(T3Orchestration, makeT3Orchestration());

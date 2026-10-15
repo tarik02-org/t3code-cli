@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 
 import { filterProvidersForModelListing } from "../domain/model-config.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
-import type { T3ModelApplicationService } from "./service.ts";
+import { T3ModelApplication, type T3ModelApplicationService } from "./service.ts";
 
 export const makeModelsApplication = Effect.fn("makeModelsApplication")(function* () {
   const orchestration = yield* T3Orchestration;
@@ -20,7 +20,7 @@ export const makeModelsApplication = Effect.fn("makeModelsApplication")(function
     },
   );
 
-  return {
+  return T3ModelApplication.of({
     listModels,
-  } satisfies T3ModelApplicationService;
+  });
 });

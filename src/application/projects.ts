@@ -7,7 +7,7 @@ import { T3Orchestration } from "../orchestration/service.ts";
 import { ProjectLookupError } from "../domain/error.ts";
 import { resolveProjectScope } from "../domain/helpers.ts";
 import { makeProjectCreateMutation, makeProjectDeleteMutation } from "./project-commands.ts";
-import type { T3ProjectApplicationService } from "./service.ts";
+import { T3ProjectApplication, type T3ProjectApplicationService } from "./service.ts";
 
 export const makeProjectApplication = Effect.fn("makeProjectApplication")(function* () {
   const orchestration = yield* T3Orchestration;
@@ -57,10 +57,10 @@ export const makeProjectApplication = Effect.fn("makeProjectApplication")(functi
     return { projectId: input.projectId };
   });
 
-  return {
+  return T3ProjectApplication.of({
     loadShell,
     addProject,
     resolveProject,
     deleteProject,
-  } satisfies T3ProjectApplicationService;
+  });
 });

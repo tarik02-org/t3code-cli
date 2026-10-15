@@ -20,6 +20,7 @@ import { findProjectById, resolveProjectScope } from "../domain/helpers.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import { makeProjectScriptsUpdateMutation } from "./project-commands.ts";
 import {
+  T3ActionApplication,
   T3TerminalApplication,
   type AddProjectActionInput,
   type ProjectActionSelector,
@@ -199,13 +200,13 @@ export const makeActionApplication = Effect.fn("makeActionApplication")(function
     return { project, action, terminal };
   });
 
-  return {
+  return T3ActionApplication.of({
     addAction,
     deleteAction,
     listActions,
     runAction,
     updateAction,
-  } satisfies T3ActionApplicationService;
+  });
 });
 
 export function nextProjectScriptId(name: string, existingIds: Iterable<string>): string {

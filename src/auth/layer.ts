@@ -92,7 +92,7 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
     return defaultName;
   });
 
-  return {
+  return T3Auth.of({
     pair: pairing.pair,
     local: localAuth.local,
     writeConfig: (input: AuthConfigInput) =>
@@ -126,7 +126,7 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
         ),
     status,
     issueWebSocketTicket,
-  };
+  });
 });
 
 export const T3AuthLive = Layer.effect(T3Auth, makeT3Auth());

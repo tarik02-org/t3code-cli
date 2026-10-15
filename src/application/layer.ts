@@ -21,13 +21,13 @@ export const makeT3Application = Effect.fn("makeT3Application")(function* () {
   const projects = yield* T3ProjectApplication;
   const terminals = yield* T3TerminalApplication;
   const threads = yield* T3ThreadApplication;
-  return {
+  return T3Application.of({
     ...actions,
     ...models,
     ...projects,
     ...terminals,
     ...threads,
-  };
+  });
 });
 
 export const T3ModelApplicationLive = Layer.effect(T3ModelApplication, makeModelsApplication());

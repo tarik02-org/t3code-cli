@@ -9,7 +9,12 @@ import { findProjectById } from "../domain/helpers.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import { RpcError } from "../rpc/error.ts";
 import { T3RpcOperations } from "../rpc/operation.ts";
-import type { T3TerminalApplicationService, CreateTerminalInput, TerminalRef } from "./service.ts";
+import {
+  T3TerminalApplication,
+  type T3TerminalApplicationService,
+  type CreateTerminalInput,
+  type TerminalRef,
+} from "./service.ts";
 
 export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(function* () {
   const crypto = yield* Crypto.Crypto;
@@ -196,7 +201,7 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
     );
   });
 
-  return {
+  return T3TerminalApplication.of({
     attachTerminal,
     createTerminal,
     destroyTerminal,
@@ -205,5 +210,5 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
     resizeTerminal,
     watchTerminalMetadata,
     writeTerminal,
-  } satisfies T3TerminalApplicationService;
+  });
 });

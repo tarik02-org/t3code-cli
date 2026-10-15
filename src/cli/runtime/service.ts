@@ -14,15 +14,21 @@ export class CliRuntime extends Context.Service<
     readonly stdoutIsTTY?: boolean;
     readonly stderrIsTTY?: boolean;
   }) =>
-    Layer.succeed(CliRuntime, {
-      cwd: input?.cwd ?? process.cwd(),
-      stdoutIsTTY: input?.stdoutIsTTY ?? false,
-      stderrIsTTY: input?.stderrIsTTY ?? false,
-    });
+    Layer.succeed(
+      CliRuntime,
+      CliRuntime.of({
+        cwd: input?.cwd ?? process.cwd(),
+        stdoutIsTTY: input?.stdoutIsTTY ?? false,
+        stderrIsTTY: input?.stderrIsTTY ?? false,
+      }),
+    );
 }
 
-export const layer = Layer.succeed(CliRuntime, {
-  cwd: process.cwd(),
-  stdoutIsTTY: process.stdout.isTTY ?? false,
-  stderrIsTTY: process.stderr.isTTY ?? false,
-});
+export const layer = Layer.succeed(
+  CliRuntime,
+  CliRuntime.of({
+    cwd: process.cwd(),
+    stdoutIsTTY: process.stdout.isTTY ?? false,
+    stderrIsTTY: process.stderr.isTTY ?? false,
+  }),
+);

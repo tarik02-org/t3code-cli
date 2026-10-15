@@ -162,7 +162,7 @@ export const make = Effect.fn("makeT3CredentialCrypto")(function* () {
     return decodeUtf8(plaintext);
   });
 
-  return { encrypt, decrypt } satisfies T3CredentialCrypto["Service"];
+  return T3CredentialCrypto.of({ encrypt, decrypt });
 });
 
 export const layer = Layer.effect(T3CredentialCrypto, make());

@@ -41,13 +41,13 @@ export const makeT3Output = Effect.fn("makeT3Output")(function* () {
     yield* writeStdout(`${message}\n`);
   });
 
-  return {
+  return T3Output.of({
     writeStdout,
     writeStderr,
     printJson,
     printNdjson,
     printInfo,
-  };
+  });
 });
 
 export const T3OutputLive = Layer.effect(T3Output, makeT3Output());

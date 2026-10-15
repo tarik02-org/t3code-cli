@@ -89,10 +89,10 @@ export const makeT3RpcOperations = Effect.fn("makeT3RpcOperations")(function* ()
       ),
     );
 
-  return {
+  return T3RpcOperations.of({
     run,
     subscribe,
-  } satisfies T3RpcOperationsService;
+  });
 });
 
 export const T3RpcOperationsLive = Layer.effect(T3RpcOperations, makeT3RpcOperations());

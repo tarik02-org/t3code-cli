@@ -33,7 +33,7 @@ export const makeT3AuthPairing = Effect.fn("makeT3AuthPairing")(function* () {
     };
   });
 
-  return { pair };
+  return T3AuthPairing.of({ pair });
 });
 
 export const T3AuthPairingLive = Layer.effect(T3AuthPairing, makeT3AuthPairing());

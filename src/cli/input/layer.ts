@@ -42,10 +42,10 @@ export const makeT3Input = Effect.fn("makeT3Input")(function* () {
     );
   });
 
-  return {
+  return T3Input.of({
     readStdin,
     readStdinBinary,
-  };
+  });
 });
 
 export const T3InputLive = Layer.effect(T3Input, makeT3Input());

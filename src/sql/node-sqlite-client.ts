@@ -6,7 +6,12 @@ import * as SqlClient from "effect/sql/SqlClient";
 
 import { SqlClientFactory } from "./service.ts";
 
-export const NodeSqlClientFactoryLive = Layer.succeed(SqlClientFactory, {
-  sqliteClient: (config) =>
-    Layer.build(NodeSqliteClient.layer(config)).pipe(Effect.map(Context.get(SqlClient.SqlClient))),
-});
+export const NodeSqlClientFactoryLive = Layer.succeed(
+  SqlClientFactory,
+  SqlClientFactory.of({
+    sqliteClient: (config) =>
+      Layer.build(NodeSqliteClient.layer(config)).pipe(
+        Effect.map(Context.get(SqlClient.SqlClient)),
+      ),
+  }),
+);

@@ -52,7 +52,9 @@ const codecFor: RpcSerialization.CodecFor = <S extends Schema.Top>(schema: S) =>
   return exitCodecJson(schema);
 };
 
-export const layerJson = Layer.succeed(RpcSerialization.RpcSerialization)({
-  ...RpcSerialization.json,
-  codecFor,
-});
+export const layerJson = Layer.succeed(RpcSerialization.RpcSerialization)(
+  RpcSerialization.RpcSerialization.of({
+    ...RpcSerialization.json,
+    codecFor,
+  }),
+);

@@ -107,11 +107,11 @@ const makeT3AuthTransport = Effect.fn("makeT3AuthTransport")(function* () {
     } satisfies AuthWebSocketTicketResult;
   });
 
-  return {
+  return T3AuthTransport.of({
     bootstrapBearer,
     getSession,
     issueWebSocketTicket,
-  };
+  });
 });
 
 export const T3AuthTransportLive = Layer.effect(T3AuthTransport, makeT3AuthTransport());

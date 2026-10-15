@@ -245,7 +245,7 @@ export const make = Effect.fn("makeT3Config")(function* () {
     });
   });
 
-  return {
+  return T3Config.of({
     resolve,
     resolveActiveEnvironmentName,
     listEnvironments,
@@ -254,7 +254,7 @@ export const make = Effect.fn("makeT3Config")(function* () {
     removeEnvironment,
     hasEnvironment,
     getDefaultEnvironmentName,
-  } as const;
+  });
 });
 
 export const layer = Layer.effect(T3Config, make());

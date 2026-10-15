@@ -89,12 +89,13 @@ function createKeyringKeystore(keyring: KeyringModule): MasterKeyKeystore {
   };
 }
 
-const make = (): T3MasterKeyKeystoreFactory["Service"] => ({
-  make: () =>
-    Effect.gen(function* () {
-      const keyring = yield* loadKeyringModule;
-      return createKeyringKeystore(keyring);
-    }),
-});
+const make = () =>
+  T3MasterKeyKeystoreFactory.of({
+    make: () =>
+      Effect.gen(function* () {
+        const keyring = yield* loadKeyringModule;
+        return createKeyringKeystore(keyring);
+      }),
+  });
 
 export const layerNode = Layer.succeed(T3MasterKeyKeystoreFactory, make());
