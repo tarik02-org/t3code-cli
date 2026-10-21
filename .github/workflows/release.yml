@@ -28,6 +28,8 @@ jobs:
         with:
           node-version-file: package.json
           cache: pnpm
+          # changesets/action v2 no longer writes an .npmrc from NPM_TOKEN.
+          registry-url: https://registry.npmjs.org
 
       - name: install dependencies
         run: pnpm install --frozen-lockfile
@@ -45,13 +47,13 @@ jobs:
           permission-pull-requests: write
 
       - name: create release pr or publish package
-        uses: changesets/action@v1.8.0
+        uses: changesets/action@v2.1.2
         with:
-          version: pnpm release:version
-          publish: pnpm release:publish
-          commit: release package
-          title: release package
-          createGithubReleases: true
+          github-token: ${{ steps.app-token.outputs.token }}
+          version-script: pnpm release:version
+          publish-script: pnpm release:publish
+          commit-message: release package
+          pr-title: release package
+          create-github-releases: true
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
