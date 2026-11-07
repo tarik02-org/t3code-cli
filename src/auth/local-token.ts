@@ -1,10 +1,11 @@
 import {
-  AuthAdministrativeScopes,
+  AuthStandardClientScopes,
   AuthSessionId,
   type AuthEnvironmentScope,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Digest from "effect/crypto/Digest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Base64Url from "effect/encoding/Base64Url";
@@ -41,7 +42,8 @@ export const makeT3LocalAuthToken = Effect.fn("makeT3LocalAuthToken")(function* 
   const path = yield* Path.Path;
   const cliRuntime = yield* CliRuntime;
   const t3CliEnv = yield* loadT3CliEnv;
-  const crypto = yield* Crypto.Crypto;
+  const crypto = yield* SecureRandom.SecureRandom;
+  const digest = yield* Digest.Digest;
   const sqlClientFactory = yield* SqlClientFactory;
 
   function readSigningSecret(secretPath: string) {
@@ -78,13 +80,13 @@ export const makeT3LocalAuthToken = Effect.fn("makeT3LocalAuthToken")(function* 
   const hmacSha256 = (secret: Uint8Array, payload: Uint8Array) =>
     Effect.gen(function* () {
       const key =
-        secret.byteLength > sha256BlockSize ? yield* crypto.digest("SHA-256", secret) : secret;
+        secret.byteLength > sha256BlockSize ? yield* digest.digest(Digest.sha256, secret) : secret;
       const block = new Uint8Array(sha256BlockSize);
       block.set(key);
       const outerPad = block.map((byte) => byte ^ 0x5c);
       const innerPad = block.map((byte) => byte ^ 0x36);
-      const innerHash = yield* crypto.digest("SHA-256", concatBytes(innerPad, payload));
-      return yield* crypto.digest("SHA-256", concatBytes(outerPad, innerHash));
+      const innerHash = yield* digest.digest(Digest.sha256, concatBytes(innerPad, payload));
+      return yield* digest.digest(Digest.sha256, concatBytes(outerPad, innerHash));
     });
 
   const signPayload = (payload: string, secret: Uint8Array) =>
@@ -150,7 +152,7 @@ export const makeT3LocalAuthToken = Effect.fn("makeT3LocalAuthToken")(function* 
     const secret = yield* readRequiredSigningSecret(input.secretsDir);
     const issuedAt = yield* DateTime.now;
     const expiresAt = DateTime.add(issuedAt, { milliseconds: defaultSessionTtlMs });
-    const sessionId = yield* crypto.randomUUIDv4().pipe(
+    const sessionId = yield* crypto.uuidV4().pipe(
       Effect.map((id) => AuthSessionId.make(id)),
       Effect.mapError(
         (error) =>
@@ -160,7 +162,7 @@ export const makeT3LocalAuthToken = Effect.fn("makeT3LocalAuthToken")(function* 
           }),
       ),
     );
-    const scopes = [...AuthAdministrativeScopes];
+    const scopes = [...AuthStandardClientScopes];
     const claims: LocalSessionClaims = {
       v: 1,
       kind: "session",

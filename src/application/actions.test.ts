@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { fromPartial } from "@total-typescript/shoehorn";
@@ -88,7 +89,11 @@ function makeTestLayer(input: {
       },
     }),
   );
-  return Layer.mergeAll(orchestration, terminals, NodeServices.layer);
+  return Layer.mergeAll(
+    orchestration,
+    terminals,
+    Layer.mergeAll(NodeServices.layer, NodeCrypto.layer),
+  );
 }
 
 describe("project actions", () => {
@@ -98,7 +103,7 @@ describe("project actions", () => {
     assert.equal(nextProjectScriptId("!!!", []), "script");
   });
 
-  it.layer(NodeServices.layer)("makeActionApplication", (t) => {
+  it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("makeActionApplication", (t) => {
     t.effect("adds an action and clears existing setup actions", () =>
       Effect.gen(function* () {
         let dispatched: ProjectMutation | undefined;

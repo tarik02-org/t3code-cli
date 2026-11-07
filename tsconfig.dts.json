@@ -34,7 +34,10 @@
     "src/t3tools/index.ts",
     "upstream-t3code/packages/client-runtime/src/**/*.ts",
     "upstream-t3code/packages/shared/src/**/*.ts",
-    "upstream-t3code/packages/source-control-*/src/client/**/*.ts"
+    "upstream-t3code/packages/source-control-*/src/client/**/*.ts",
+    "upstream-t3code/packages/source-control-core/src/shared/**/*.ts",
+    "upstream-t3code/packages/provider-*/src/client.ts",
+    "upstream-t3code/packages/provider-core/src/modelShortName.ts"
   ],
   "exclude": ["upstream-t3code/**/*.test.ts", "upstream-t3code/**/*.bench.ts"]
 }

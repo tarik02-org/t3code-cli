@@ -1,0 +1,20 @@
+# Restates the generator's signature as the binding's type, so it is not inferred.
+id: connected-environment-http-request
+language: TypeScript
+files:
+  - upstream-t3code/packages/client-runtime/src/state/environmentHttpAuth.ts
+rule:
+  pattern: |-
+    export const executeConnectedEnvironmentHttpRequest = Effect.fn($NAME)(function* <$$$TYPES>($INPUT: $INPUT_TYPE) {
+      $$$BODY
+    })
+fix: |-
+  export const executeConnectedEnvironmentHttpRequest: <$$$TYPES>(
+    $INPUT: $INPUT_TYPE,
+  ) => Effect.Effect<
+    Effect.Success<ReturnType<typeof executeEnvironmentRequest<Group, A, E, R>>>,
+    Effect.Error<ReturnType<typeof executeEnvironmentRequest<Group, A, E, R>>> | RemoteEnvironmentAuthFetchError,
+    Effect.Services<ReturnType<typeof executeEnvironmentRequest<Group, A, E, R>>> | EnvironmentSupervisor.EnvironmentSupervisor
+  > = Effect.fn($NAME)(function* <$$$TYPES>($INPUT: $INPUT_TYPE) {
+    $$$BODY
+  })

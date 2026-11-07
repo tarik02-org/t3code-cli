@@ -1,4 +1,4 @@
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import type { OrchestrationV2ThreadProjection } from "@t3tools/contracts";
@@ -47,8 +47,8 @@ export function queuedRuns(projection: OrchestrationV2ThreadProjection): Readonl
 
 export const makeThreadQueue = Effect.fn("makeThreadQueue")(function* () {
   const orchestration = yield* T3Orchestration;
-  const crypto = yield* Crypto.Crypto;
-  const withCrypto = Effect.provideService(Crypto.Crypto, crypto);
+  const crypto = yield* SecureRandom.SecureRandom;
+  const withCrypto = Effect.provideService(SecureRandom.SecureRandom, crypto);
 
   const loadQueuedRun = Effect.fn("T3ThreadQueue.loadQueuedRun")(function* (input: {
     readonly threadId: string;

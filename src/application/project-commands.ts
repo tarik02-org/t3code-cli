@@ -1,4 +1,4 @@
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import { ProjectId, type ProjectMutation, type ProjectScript } from "@t3tools/contracts";
@@ -11,13 +11,13 @@ export const makeProjectCreateMutation = Effect.fn("makeProjectCreateMutation")(
   readonly cwd: string;
 }) {
   const path = yield* Path.Path;
-  const crypto = yield* Crypto.Crypto;
+  const crypto = yield* SecureRandom.SecureRandom;
   const workspaceRoot = path.resolve(input.cwd, input.path);
   const title = input.title?.trim();
   return {
     type: "project.create",
     commandId: yield* makeCommandId("project-create"),
-    projectId: ProjectId.make(yield* crypto.randomUUIDv4().pipe(Effect.orDie)),
+    projectId: ProjectId.make(yield* crypto.uuidV4()),
     title: title !== undefined && title.length > 0 ? title : path.basename(workspaceRoot),
     workspaceRoot,
   } satisfies Extract<ProjectMutation, { readonly type: "project.create" }>;

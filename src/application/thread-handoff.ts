@@ -1,4 +1,4 @@
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
@@ -31,8 +31,8 @@ type SendMessage = (
 export function makeHandoffThread(sendMessage: SendMessage) {
   return Effect.fn("T3ApplicationLive.handoffThread")(function* (input: HandoffThreadInput) {
     const orchestration = yield* T3Orchestration;
-    const crypto = yield* Crypto.Crypto;
-    const withCrypto = Effect.provideService(Crypto.Crypto, crypto);
+    const crypto = yield* SecureRandom.SecureRandom;
+    const withCrypto = Effect.provideService(SecureRandom.SecureRandom, crypto);
     const step = input.onStep ?? (() => Effect.void);
     const threadId = input.threadId;
     const fail = (message: string) => new ThreadWorktreeError({ message, threadId });

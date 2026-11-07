@@ -1,4 +1,4 @@
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
@@ -17,7 +17,7 @@ import {
 } from "./service.ts";
 
 export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(function* () {
-  const crypto = yield* Crypto.Crypto;
+  const crypto = yield* SecureRandom.SecureRandom;
   const orchestration = yield* T3Orchestration;
   const rpc = yield* T3RpcOperations;
 
@@ -121,8 +121,7 @@ export const makeTerminalApplication = Effect.fn("makeTerminalApplication")(func
       );
     }
 
-    const terminalId =
-      input.terminalId ?? `t3cli-${yield* crypto.randomUUIDv4().pipe(Effect.orDie)}`;
+    const terminalId = input.terminalId ?? `t3cli-${yield* crypto.uuidV4()}`;
     const cwd = thread.worktreePath ?? project.workspaceRoot;
     const opened = yield* rpc.run(WS_METHODS.terminalOpen, (client) =>
       client[WS_METHODS.terminalOpen]({

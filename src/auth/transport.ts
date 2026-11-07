@@ -7,6 +7,7 @@ import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { HttpClient } from "effect/http";
 
 import type { AuthClientPresentationMetadata } from "../contracts/index.ts";
@@ -102,7 +103,7 @@ const makeT3AuthTransport = Effect.fn("makeT3AuthTransport")(function* () {
       ),
     );
     return {
-      ticket: result.ticket,
+      ticket: Redacted.value(result.ticket),
       expiresAt: DateTime.formatIso(result.expiresAt),
     } satisfies AuthWebSocketTicketResult;
   });
