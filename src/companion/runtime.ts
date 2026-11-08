@@ -1,9 +1,11 @@
 import { createServer } from "node:http";
+import { homedir } from "node:os";
 import { spawn, spawnSync } from "node:child_process";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 
 import * as CredentialCipherNode from "../config/credential/cipher-node.ts";
 import * as KeystoreKeyringNode from "../config/keystore/keyring-node.ts";
@@ -11,6 +13,7 @@ import { T3ConfigSelection } from "../config/selection/service.ts";
 import { BaseAppLayer } from "../runtime/layer.ts";
 import { NodeSqlClientFactoryLive } from "../sql/node-sqlite-client.ts";
 import { CompanionClientError } from "./error.ts";
+import type { AutostartPlatform, AutostartTarget } from "./autostart.ts";
 import type { ConnectEnvironment } from "./environments.ts";
 
 /** The CLI's own service stack, pinned to one stored environment instead of the CLI selection. */
@@ -81,4 +84,50 @@ export const spawnDetachedCompanion = (args: ReadonlyArray<string>) =>
         operation: "spawn",
         cause,
       }),
+  });
+
+/** The login launcher for this machine, re-running this exact node and entry script. */
+export const companionAutostartTarget = (args: ReadonlyArray<string>) =>
+  Effect.try({
+    try: (): AutostartTarget => {
+      const entry = process.argv[1];
+      if (entry === undefined) {
+        throw new Error("cannot locate the t3cli entry script");
+      }
+      const platform: AutostartPlatform | undefined =
+        process.platform === "win32"
+          ? "windows"
+          : process.platform === "darwin"
+            ? "launchd"
+            : process.platform === "linux"
+              ? "systemd"
+              : undefined;
+      if (platform === undefined) {
+        throw new Error(`autostart is not supported on ${process.platform}`);
+      }
+      return {
+        platform,
+        homeDir: homedir(),
+        uid: process.getuid?.() ?? 0,
+        command: [process.execPath, entry, ...args],
+      };
+    },
+    catch: (cause) =>
+      new CompanionClientError({
+        message: "failed to describe the autostart entry",
+        operation: "autostart",
+        cause,
+      }),
+  });
+
+/** Signal 0 checks that the pid exists without touching the process. */
+export const isProcessAlive = (pid: number) =>
+  Effect.sync(() => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (error) {
+      // EPERM means the pid exists but belongs to someone else.
+      return Predicate.hasProperty(error, "code") && error.code === "EPERM";
+    }
   });

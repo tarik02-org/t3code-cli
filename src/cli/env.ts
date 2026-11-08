@@ -13,6 +13,7 @@ import { CliRuntime } from "../cli/runtime/service.ts";
 import { loadT3CliEnv } from "../config/env/env.ts";
 import { requireDestructiveConfirmation } from "./interaction/confirm.ts";
 import { extraArgsConfig } from "./extra-args.ts";
+import { cliEnvironmentSetting } from "./env/flag.ts";
 import { envNameFlag, formatFlag, yesFlag } from "./flags.ts";
 import { resolveOutputFormat } from "./format/output.ts";
 import { T3Output } from "./output/service.ts";
@@ -84,8 +85,10 @@ const removeCommand = Command.make(
       const t3CliEnv = yield* loadT3CliEnv;
       const output = yield* T3Output;
       const resolvedFormat = resolveOutputFormat(format, cliRuntime, t3CliEnv, "json");
+      const selected = Option.flatten(yield* Effect.serviceOption(cliEnvironmentSetting));
+      const requested = Option.orElse(name, () => selected);
       const targetName = yield* auth.resolveUnpairTarget(
-        Option.isSome(name) ? { name: name.value } : {},
+        Option.isSome(requested) ? { name: requested.value } : {},
       );
       yield* requireDestructiveConfirmation({
         message: `Remove local credentials for environment '${targetName}'?`,

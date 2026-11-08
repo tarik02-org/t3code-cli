@@ -5,12 +5,15 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
+import * as Stream from "effect/Stream";
 import * as HttpRouter from "effect/http/HttpRouter";
 import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as RpcServer from "effect/rpc/RpcServer";
 
+import { resolveConfigFilePath } from "../config/paths/paths.ts";
 import { SqlClientFactory } from "../sql/service.ts";
 import {
   CompanionEnvironments,
@@ -128,6 +131,22 @@ export const runCompanionDaemon = Effect.fn("runCompanionDaemon")(function* <E, 
 
   yield* hub.flushPendingWakes;
   yield* Effect.forkScoped(runCompanionWatcher().pipe(Effect.provide(services)));
+
+  // `t3cli env` and `auth` rewrite the config file; pick up added and removed environments.
+  const path = yield* Path.Path;
+  const environments = Context.get(services, CompanionEnvironments);
+  const configFile = yield* resolveConfigFilePath();
+  yield* fs.watch(path.dirname(configFile)).pipe(
+    Stream.filter((event) => path.basename(event.path) === path.basename(configFile)),
+    Stream.debounce(Duration.seconds(1)),
+    Stream.runForEach(() =>
+      environments.reload.pipe(
+        Effect.catchCause((cause) => Effect.logWarning("failed to reload environments", cause)),
+      ),
+    ),
+    Effect.catchCause((cause) => Effect.logWarning("stopped watching the t3cli config", cause)),
+    Effect.forkScoped,
+  );
 
   yield* fs.writeFileString(
     paths.runtimeFile,

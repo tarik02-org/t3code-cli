@@ -11,7 +11,11 @@ import * as FiberMap from "effect/FiberMap";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 
-import { type CompanionEnvironment, CompanionEnvironments } from "./environments.ts";
+import {
+  type CompanionEnvironment,
+  CompanionEnvironments,
+  environmentKey,
+} from "./environments.ts";
 import { CompanionHub } from "./hub.ts";
 import type { ThreadEvent } from "./schema.ts";
 import { idleCandidate, immediateEvents } from "./state.ts";
@@ -189,14 +193,38 @@ export const runCompanionWatcher = Effect.fn("runCompanionWatcher")(function* ()
       Effect.andThen(markDown),
       Effect.andThen(Effect.sleep(reconnectDelay)),
       Effect.forever,
+      // A removed environment must not report an outage after it is gone.
+      Effect.ensuring(FiberMap.remove(downTimers, environment.name)),
     );
   });
 
-  yield* Effect.logInfo(
-    `watching ${environments.all.map((env) => `${env.name} (${env.url})`).join(", ")}`,
+  const watching = yield* FiberMap.make<string>();
+  // Only this fiber touches it: the keys of the environments being watched.
+  let active = new Set<string>();
+  return yield* environments.changes.pipe(
+    Stream.runForEach(
+      Effect.fnUntraced(function* (current) {
+        const keys = new Set(current.map(environmentKey));
+        for (const key of active) {
+          if (!keys.has(key)) {
+            yield* FiberMap.remove(watching, key);
+          }
+        }
+        active = keys;
+        for (const environment of current) {
+          yield* FiberMap.run(
+            watching,
+            environmentKey(environment),
+            watchEnvironment(environment),
+            {
+              onlyIfMissing: true,
+            },
+          );
+        }
+        yield* Effect.logInfo(
+          `watching ${current.map((env) => `${env.name} (${env.url})`).join(", ")}`,
+        );
+      }),
+    ),
   );
-  return yield* Effect.forEach(environments.all, watchEnvironment, {
-    concurrency: "unbounded",
-    discard: true,
-  });
 });

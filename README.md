@@ -79,7 +79,7 @@ t3cli auth local [--name <name>] [--replace]                        # Local t3co
 t3cli auth status [--format json]                                   # Check current auth
 t3cli env list [--format json]                                      # List stored environments
 t3cli env use <name> [--format json]                                # Set default environment
-t3cli env remove [--name <name>] [--yes]                            # Remove local credentials
+t3cli env remove (--name <name> | --environment <name>) [--yes]  # Remove local credentials
 t3cli --environment <name> ...                                      # Use a specific environment once
 ```
 
@@ -289,12 +289,14 @@ t3cli terminal destroy [--thread <id>] <terminal-id> [--yes] [--format auto|huma
 t3cli companion start [--port <port>] [--env <name>]... [--format auto|human|json]
 t3cli companion status [--format auto|human|json]
 t3cli companion stop
+t3cli companion install [--port <port>] [--env <name>]... [--format auto|human|json]
+t3cli companion uninstall [--format auto|human|json]
 t3cli companion run [--port <port>] [--env <name>]... [--log-file <path>]
 t3cli subscribe [--thread <subscriber>] [--caller-env <env>] (--to <thread> | --project <id>) [--source-env <env>] [--event <kind>]... [--wake]
 t3cli inbox [--thread <subscriber>] [--caller-env <env>] [--wait] [--timeout <seconds>] [--event <kind>]... [--ack] [--all]
 ```
 
-The companion is a background daemon that keeps one shell-stream connection per stored environment (all of them by default; names sharing a URL share one connection) and records thread events in an inbox, so agents subscribe to other threads instead of polling them. It stores subscriptions and the inbox in SQLite under `%LOCALAPPDATA%\t3cli` on Windows or `$XDG_STATE_HOME/t3cli` (default `~/.local/state/t3cli`) elsewhere, and logs to `companion.log` there.
+The companion is a background daemon that keeps one shell-stream connection per stored environment (all of them by default; names sharing a URL share one connection) and records thread events in an inbox, so agents subscribe to other threads instead of polling them. It stores subscriptions and the inbox in SQLite under `%LOCALAPPDATA%\t3cli` on Windows or `$XDG_STATE_HOME/t3cli` (default `~/.local/state/t3cli`) elsewhere, and logs to `companion.log` there. It reloads environments when `t3cli env` or `auth` changes the config. `companion install` starts it at login (a hidden Windows scheduled task, a systemd user unit, or a launchd agent) and starts it now; re-run it after upgrading node or t3cli, since the entry pins both paths. A second `run` exits when a companion already answers, `stop` clears a stale runtime file left by a crashed daemon, and a busy port is retried for 30 seconds.
 
 Events: `idle` (no active or queued run, no pending request, no pending background task such as a Claude `Monitor` or background command, quiet for 3 seconds; a background task older than 30 minutes no longer holds it and is named in the event), `failed`, `needs-input`, `settled`, and `env-down` / `env-up` when an environment with subscriptions stays unreachable for a minute and later returns. Every event lands in the subscriber's inbox until acknowledged; `--wake` also sends the subscriber thread one digest message per 5-second window.
 

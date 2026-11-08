@@ -58,3 +58,13 @@ export class CompanionToolError extends Schema.TaggedError<CompanionToolError>()
     tool: Schema.String,
   },
 ) {}
+
+export class CompanionAutostartError extends Schema.TaggedError<CompanionAutostartError>()(
+  "CompanionAutostartError",
+  {
+    message: Schema.String,
+    operation: Schema.String,
+    /** The platform tool's own output, kept apart from the message. */
+    output: Schema.String,
+  },
+) {}

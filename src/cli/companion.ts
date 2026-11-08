@@ -2,7 +2,9 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Logger from "effect/Logger";
+import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { Command, Flag } from "effect/cli";
@@ -13,13 +15,16 @@ import {
   withCompanionClient,
   withRunningCompanion,
 } from "../companion/client.ts";
+import { installAutostart, uninstallAutostart } from "../companion/autostart.ts";
 import { runCompanionDaemon } from "../companion/daemon.ts";
 import { CompanionNotRunningError } from "../companion/error.ts";
 import { defaultCompanionPort, resolveCompanionPaths } from "../companion/paths.ts";
 import {
+  companionAutostartTarget,
   companionDaemonPlatformLayer,
   companionProcessId,
   connectStoredEnvironment,
+  isProcessAlive,
   spawnDetachedCompanion,
 } from "../companion/runtime.ts";
 import {
@@ -119,10 +124,17 @@ const runCommand = Command.make(
     ),
     ...extraArgsConfig,
   },
-  ({ port, env, logFile }) =>
-    Effect.gen(function* () {
+  ({ port, env, logFile }) => {
+    const program = Effect.gen(function* () {
       const version = yield* T3Version;
-      const daemon = runCompanionDaemon(
+      // Autostart and a manual start can race; the second one leaves the running daemon alone.
+      const existing = yield* Effect.option(runningHealth);
+      if (Option.isSome(existing) && existing.value.pid !== companionProcessId()) {
+        return yield* Effect.logInfo(
+          `companion already running (pid ${existing.value.pid}, ${existing.value.mcpUrl}); exiting`,
+        );
+      }
+      return yield* runCompanionDaemon(
         {
           port,
           pid: companionProcessId(),
@@ -130,16 +142,25 @@ const runCommand = Command.make(
           environments: env,
         },
         connectStoredEnvironment,
-      ).pipe(Effect.provide(companionDaemonPlatformLayer(port)));
-      if (Option.isNone(logFile)) {
-        return yield* daemon;
-      }
-      return yield* daemon.pipe(
-        Effect.provide(
-          Logger.layer([Logger.toFile(Logger.formatLogFmt, logFile.value, { flag: "a" })]),
-        ),
+      ).pipe(
+        Effect.provide(companionDaemonPlatformLayer(port)),
+        // A daemon that is still shutting down, or a stale socket, holds the port for a moment.
+        Effect.tapErrorTag("ServeError", () => Effect.logWarning(`port ${port} is busy; retrying`)),
+        Effect.retry({
+          schedule: Schedule.spaced(Duration.seconds(1)),
+          times: 30,
+          while: (error) => Predicate.isTagged(error, "ServeError"),
+        }),
       );
-    }),
+    }).pipe(withHttp);
+    return Option.isNone(logFile)
+      ? program
+      : program.pipe(
+          Effect.provide(
+            Logger.layer([Logger.toFile(Logger.formatLogFmt, logFile.value, { flag: "a" })]),
+          ),
+        );
+  },
 ).pipe(Command.withDescription("run the companion in the foreground"));
 
 const startCommand = Command.make(
@@ -203,7 +224,22 @@ const stopCommand = Command.make("stop", { ...extraArgsConfig }, () =>
   Effect.gen(function* () {
     const output = yield* T3Output;
     const runtime = yield* readCompanionRuntime();
-    yield* withCompanionClient(runtime.url, (client) => client.shutdown());
+    const requested = yield* Effect.exit(
+      withCompanionClient(runtime.url, (client) => client.shutdown()),
+    );
+    if (Exit.isFailure(requested)) {
+      if (yield* isProcessAlive(runtime.pid)) {
+        return yield* new CompanionNotRunningError({
+          message: `companion (pid ${runtime.pid}) is running but does not answer at ${runtime.url}`,
+          cause: requested.cause,
+        });
+      }
+      const paths = yield* resolveCompanionPaths();
+      yield* (yield* FileSystem.FileSystem).remove(paths.runtimeFile, { force: true });
+      return yield* output.printInfo(
+        `companion was not running (pid ${runtime.pid} is gone); removed its stale runtime file`,
+      );
+    }
     // The daemon removes its runtime file on the way out.
     yield* readCompanionRuntime().pipe(
       Effect.flip,
@@ -215,16 +251,74 @@ const stopCommand = Command.make("stop", { ...extraArgsConfig }, () =>
           }),
       ),
     );
-    yield* output.printInfo(`companion stopped (pid ${runtime.pid})`);
+    return yield* output.printInfo(`companion stopped (pid ${runtime.pid})`);
   }).pipe(withHttp),
 ).pipe(Command.withDescription("stop the companion"));
+
+const installCommand = Command.make(
+  "install",
+  { port: portFlag, env: envsFlag, format: formatFlag, ...extraArgsConfig },
+  ({ port, env, format }) =>
+    Effect.gen(function* () {
+      const output = yield* T3Output;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
+      const paths = yield* resolveCompanionPaths();
+      yield* (yield* FileSystem.FileSystem).makeDirectory(paths.stateDir, { recursive: true });
+      const target = yield* companionAutostartTarget([
+        "companion",
+        "run",
+        "--port",
+        String(port),
+        "--log-file",
+        paths.logFile,
+        ...env.flatMap((name) => ["--env", name]),
+      ]);
+      const result = yield* installAutostart(target);
+      if (resolveOutputFormat(format, cliRuntime, t3CliEnv, "json") === "json") {
+        return yield* output.printJson({ ...result, command: target.command });
+      }
+      return yield* output.printInfo(
+        [
+          `companion autostart installed (${result.platform}: ${result.location})`,
+          `runs at login: ${target.command.join(" ")}`,
+          "re-run after upgrading node or t3cli, since the entry pins both paths",
+        ].join("\n"),
+      );
+    }),
+).pipe(Command.withDescription("start the companion at login (and now)"));
+
+const uninstallCommand = Command.make(
+  "uninstall",
+  { format: formatFlag, ...extraArgsConfig },
+  ({ format }) =>
+    Effect.gen(function* () {
+      const output = yield* T3Output;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
+      const result = yield* uninstallAutostart(yield* companionAutostartTarget([]));
+      if (resolveOutputFormat(format, cliRuntime, t3CliEnv, "json") === "json") {
+        return yield* output.printJson(result);
+      }
+      return yield* output.printInfo(
+        `companion autostart removed (${result.platform}: ${result.location}); a running daemon keeps running until "t3cli companion stop"`,
+      );
+    }),
+).pipe(Command.withDescription("stop starting the companion at login"));
 
 export function createCompanionCommand() {
   return Command.make("companion").pipe(
     Command.withDescription(
       "long-lived daemon that watches threads and serves an inbox over MCP (http://127.0.0.1:<port>/mcp)",
     ),
-    Command.withSubcommands([startCommand, statusCommand, stopCommand, runCommand]),
+    Command.withSubcommands([
+      startCommand,
+      statusCommand,
+      stopCommand,
+      installCommand,
+      uninstallCommand,
+      runCommand,
+    ]),
   );
 }
 
