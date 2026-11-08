@@ -1,6 +1,7 @@
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -109,11 +110,19 @@ const runningHealth = readCompanionRuntime().pipe(
 
 const runCommand = Command.make(
   "run",
-  { port: portFlag, env: envsFlag, ...extraArgsConfig },
-  ({ port, env }) =>
+  {
+    port: portFlag,
+    env: envsFlag,
+    logFile: Flag.String("log-file").pipe(
+      Flag.withDescription("Append logs to this file instead of stderr"),
+      Flag.optional,
+    ),
+    ...extraArgsConfig,
+  },
+  ({ port, env, logFile }) =>
     Effect.gen(function* () {
       const version = yield* T3Version;
-      yield* runCompanionDaemon(
+      const daemon = runCompanionDaemon(
         {
           port,
           pid: companionProcessId(),
@@ -122,6 +131,14 @@ const runCommand = Command.make(
         },
         connectStoredEnvironment,
       ).pipe(Effect.provide(companionDaemonPlatformLayer(port)));
+      if (Option.isNone(logFile)) {
+        return yield* daemon;
+      }
+      return yield* daemon.pipe(
+        Effect.provide(
+          Logger.layer([Logger.toFile(Logger.formatLogFmt, logFile.value, { flag: "a" })]),
+        ),
+      );
     }),
 ).pipe(Command.withDescription("run the companion in the foreground"));
 
@@ -142,16 +159,15 @@ const startCommand = Command.make(
       }
       const paths = yield* resolveCompanionPaths();
       yield* (yield* FileSystem.FileSystem).makeDirectory(paths.stateDir, { recursive: true });
-      yield* spawnDetachedCompanion({
-        args: [
-          "companion",
-          "run",
-          "--port",
-          String(port),
-          ...env.flatMap((name) => ["--env", name]),
-        ],
-        logFile: paths.logFile,
-      });
+      yield* spawnDetachedCompanion([
+        "companion",
+        "run",
+        "--port",
+        String(port),
+        "--log-file",
+        paths.logFile,
+        ...env.flatMap((name) => ["--env", name]),
+      ]);
       const health = yield* runningHealth.pipe(
         Effect.retry(startupRetry),
         Effect.mapError(
@@ -214,7 +230,7 @@ export function createCompanionCommand() {
 
 function formatInboxEvent(row: InboxEvent): string {
   const acked = row.ackedAt === null ? "" : " (acked)";
-  return `[${row.id}] ${row.event.occurredAt} ${row.event.kind} ${row.event.environment}/${row.event.threadId} "${row.event.title}"${acked}\n    ${row.event.summary}`;
+  return `[${row.id}] ${row.event.occurredAt} ${row.event.kind} ${row.event.environment}${row.event.threadId === null ? "" : `/${row.event.threadId}`} "${row.event.title}"${acked}\n    ${row.event.summary}`;
 }
 
 export const inboxCommand = Command.make(

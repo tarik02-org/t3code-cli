@@ -283,6 +283,23 @@ t3cli terminal destroy [--thread <id>] <terminal-id> [--yes] [--format auto|huma
 
 `terminal write` accepts exactly one payload source: raw argument text, `--stdin`, `--hex`, or `--base64`. Payloads are treated as raw bytes (latin1), not UTF-8 text. `terminal destroy` performs a destructive close with history deletion and requires `--yes` in non-interactive mode.
 
+## Companion (prototype)
+
+```sh
+t3cli companion start [--port <port>] [--env <name>]... [--format auto|human|json]
+t3cli companion status [--format auto|human|json]
+t3cli companion stop
+t3cli companion run [--port <port>] [--env <name>]... [--log-file <path>]
+t3cli subscribe [--thread <subscriber>] [--caller-env <env>] (--to <thread> | --project <id>) [--source-env <env>] [--event <kind>]... [--wake]
+t3cli inbox [--thread <subscriber>] [--caller-env <env>] [--wait] [--timeout <seconds>] [--event <kind>]... [--ack] [--all]
+```
+
+The companion is a background daemon that keeps one shell-stream connection per stored environment (all of them by default; names sharing a URL share one connection) and records thread events in an inbox, so agents subscribe to other threads instead of polling them. It stores subscriptions and the inbox in SQLite under `%LOCALAPPDATA%\t3cli` on Windows or `$XDG_STATE_HOME/t3cli` (default `~/.local/state/t3cli`) elsewhere, and logs to `companion.log` there.
+
+Events: `idle` (no active or queued run, no pending request, no pending background task such as a Claude `Monitor` or background command, quiet for 3 seconds; a background task older than 30 minutes no longer holds it and is named in the event), `failed`, `needs-input`, `settled`, and `env-down` / `env-up` when an environment with subscriptions stays unreachable for a minute and later returns. Every event lands in the subscriber's inbox until acknowledged; `--wake` also sends the subscriber thread one digest message per 5-second window.
+
+Agents use the MCP endpoint at `http://127.0.0.1:47731/mcp` (`subscribe`, `unsubscribe`, `subscriptions_list`, `inbox_list`, `inbox_ack`, `inbox_wait`, `thread_send`, `thread_start`), identifying themselves with `callerThreadId` (their `T3CODE_THREAD_ID`) and optionally `callerEnvironment`. The CLI commands talk to the daemon over Effect RPC at `/rpc`.
+
 ### Environment Variables
 
 When flags are omitted, the CLI reads these environment variables (first match wins):

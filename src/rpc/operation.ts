@@ -79,7 +79,14 @@ export const makeT3RpcOperations = Effect.fn("makeT3RpcOperations")(function* ()
     method: string,
     operation: (client: WsClient) => Stream.Stream<A, CliRpcOperationError>,
   ): Stream.Stream<A, RpcError> =>
-    Stream.unwrap(rpc.getClient.pipe(Effect.map((client) => operation(client)))).pipe(
+    Stream.unwrap(
+      rpc.getConnection.pipe(
+        // The client neither ends nor fails an open stream when its socket closes.
+        Effect.map((connection) =>
+          operation(connection.client).pipe(Stream.interruptWhen(connection.closed)),
+        ),
+      ),
+    ).pipe(
       Stream.tapError((error) =>
         Predicate.isTagged(error, "RpcClientError") ? rpc.disconnect : Effect.void,
       ),

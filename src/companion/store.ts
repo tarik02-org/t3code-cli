@@ -36,8 +36,8 @@ const InboxRow = Schema.Struct({
   event_id: Schema.String,
   kind: CompanionEventKind,
   source_env: Schema.String,
-  source_thread: Schema.String,
-  source_project: Schema.String,
+  source_thread: Schema.NullOr(Schema.String),
+  source_project: Schema.NullOr(Schema.String),
   title: Schema.String,
   occurred_at: Schema.String,
   summary: Schema.String,
@@ -164,8 +164,8 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
         event_id TEXT NOT NULL,
         kind TEXT NOT NULL,
         source_env TEXT NOT NULL,
-        source_thread TEXT NOT NULL,
-        source_project TEXT NOT NULL,
+        source_thread TEXT,
+        source_project TEXT,
         title TEXT NOT NULL,
         occurred_at TEXT NOT NULL,
         summary TEXT NOT NULL,
@@ -176,6 +176,39 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
         UNIQUE (subscriber_env, subscriber_thread, event_id)
       )
     `;
+    // Version 1 allows null source columns for environment events; SQLite needs a rebuild.
+    const [version] = yield* sql<{ readonly user_version: number }>`PRAGMA user_version`;
+    if ((version?.user_version ?? 0) < 1) {
+      yield* sql.withTransaction(
+        Effect.gen(function* () {
+          yield* sql`ALTER TABLE inbox RENAME TO inbox_v0`;
+          yield* sql`
+        CREATE TABLE inbox (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          subscription_id INTEGER NOT NULL,
+          subscriber_env TEXT NOT NULL,
+          subscriber_thread TEXT NOT NULL,
+          event_id TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          source_env TEXT NOT NULL,
+          source_thread TEXT,
+          source_project TEXT,
+          title TEXT NOT NULL,
+          occurred_at TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          wake INTEGER NOT NULL,
+          delivered_at TEXT NOT NULL,
+          woken_at TEXT,
+          acked_at TEXT,
+          UNIQUE (subscriber_env, subscriber_thread, event_id)
+        )
+      `;
+          yield* sql`INSERT INTO inbox SELECT * FROM inbox_v0`;
+          yield* sql`DROP TABLE inbox_v0`;
+          yield* sql`PRAGMA user_version = 1`;
+        }),
+      );
+    }
     yield* sql`
       CREATE INDEX IF NOT EXISTS inbox_subscriber
       ON inbox (subscriber_env, subscriber_thread, acked_at, id)

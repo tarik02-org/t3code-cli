@@ -1,11 +1,17 @@
 import type { OrchestrationV2ThreadShell } from "@t3tools/contracts";
-import { backgroundWorkHoldsCompletion } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
 import * as DateTime from "effect/DateTime";
 
 import type { CompanionEventKind, ThreadEvent } from "./schema.ts";
 
 // Mirrors the server's auto-settle grace for a sent message the server has not adopted as a run.
 const queuedTurnStartGraceMs = 2 * 60_000;
+
+/**
+ * A background task (Claude `Monitor`, a `run_in_background` command, a subagent) wakes the
+ * thread later, so it holds idle. Past this age the task is reported as still pending instead,
+ * since dev servers and PR watches can run for hours.
+ */
+export const backgroundTaskIdleCapMs = 30 * 60_000;
 
 const activeRunStatuses: ReadonlySet<string> = new Set([
   "preparing",
@@ -40,7 +46,7 @@ function hasQueuedTurnStart(shell: OrchestrationV2ThreadShell, nowMs: number): b
   ].every((value) => value === null || value < messageAtMs);
 }
 
-/** Why a thread is not idle, or an empty list when it is. */
+/** Why a thread is not idle, apart from pending background tasks; empty when nothing else runs. */
 export function busyReasons(shell: OrchestrationV2ThreadShell, nowMs: number): Array<string> {
   const reasons: Array<string> = [];
   if (shell.activityRunStatus !== null && shell.activityRunStatus !== undefined) {
@@ -57,9 +63,6 @@ export function busyReasons(shell: OrchestrationV2ThreadShell, nowMs: number): A
   }
   if ((shell.pendingGuestMessageCount ?? 0) > 0) {
     reasons.push("pending guest messages");
-  }
-  if (backgroundWorkHoldsCompletion(shell.pendingBackgroundTasks ?? [])) {
-    reasons.push("background work");
   }
   if (shell.blockedOnThreadWait === true) {
     reasons.push("waiting on another thread");
@@ -127,12 +130,22 @@ export function immediateEvents(
   return events;
 }
 
-/** The idle event the shell would produce once it stays quiet, or null while it is busy. */
+export interface IdleCandidate {
+  readonly event: ThreadEvent;
+  /** Epoch ms before which the event must not fire; the caller adds the debounce on top. */
+  readonly notBeforeMs: number;
+}
+
+/**
+ * The idle event the shell would produce once it stays quiet, or null while it is busy. With
+ * background tasks pending, idle waits until the cap passes after the run completed; the event
+ * id is the same either way, so a capped idle and a later real one are delivered once.
+ */
 export function idleCandidate(
   environment: string,
   shell: OrchestrationV2ThreadShell,
   nowMs: number,
-): ThreadEvent | null {
+): IdleCandidate | null {
   if (shell.latestRunId === null || shell.status === "failed") {
     return null;
   }
@@ -140,16 +153,30 @@ export function idleCandidate(
     return null;
   }
   const completedAt = iso(shell.latestRunCompletedAt) ?? DateTime.formatIso(shell.updatedAt);
-  const summary =
+  const finished =
     shell.latestVisibleMessage === null
       ? "run finished"
       : `run finished: ${shell.latestVisibleMessage.text.slice(0, 280)}`;
-  return makeEvent(
-    environment,
-    shell,
-    "idle",
-    `${shell.latestRunId}@${completedAt}`,
-    completedAt,
-    summary,
-  );
+  const tasks = shell.pendingBackgroundTasks ?? [];
+  const pendingNote =
+    tasks.length === 0
+      ? ""
+      : `; background task still pending: ${tasks
+          .map((task) => `${task.kind} ${task.description ?? task.taskId}`)
+          .join(", ")}`;
+  return {
+    event: makeEvent(
+      environment,
+      shell,
+      "idle",
+      `${shell.latestRunId}@${completedAt}`,
+      completedAt,
+      `${finished}${pendingNote}`,
+    ),
+    notBeforeMs:
+      tasks.length === 0
+        ? nowMs
+        : DateTime.toEpochMillis(shell.latestRunCompletedAt ?? shell.updatedAt) +
+          backgroundTaskIdleCapMs,
+  };
 }

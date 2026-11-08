@@ -1,6 +1,13 @@
 import * as Schema from "effect/Schema";
 
-export const CompanionEventKind = Schema.Literals(["idle", "failed", "needs-input", "settled"]);
+export const CompanionEventKind = Schema.Literals([
+  "idle",
+  "failed",
+  "needs-input",
+  "settled",
+  "env-down",
+  "env-up",
+]);
 export type CompanionEventKind = typeof CompanionEventKind.Type;
 
 export const allCompanionEventKinds: ReadonlyArray<CompanionEventKind> = [
@@ -8,7 +15,12 @@ export const allCompanionEventKinds: ReadonlyArray<CompanionEventKind> = [
   "failed",
   "needs-input",
   "settled",
+  "env-down",
+  "env-up",
 ];
+
+/** Environment events reach every subscription on that environment, whatever it asked for. */
+export const environmentEventKinds: ReadonlyArray<CompanionEventKind> = ["env-down", "env-up"];
 
 export const ThreadRef = Schema.Struct({
   environment: Schema.String,
@@ -34,13 +46,16 @@ export const Subscription = Schema.Struct({
 });
 export type Subscription = typeof Subscription.Type;
 
-/** What the watcher observed on one source thread, before it is matched to subscriptions. */
+/**
+ * What the watcher observed, before it is matched to subscriptions: a thread event, or an
+ * environment event with null `threadId` and `projectId`.
+ */
 export const ThreadEvent = Schema.Struct({
   eventId: Schema.String,
   kind: CompanionEventKind,
   environment: Schema.String,
-  threadId: Schema.String,
-  projectId: Schema.String,
+  threadId: Schema.NullOr(Schema.String),
+  projectId: Schema.NullOr(Schema.String),
   title: Schema.String,
   occurredAt: Schema.String,
   summary: Schema.String,

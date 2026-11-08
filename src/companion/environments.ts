@@ -66,7 +66,13 @@ export const makeCompanionEnvironments = Effect.fn("makeCompanionEnvironments")(
     if (preferred === undefined) {
       continue;
     }
-    const built = yield* Layer.buildWithScope(connect(preferred.name), scope).pipe(
+    // A fresh memo map per environment: `buildWithScope` forks the caller's, which would reuse
+    // the CLI's already built config and RPC layers, all bound to the default environment.
+    const built = yield* Layer.buildWithMemoMap(
+      connect(preferred.name),
+      yield* Layer.makeMemoMap,
+      scope,
+    ).pipe(
       Effect.mapError(
         (cause) =>
           new CompanionEnvironmentError({

@@ -13,7 +13,7 @@ import { T3CodeConnectionError } from "../connection/error.ts";
 import { T3PreparedConnectionProvider } from "../connection/prepared.ts";
 import { RpcError } from "./error.ts";
 import { T3RpcSessionFactory } from "./session.ts";
-import { T3Rpc, type T3RpcService, type WsClient } from "./service.ts";
+import { T3Rpc, type T3RpcConnection, type T3RpcService } from "./service.ts";
 
 const connectionRetrySchedule = Schedule.exponential("100 millis").pipe(
   Schedule.setInputType<ConnectionAttemptError | T3CodeConnectionError>(),
@@ -21,10 +21,9 @@ const connectionRetrySchedule = Schedule.exponential("100 millis").pipe(
   Schedule.while((metadata) => Predicate.isTagged(metadata.input, "ConnectionTransientError")),
 );
 
-type Connection = {
+interface Connection extends T3RpcConnection {
   readonly scope: Scope.Closeable;
-  readonly client: WsClient;
-};
+}
 
 export const makeT3RpcLayer: () => Effect.Effect<
   T3RpcService,
@@ -35,21 +34,42 @@ export const makeT3RpcLayer: () => Effect.Effect<
   const sessions = yield* T3RpcSessionFactory;
   const parentScope = yield* Scope.Scope;
   const connection = yield* SynchronizedRef.make(Option.none<Connection>());
+
+  // A closed socket leaves the client unusable; forget it so the next call reconnects.
+  const forgetOnClose = (current: Connection) =>
+    current.closed.pipe(
+      Effect.ignore,
+      Effect.andThen(
+        SynchronizedRef.modify(connection, (stored) =>
+          Option.isSome(stored) && stored.value === current
+            ? [true, Option.none<Connection>()]
+            : [false, stored],
+        ),
+      ),
+      Effect.flatMap((forgotten) =>
+        forgotten ? Scope.close(current.scope, Exit.void) : Effect.void,
+      ),
+    );
+
   const openConnection = Effect.fn("T3RpcLive.openConnection")(function* () {
     const scope = yield* Scope.fork(parentScope);
-    return yield* Effect.gen(function* () {
+    const opened = yield* Effect.gen(function* () {
       const prepared = yield* preparedConnectionProvider.get;
       const session = yield* sessions
         .connect(prepared)
         .pipe(Effect.provideService(Scope.Scope, scope));
       yield* session.ready;
-      const client: WsClient = session.client;
-      return { scope, client } satisfies Connection;
+      const closed = session.closed.pipe(
+        Effect.mapError((cause) => new RpcError({ message: cause.message, cause })),
+      );
+      return { scope, client: session.client, closed } satisfies Connection;
     }).pipe(
       Effect.retry(connectionRetrySchedule),
       Effect.onError(() => Scope.close(scope, Exit.void)),
       Effect.mapError((error) => new RpcError({ message: error.message, cause: error })),
     );
+    yield* Effect.forkIn(forgetOnClose(opened), parentScope);
+    return opened;
   });
 
   const disconnect = Effect.fn("T3RpcLive.disconnect")(function* () {
@@ -59,19 +79,22 @@ export const makeT3RpcLayer: () => Effect.Effect<
     }
   });
 
-  const getClient = Effect.fn("T3RpcLive.getClient")(function* () {
+  const getConnection = Effect.fn("T3RpcLive.getConnection")(function* () {
     return yield* SynchronizedRef.modifyEffect(connection, (current) => {
       if (Option.isSome(current)) {
-        return Effect.succeed([current.value.client, current] as const);
+        return Effect.succeed([current.value, current] as const);
       }
-      return openConnection().pipe(Effect.map((next) => [next.client, Option.some(next)] as const));
+      return openConnection().pipe(Effect.map((next) => [next, Option.some(next)] as const));
     });
   });
 
+  const getClient = getConnection().pipe(Effect.map((current) => current.client));
+
   return T3Rpc.of({
-    getClient: getClient(),
+    getClient,
+    getConnection: getConnection(),
     disconnect: disconnect(),
-    reconnect: disconnect().pipe(Effect.andThen(getClient())),
+    reconnect: disconnect().pipe(Effect.andThen(getClient)),
   });
 });
 

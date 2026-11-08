@@ -9,8 +9,9 @@ import * as Ref from "effect/Ref";
 
 import { CompanionEnvironments } from "./environments.ts";
 import { CompanionInvalidRequestError } from "./error.ts";
-import type {
-  CompanionEventKind,
+import {
+  environmentEventKinds,
+  type CompanionEventKind,
   InboxEvent,
   Subscription,
   SubscriptionSource,
@@ -79,12 +80,17 @@ const refKey = (ref: ThreadRef) => `${ref.environment}/${ref.threadId}`;
 
 const matches = (subscription: Subscription, event: ThreadEvent) =>
   subscription.source.environment === event.environment &&
+  // Subscribing does not replay state that already held before the subscription existed.
+  event.occurredAt >= subscription.createdAt &&
+  (event.threadId === null
+    ? environmentEventKinds.includes(event.kind)
+    : matchesThread(subscription, event));
+
+const matchesThread = (subscription: Subscription, event: ThreadEvent) =>
   (subscription.source.threadId === null
     ? subscription.source.projectId === event.projectId
     : subscription.source.threadId === event.threadId) &&
   subscription.events.includes(event.kind) &&
-  // Subscribing does not replay state that already held before the subscription existed.
-  event.occurredAt >= subscription.createdAt &&
   // A thread never wakes itself.
   !(
     subscription.subscriber.environment === event.environment &&
@@ -94,7 +100,7 @@ const matches = (subscription: Subscription, event: ThreadEvent) =>
 function formatDigest(events: ReadonlyArray<InboxEvent>): string {
   const lines = events.map(
     (row) =>
-      `- [${row.id}] ${row.event.kind}: "${row.event.title}" (${row.event.environment}/${row.event.threadId}) ${row.event.summary}`,
+      `- [${row.id}] ${row.event.kind}: "${row.event.title}" (${row.event.environment}${row.event.threadId === null ? "" : `/${row.event.threadId}`}) ${row.event.summary}`,
   );
   return [
     `t3 companion: ${events.length} subscribed thread event${events.length === 1 ? "" : "s"}.`,

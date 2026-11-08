@@ -1,6 +1,5 @@
-import { closeSync, openSync } from "node:fs";
 import { createServer } from "node:http";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as Effect from "effect/Effect";
@@ -35,30 +34,46 @@ export const companionDaemonPlatformLayer = (port: number) =>
 
 export const companionProcessId = () => process.pid;
 
-/** Re-runs this CLI as `companion run` in the background, logging to `logFile`. */
-export const spawnDetachedCompanion = (input: {
-  readonly args: ReadonlyArray<string>;
-  readonly logFile: string;
-}) =>
+// CommandLineToArgvW quoting: backslashes double only before a quote or the closing quote.
+const quoteWindowsArg = (arg: string) =>
+  `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`;
+
+const quotePowerShell = (value: string) => `'${value.replace(/'/g, "''")}'`;
+
+/**
+ * Re-runs this CLI as `companion run` in the background; the daemon writes its own log file.
+ * On Windows a spawned child inherits every inheritable handle, including the caller's stdout
+ * pipe, which would keep `t3cli companion start | ...` from ever seeing EOF. Start-Process goes
+ * through ShellExecute, which inherits none.
+ */
+export const spawnDetachedCompanion = (args: ReadonlyArray<string>) =>
   Effect.try({
     try: () => {
       const entry = process.argv[1];
       if (entry === undefined) {
         throw new Error("cannot locate the t3cli entry script");
       }
-      const log = openSync(input.logFile, "a");
-      try {
-        const child = spawn(process.execPath, [entry, ...input.args], {
-          detached: true,
-          stdio: ["ignore", log, log],
-          windowsHide: true,
-          env: process.env,
-        });
-        child.unref();
-        return child.pid ?? null;
-      } finally {
-        closeSync(log);
+      if (process.platform === "win32") {
+        const argumentList = [entry, ...args].map(quoteWindowsArg).join(" ");
+        const result = spawnSync(
+          "powershell.exe",
+          [
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            `Start-Process -WindowStyle Hidden -FilePath ${quotePowerShell(process.execPath)} -ArgumentList ${quotePowerShell(argumentList)}`,
+          ],
+          { stdio: ["ignore", "ignore", "pipe"], windowsHide: true, encoding: "utf8" },
+        );
+        if (result.error !== undefined) {
+          throw result.error;
+        }
+        if (result.status !== 0) {
+          throw new Error(`Start-Process exited with ${result.status}: ${result.stderr.trim()}`);
+        }
+        return;
       }
+      spawn(process.execPath, [entry, ...args], { detached: true, stdio: "ignore" }).unref();
     },
     catch: (cause) =>
       new CompanionClientError({
