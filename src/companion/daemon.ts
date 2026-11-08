@@ -26,7 +26,7 @@ import { CompanionMcpLive, companionMcpPath } from "./mcp.ts";
 import { resolveCompanionPaths } from "./paths.ts";
 import { CompanionRpcs, companionRpcPath } from "./rpc.ts";
 import { CompanionRuntimeFile } from "./schema.ts";
-import { CompanionStore, CompanionStoreLive } from "./store.ts";
+import { CompanionStoreLive } from "./store.ts";
 import { runCompanionWatcher } from "./watcher.ts";
 
 const encodeRuntimeFile = Schema.encodeEffect(Schema.fromJsonString(CompanionRuntimeFile));
@@ -74,7 +74,6 @@ export const runCompanionDaemon = Effect.fn("runCompanionDaemon")(function* <E, 
     Effect.gen(function* () {
       const environments = yield* CompanionEnvironments;
       const hub = yield* CompanionHub;
-      const store = yield* CompanionStore;
       return CompanionRpcs.of({
         health: () =>
           environments.statuses.pipe(
@@ -88,30 +87,19 @@ export const runCompanionDaemon = Effect.fn("runCompanionDaemon")(function* <E, 
           ),
         shutdown: () => Deferred.succeed(shutdown, undefined).pipe(Effect.asVoid),
         subscribe: (input) => hub.subscribe(input),
-        unsubscribe: Effect.fn("CompanionRpc.unsubscribe")(function* (input) {
-          const subscriber = yield* hub.normalizeRef(input.subscriber);
-          return yield* hub.unsubscribe({ subscriber, ids: input.ids });
-        }),
-        subscriptions: Effect.fn("CompanionRpc.subscriptions")(function* (input) {
-          return yield* store.listSubscriptions(yield* hub.normalizeRef(input.subscriber));
-        }),
-        inbox: Effect.fn("CompanionRpc.inbox")(function* (input) {
-          const subscriber = yield* hub.normalizeRef(input.subscriber);
-          return yield* store.listInbox({ ...input, subscriber });
-        }),
-        ack: Effect.fn("CompanionRpc.ack")(function* (input) {
-          const subscriber = yield* hub.normalizeRef(input.subscriber);
-          return yield* store.ack({ subscriber, ids: input.ids });
-        }),
-        wait: Effect.fn("CompanionRpc.wait")(function* (input) {
-          const subscriber = yield* hub.normalizeRef(input.subscriber);
-          return yield* hub.wait({
-            subscriber,
+        unsubscribe: (input) => hub.unsubscribe(input),
+        subscriptions: (input) => hub.listSubscriptions(input.subscriber),
+        inbox: (input) => hub.listInbox(input),
+        resolve: (input) => hub.resolve(input),
+        snooze: (input) => hub.snooze(input),
+        wait: (input) =>
+          hub.wait({
+            subscriber: input.subscriber,
             afterId: input.afterId,
             kinds: input.events,
             timeout: Duration.seconds(Math.min(Math.max(input.timeoutSeconds, 0), maxWaitSeconds)),
-          });
-        }),
+          }),
+        openWork: (input) => hub.openWork(input.subscriber),
       });
     }),
   );
@@ -131,6 +119,7 @@ export const runCompanionDaemon = Effect.fn("runCompanionDaemon")(function* <E, 
 
   yield* hub.flushPendingWakes;
   yield* Effect.forkScoped(runCompanionWatcher().pipe(Effect.provide(services)));
+  yield* Effect.forkScoped(hub.runSnoozes);
 
   // `t3cli env` and `auth` rewrite the config file; pick up added and removed environments.
   const path = yield* Path.Path;

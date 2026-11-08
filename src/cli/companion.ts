@@ -6,6 +6,7 @@ import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { Command, Flag } from "effect/cli";
 
@@ -29,9 +30,12 @@ import {
 } from "../companion/runtime.ts";
 import {
   type CompanionHealth,
+  DeliveryPriority,
   type InboxEvent,
   allCompanionEventKinds,
 } from "../companion/schema.ts";
+
+const decodePriorities = Schema.decodeUnknownEffect(Schema.Record(Schema.String, DeliveryPriority));
 import { T3Version } from "../version/service.ts";
 import { MissingThreadError } from "./error.ts";
 import { extraArgsConfig } from "./extra-args.ts";
@@ -323,8 +327,25 @@ export function createCompanionCommand() {
 }
 
 function formatInboxEvent(row: InboxEvent): string {
-  const acked = row.ackedAt === null ? "" : " (acked)";
-  return `[${row.id}] ${row.event.occurredAt} ${row.event.kind} ${row.event.environment}${row.event.threadId === null ? "" : `/${row.event.threadId}`} "${row.event.title}"${acked}\n    ${row.event.summary}`;
+  const event = row.event;
+  const state =
+    row.resolvedAt !== null
+      ? ` (resolved${row.disposition === null ? "" : `: ${row.disposition}`})`
+      : row.snoozedUntil !== null
+        ? ` (snoozed until ${row.snoozedUntil})`
+        : "";
+  const lines = [
+    `[${row.id}] ${event.occurredAt} ${row.priority} ${event.kind}${event.pause ? " (pause)" : ""} ${event.environment}${event.threadId === null ? "" : `/${event.threadId}`} "${event.title}"${state}`,
+    `    ${event.summary}`,
+    ...event.pullRequests.map(
+      (pr) =>
+        `    PR #${pr.number} ${pr.state}${pr.draft ? " draft" : ""}, checks ${pr.checks ?? "unknown"}, ${pr.mergeable ?? "mergeability unknown"}`,
+    ),
+  ];
+  if (event.lastMessage !== null) {
+    lines.push(`    last message: ${event.lastMessage.slice(0, 300).replace(/\s+/g, " ")}`);
+  }
+  return lines.join("\n");
 }
 
 export const inboxCommand = Command.make(
@@ -333,7 +354,7 @@ export const inboxCommand = Command.make(
     thread: threadFlag,
     callerEnv: callerEnvFlag,
     wait: Flag.Boolean("wait").pipe(
-      Flag.withDescription("Block until an event arrives or --timeout passes"),
+      Flag.withDescription("Block until an item arrives or --timeout passes"),
       Flag.withDefault(false),
     ),
     timeout: Flag.Int("timeout").pipe(
@@ -341,12 +362,28 @@ export const inboxCommand = Command.make(
       Flag.withDefault(60),
     ),
     event: eventsFlag,
-    ack: Flag.Boolean("ack").pipe(
-      Flag.withDescription("Acknowledge the listed events"),
+    id: Flag.Int("id").pipe(
+      Flag.withDescription(
+        "Item to resolve or snooze; repeat for several (default: the listed ones)",
+      ),
+      Flag.atLeast(0),
+    ),
+    resolve: Flag.Boolean("resolve").pipe(
+      Flag.withDescription("Resolve the items for good"),
       Flag.withDefault(false),
     ),
+    disposition: Flag.String("disposition").pipe(
+      Flag.withDescription('What was done with resolved items, e.g. "marked ready"'),
+      Flag.optional,
+    ),
+    snooze: Flag.Int("snooze").pipe(
+      Flag.withDescription(
+        "Hide the items for at least this many seconds, until their source is idle",
+      ),
+      Flag.optional,
+    ),
     all: Flag.Boolean("all").pipe(
-      Flag.withDescription("Include acknowledged events"),
+      Flag.withDescription("Include resolved and snoozed items"),
       Flag.withDefault(false),
     ),
     format: formatFlag,
@@ -369,34 +406,53 @@ export const inboxCommand = Command.make(
               })
             : yield* client.inbox({
                 subscriber,
-                includeAcked: input.all,
+                includeResolved: input.all,
                 afterId: 0,
                 limit: 100,
               });
-          const acked =
-            input.ack && events.length > 0
-              ? yield* client.ack({ subscriber, ids: events.map((row) => row.id) })
+          const ids = input.id.length > 0 ? input.id : events.map((row) => row.id);
+          const resolved =
+            input.resolve && ids.length > 0
+              ? yield* client.resolve({
+                  subscriber,
+                  ids,
+                  disposition: Option.getOrNull(input.disposition),
+                })
               : 0;
-          return { events, acked };
+          const snoozed =
+            Option.isSome(input.snooze) && ids.length > 0
+              ? yield* client.snooze({ subscriber, ids, minSeconds: input.snooze.value })
+              : 0;
+          return { events, resolved, snoozed };
         }),
       );
-      const { events, acked } = result;
+      const { events, resolved, snoozed } = result;
       if (resolveOutputFormat(input.format, cliRuntime, t3CliEnv, "json") === "json") {
         return yield* output.printJson({
           events,
-          acked,
+          resolved,
+          snoozed,
           timedOut: input.wait && events.length === 0,
         });
       }
-      if (events.length === 0) {
-        return yield* output.printInfo(input.wait ? "no events (timed out)" : "inbox empty");
-      }
-      const lines = events.map(formatInboxEvent);
+      const lines =
+        events.length === 0
+          ? [input.wait ? "no items (timed out)" : "inbox empty"]
+          : events.map(formatInboxEvent);
       return yield* output.printInfo(
-        (acked > 0 ? [...lines, `acknowledged ${acked}`] : lines).join("\n"),
+        [
+          ...lines,
+          ...(resolved > 0 ? [`resolved ${resolved}`] : []),
+          ...(snoozed > 0 ? [`snoozed ${snoozed}`] : []),
+        ].join("\n"),
       );
     }).pipe(withHttp),
-).pipe(Command.withDescription("list or wait for companion inbox events of a thread"));
+).pipe(Command.withDescription("list, wait for, resolve, or snooze companion inbox items"));
+
+const priorityFlag = Flag.KeyValuePair("priority").pipe(
+  Flag.withDescription("Per-kind digest priority, e.g. idle=low (urgent, normal, low)"),
+  Flag.optional,
+);
 
 export const subscribeCommand = Command.make(
   "subscribe",
@@ -414,9 +470,10 @@ export const subscribeCommand = Command.make(
     ),
     event: eventsFlag,
     wake: Flag.Boolean("wake").pipe(
-      Flag.withDescription("Also send one coalesced digest message to the subscriber thread"),
+      Flag.withDescription("Also send digest messages to the subscriber thread"),
       Flag.withDefault(false),
     ),
+    priority: priorityFlag,
     format: formatFlag,
     ...extraArgsConfig,
   },
@@ -426,7 +483,8 @@ export const subscribeCommand = Command.make(
       const cliRuntime = yield* CliRuntime;
       const t3CliEnv = yield* loadT3CliEnv;
       const subscriber = yield* resolveSubscriber(input);
-      const subscription = yield* withRunningCompanion((client) =>
+      const priorities = yield* decodePriorities(Option.getOrElse(input.priority, () => ({})));
+      const result = yield* withRunningCompanion((client) =>
         client.subscribe({
           subscriber,
           source: {
@@ -436,17 +494,26 @@ export const subscribeCommand = Command.make(
           },
           events: input.event.length === 0 ? allCompanionEventKinds : input.event,
           wake: input.wake,
+          priorities,
         }),
       );
       if (resolveOutputFormat(input.format, cliRuntime, t3CliEnv, "json") === "json") {
-        return yield* output.printJson(subscription);
+        return yield* output.printJson(result);
       }
+      const { subscription, source: status } = result;
       const source =
         subscription.source.threadId === null
           ? `project ${subscription.source.projectId}`
           : `thread ${subscription.source.threadId}`;
       return yield* output.printInfo(
-        `subscription ${subscription.id}: ${subscription.subscriber.environment}/${subscription.subscriber.threadId} <- ${subscription.source.environment} ${source} [${subscription.events.join(", ")}]${subscription.wake ? " +wake" : ""}`,
+        [
+          `subscription ${subscription.id}: ${subscription.subscriber.environment}/${subscription.subscriber.threadId} <- ${subscription.source.environment} ${source} [${subscription.events.join(", ")}]${subscription.wake ? " +wake" : ""}`,
+          ...(status === null
+            ? []
+            : [
+                `source is ${status.state} (run ${status.latestRunStatus})${status.pendingTasks.length > 0 ? `, waiting on: ${status.pendingTasks.join(", ")}` : ""}`,
+              ]),
+        ].join("\n"),
       );
     }).pipe(withHttp),
 ).pipe(Command.withDescription("subscribe a thread to another thread's events via the companion"));

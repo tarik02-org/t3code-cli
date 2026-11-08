@@ -44,6 +44,10 @@ const environmentEvent = (
     title: environment.name,
     occurredAt: DateTime.formatIso(DateTime.makeUnsafe(nowMs)),
     summary,
+    pause: false,
+    pendingTasks: [],
+    lastMessage: null,
+    pullRequests: [],
   };
 };
 
@@ -62,8 +66,11 @@ export const runCompanionWatcher = Effect.fn("runCompanionWatcher")(function* ()
     shell: OrchestrationV2ThreadShell,
   ) {
     const key = `${environment.name}/${shell.id}`;
-    const watched = yield* hub.isWatched(environment.name, shell.id, shell.projectId);
-    if (!watched || shell.deletedAt !== null || shell.archivedAt !== null) {
+    const relevance = yield* hub.relevance(environment.name, shell.id, shell.projectId);
+    if (relevance.source || relevance.subscriber) {
+      yield* hub.observe(environment.name, shell);
+    }
+    if (!relevance.source || shell.deletedAt !== null || shell.archivedAt !== null) {
       yield* FiberMap.remove(idleTimers, key);
       return;
     }

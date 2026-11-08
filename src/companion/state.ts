@@ -1,7 +1,14 @@
 import type { OrchestrationV2ThreadShell } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
-import type { CompanionEventKind, ThreadEvent } from "./schema.ts";
+import type {
+  CompanionEventKind,
+  DeliveryPriority,
+  PullRequestSummary,
+  Subscription,
+  ThreadEvent,
+  ThreadStatus,
+} from "./schema.ts";
 
 // Mirrors the server's auto-settle grace for a sent message the server has not adopted as a run.
 const queuedTurnStartGraceMs = 2 * 60_000;
@@ -70,6 +77,74 @@ export function busyReasons(shell: OrchestrationV2ThreadShell, nowMs: number): A
   return reasons;
 }
 
+const taskLabel = (
+  task: NonNullable<OrchestrationV2ThreadShell["pendingBackgroundTasks"]>[number],
+) => `${task.kind} ${task.description ?? task.taskId}`;
+
+export const pendingTaskLabels = (shell: OrchestrationV2ThreadShell): Array<string> =>
+  (shell.pendingBackgroundTasks ?? []).map(taskLabel);
+
+const checksRollup = { passing: "pass", pending: "pending", failing: "fail" } as const;
+
+/** The thread's linked pull requests, from the snapshot the server last synced. */
+export function pullRequestSummaries(shell: OrchestrationV2ThreadShell): Array<PullRequestSummary> {
+  return (shell.pullRequests ?? [])
+    .filter((link) => link.source !== "stack-dismissed")
+    .map((link) => ({
+      number: link.number,
+      repository: link.repository,
+      url: link.url,
+      state: link.snapshot?.state ?? "open",
+      draft: link.snapshot?.isDraft ?? false,
+      mergeable: link.snapshot?.mergeability ?? null,
+      checks:
+        link.snapshot?.checksState === null || link.snapshot?.checksState === undefined
+          ? null
+          : checksRollup[link.snapshot.checksState],
+    }));
+}
+
+/** Draft pull requests whose checks pass: the ones waiting to be marked ready. */
+export const readyToMark = (pullRequests: ReadonlyArray<PullRequestSummary>) =>
+  pullRequests.filter((pr) => pr.state === "open" && pr.draft && pr.checks === "pass");
+
+/**
+ * Where a thread stands. Pending background tasks count as running until the idle cap passes
+ * after the run completed, matching when `idleCandidate` lets idle fire.
+ */
+export function threadStatus(
+  environment: string,
+  shell: OrchestrationV2ThreadShell,
+  nowMs: number,
+): ThreadStatus {
+  const pendingTasks = pendingTaskLabels(shell);
+  const completedMs = DateTime.toEpochMillis(shell.latestRunCompletedAt ?? shell.updatedAt);
+  const waitingOnTasks = pendingTasks.length > 0 && nowMs < completedMs + backgroundTaskIdleCapMs;
+  const state: ThreadStatus["state"] =
+    shell.archivedAt !== null || shell.deletedAt !== null
+      ? "archived"
+      : shell.pendingRuntimeRequest !== null
+        ? "needs-input"
+        : shell.status === "failed"
+          ? "failed"
+          : busyReasons(shell, nowMs).length > 0 || waitingOnTasks
+            ? "running"
+            : shell.settledOverride === "settled"
+              ? "settled"
+              : "idle";
+  return {
+    environment,
+    threadId: shell.id,
+    projectId: shell.projectId,
+    title: shell.title,
+    state,
+    latestRunStatus: shell.status,
+    pendingTasks,
+    pullRequests: pullRequestSummaries(shell),
+    updatedAt: DateTime.formatIso(shell.updatedAt),
+  };
+}
+
 const makeEvent = (
   environment: string,
   shell: OrchestrationV2ThreadShell,
@@ -77,6 +152,7 @@ const makeEvent = (
   key: string,
   occurredAt: string,
   summary: string,
+  pendingTasks: ReadonlyArray<string> = [],
 ): ThreadEvent => ({
   eventId: `${environment}/${shell.id}/${kind}/${key}`,
   kind,
@@ -86,6 +162,11 @@ const makeEvent = (
   title: shell.title,
   occurredAt,
   summary,
+  pause: pendingTasks.length > 0,
+  pendingTasks,
+  // Shell rows carry no message text; the hub reads it when the event is delivered.
+  lastMessage: null,
+  pullRequests: pullRequestSummaries(shell),
 });
 
 /**
@@ -138,8 +219,9 @@ export interface IdleCandidate {
 
 /**
  * The idle event the shell would produce once it stays quiet, or null while it is busy. With
- * background tasks pending, idle waits until the cap passes after the run completed; the event
- * id is the same either way, so a capped idle and a later real one are delivered once.
+ * background tasks pending, idle waits until the cap passes after the run completed and is then
+ * a pause, carrying the tasks. The id is the same either way, so a capped idle and a later real
+ * one are delivered once.
  */
 export function idleCandidate(
   environment: string,
@@ -153,17 +235,7 @@ export function idleCandidate(
     return null;
   }
   const completedAt = iso(shell.latestRunCompletedAt) ?? DateTime.formatIso(shell.updatedAt);
-  const finished =
-    shell.latestVisibleMessage === null
-      ? "run finished"
-      : `run finished: ${shell.latestVisibleMessage.text.slice(0, 280)}`;
-  const tasks = shell.pendingBackgroundTasks ?? [];
-  const pendingNote =
-    tasks.length === 0
-      ? ""
-      : `; background task still pending: ${tasks
-          .map((task) => `${task.kind} ${task.description ?? task.taskId}`)
-          .join(", ")}`;
+  const pendingTasks = pendingTaskLabels(shell);
   return {
     event: makeEvent(
       environment,
@@ -171,12 +243,35 @@ export function idleCandidate(
       "idle",
       `${shell.latestRunId}@${completedAt}`,
       completedAt,
-      `${finished}${pendingNote}`,
+      pendingTasks.length === 0
+        ? "run finished"
+        : `run ended; background task still pending: ${pendingTasks.join(", ")}`,
+      pendingTasks,
     ),
     notBeforeMs:
-      tasks.length === 0
+      pendingTasks.length === 0
         ? nowMs
         : DateTime.toEpochMillis(shell.latestRunCompletedAt ?? shell.updatedAt) +
           backgroundTaskIdleCapMs,
   };
+}
+
+const defaultPriorities: Record<CompanionEventKind, DeliveryPriority> = {
+  failed: "urgent",
+  "needs-input": "urgent",
+  idle: "normal",
+  "env-down": "normal",
+  settled: "low",
+  "env-up": "low",
+};
+
+/**
+ * The priority one subscription delivers an event at. A pause is always low: the thread is only
+ * waiting on its own background work, which wakes it again.
+ */
+export function deliveryPriority(subscription: Subscription, event: ThreadEvent): DeliveryPriority {
+  if (event.pause) {
+    return "low";
+  }
+  return subscription.priorities[event.kind] ?? defaultPriorities[event.kind];
 }
