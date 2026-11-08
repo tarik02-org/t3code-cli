@@ -2,6 +2,7 @@ import { Command } from "effect/cli";
 
 import { createActionCommand } from "./action.ts";
 import { askCommand } from "./ask.ts";
+import { createCompanionCommand, inboxCommand, subscribeCommand } from "./companion.ts";
 import { createAuthCommand } from "./auth.ts";
 import { createEnvCommand } from "./env.ts";
 import { cliEnvironmentSetting } from "./env/flag.ts";
@@ -25,11 +26,14 @@ export function createCliCommand() {
       createActionCommand(),
       askCommand,
       createAuthCommand(),
+      createCompanionCommand(),
       createEnvCommand(),
+      inboxCommand,
       listThreadsCommand,
       createModelCommand(),
       createProjectCommand(),
       searchThreadsCommand,
+      subscribeCommand,
       createTerminalCommandGroup(),
       startThreadCommand,
       sendThreadCommand,
