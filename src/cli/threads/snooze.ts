@@ -3,10 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { Command, Flag } from "effect/cli";
-import {
-  resolveSnoozePresets,
-  type SnoozePresetId,
-} from "@t3tools/client-runtime/state/thread-settled";
+import { resolveSnoozePreset as resolveSnoozePresetSetting } from "@t3tools/client-runtime/state/thread-settled";
+import type { SnoozePresetSetting } from "@t3tools/contracts/settings";
 
 import { T3Application } from "../../application/service.ts";
 import { loadT3CliEnv } from "../../config/env/env.ts";
@@ -23,6 +21,14 @@ import { T3Output } from "../output/service.ts";
 import { CliRuntime } from "../runtime/service.ts";
 import { resolveThreadId } from "../scope/index.ts";
 
+// Upstream presets are settings-driven; the CLI keeps stable names for the defaults.
+const snoozePresetSettings = {
+  hour: { kind: "after", minutes: 60 },
+  evening: { kind: "at", day: "today", time: "18:00" },
+  tomorrow: { kind: "at", day: "tomorrow", time: "09:00" },
+  "next-week": { kind: "at", day: "monday", time: "09:00" },
+} as const satisfies Record<string, SnoozePresetSetting>;
+type SnoozePresetId = keyof typeof snoozePresetSettings;
 const snoozePresetChoices = [
   "hour",
   "evening",
@@ -104,8 +110,8 @@ export const snoozeThreadCommand = Command.make(
 
 const resolveSnoozePreset = Effect.fn("resolveSnoozePreset")(function* (presetId: SnoozePresetId) {
   const now = yield* DateTime.nowAsDate;
-  const preset = resolveSnoozePresets(now).find((candidate) => candidate.id === presetId);
-  if (preset === undefined) {
+  const preset = resolveSnoozePresetSetting(snoozePresetSettings[presetId], now);
+  if (preset === null) {
     return yield* Effect.fail(
       new UnavailableSnoozePresetError({
         message: `snooze preset is not available at this time: ${presetId}`,

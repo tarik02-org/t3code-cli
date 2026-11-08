@@ -117,7 +117,11 @@ const pack = Effect.gen(function* () {
     .pipe(Effect.mapError(packError("failed to resolve the repository root")));
   yield* Effect.acquireUseRelease(
     annotateUpstream(root),
-    () => run("vp", ["pack"], { cwd: root }),
+    // The `vp` bin is a `.cmd` shim on Windows that spawn cannot launch, so run its script.
+    () =>
+      run(process.execPath, [path.join(root, "node_modules/vite-plus/bin/vp"), "pack"], {
+        cwd: root,
+      }),
     (originals) => restoreUpstream(originals).pipe(Effect.orDie),
   );
 });

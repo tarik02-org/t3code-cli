@@ -3,6 +3,7 @@ import "vite-plus/test/config";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { fromPartial } from "@total-typescript/shoehorn";
@@ -62,13 +63,13 @@ function makeOrchestrationLayer(input: {
 const testLayer = (orchestration: Layer.Layer<T3Orchestration>) =>
   Layer.mergeAll(
     orchestration,
-    NodeServices.layer,
+    Layer.mergeAll(NodeServices.layer, NodeCrypto.layer),
     CliRuntime.layer,
     t3CliEnvConfigLayer("/tmp/t3cli-test"),
   );
 
 describe("interruptThread", () => {
-  it.layer(NodeServices.layer)("interruptThread", (t) => {
+  it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("interruptThread", (t) => {
     t.effect("dispatches run.interrupt for the live run", () =>
       Effect.gen(function* () {
         let dispatched: OrchestrationV2Command | undefined;
@@ -129,7 +130,7 @@ describe("interruptThread", () => {
 });
 
 describe("listThreads", () => {
-  it.layer(NodeServices.layer)("listThreads", (t) => {
+  it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("listThreads", (t) => {
     t.effect("returns active threads by default", () =>
       Effect.gen(function* () {
         const active = makeSnapshot([

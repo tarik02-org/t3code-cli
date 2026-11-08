@@ -3,6 +3,7 @@ import "vite-plus/test/config";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { fromPartial } from "@total-typescript/shoehorn";
@@ -37,7 +38,7 @@ function makeLayer(
   onDispatch: (command: OrchestrationV2Command) => void,
 ) {
   return Layer.mergeAll(
-    NodeServices.layer,
+    Layer.mergeAll(NodeServices.layer, NodeCrypto.layer),
     Layer.succeed(
       T3Orchestration,
       fromPartial<Orchestration>({

@@ -1,6 +1,6 @@
 import "vite-plus/test/config";
 
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
@@ -17,7 +17,7 @@ describe("T3CredentialCrypto", () => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const cryptoService = yield* Crypto.Crypto;
+      const cryptoService = yield* SecureRandom.SecureRandom;
       const homeDir = yield* makeTempHomeScoped("t3cli-credential-");
       yield* Effect.gen(function* () {
         const keyPath = path.join(homeDir, ".config", "t3cli", "key");
@@ -48,7 +48,7 @@ describe("T3CredentialCrypto", () => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
-      const cryptoService = yield* Crypto.Crypto;
+      const cryptoService = yield* SecureRandom.SecureRandom;
       const homeDir = yield* makeTempHomeScoped("t3cli-credential-");
       yield* Effect.gen(function* () {
         const keyPath = path.join(homeDir, ".config", "t3cli", "key");

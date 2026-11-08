@@ -1,0 +1,20 @@
+# Names the item union's members so the declaration references them instead of inlining every
+# event schema.
+id: orchestration-v2-thread-stream-item
+language: TypeScript
+files:
+  - upstream-t3code/packages/contracts/src/orchestrationV2.ts
+rule:
+  pattern: |-
+    export const OrchestrationV2ThreadStreamItem = withRecordIdTable(
+      Schema.Union([$SYNCHRONIZED, $SNAPSHOT, $EVENT, $UNKNOWN]),
+      $CONTAINER,
+    )
+fix: |-
+  const OrchestrationV2ThreadStreamSynchronizedItem = $SYNCHRONIZED;
+  const OrchestrationV2ThreadStreamSnapshotItem = $SNAPSHOT;
+  const OrchestrationV2ThreadStreamEventItem = $EVENT;
+  const OrchestrationV2ThreadStreamItemUnion: Schema.Union<readonly [typeof OrchestrationV2ThreadStreamSynchronizedItem, typeof OrchestrationV2ThreadStreamSnapshotItem, typeof OrchestrationV2ThreadStreamEventItem, typeof $UNKNOWN]> = Schema.Union([OrchestrationV2ThreadStreamSynchronizedItem, OrchestrationV2ThreadStreamSnapshotItem, OrchestrationV2ThreadStreamEventItem, $UNKNOWN]);
+  // An interface keeps the name in declarations that reference this schema.
+  export interface OrchestrationV2ThreadStreamItemSchema extends ReturnType<typeof withRecordIdTable<typeof OrchestrationV2ThreadStreamItemUnion>> {}
+  export const OrchestrationV2ThreadStreamItem: OrchestrationV2ThreadStreamItemSchema = withRecordIdTable(OrchestrationV2ThreadStreamItemUnion, $CONTAINER)

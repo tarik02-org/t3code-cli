@@ -1,5 +1,5 @@
 import * as Context from "effect/Context";
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Base64 from "effect/encoding/Base64";
@@ -44,13 +44,13 @@ export const make = Effect.fn("makeT3CredentialCrypto")(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const configProvider = yield* ConfigProvider.ConfigProvider;
-  const cryptoService = yield* Crypto.Crypto;
+  const cryptoService = yield* SecureRandom.SecureRandom;
   const cipher = yield* T3CredentialCipher;
   const keystoreFactory = yield* T3MasterKeyKeystoreFactory;
   const services = Layer.mergeAll(
     Layer.succeed(FileSystem.FileSystem, fs),
     Layer.succeed(Path.Path, path),
-    Layer.succeed(Crypto.Crypto, cryptoService),
+    Layer.succeed(SecureRandom.SecureRandom, cryptoService),
     Layer.succeed(ConfigProvider.ConfigProvider, configProvider),
   );
 

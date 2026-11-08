@@ -1,4 +1,4 @@
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import {
   MessageId,
@@ -25,8 +25,8 @@ type Command<T extends OrchestrationV2Command["type"]> = Extract<
 const CREATION = { createdBy: "user", creationSource: "web" } as const;
 
 const makeMessageId = Effect.fn("makeMessageId")(function* () {
-  const crypto = yield* Crypto.Crypto;
-  return MessageId.make(yield* crypto.randomUUIDv4().pipe(Effect.orDie));
+  const crypto = yield* SecureRandom.SecureRandom;
+  return MessageId.make(yield* crypto.uuidV4());
 });
 
 export const makeThreadLaunchInput = Effect.fn("makeThreadLaunchInput")(function* (input: {
@@ -34,7 +34,7 @@ export const makeThreadLaunchInput = Effect.fn("makeThreadLaunchInput")(function
   readonly project: OrchestrationProjectShell;
   readonly serverConfig: ServerConfig;
 }) {
-  const crypto = yield* Crypto.Crypto;
+  const crypto = yield* SecureRandom.SecureRandom;
   const modelSelection = yield* resolveModelSelection(input);
   const inputTitle = input.start.title?.trim();
   const hasTitle = inputTitle !== undefined && inputTitle.length > 0;
@@ -43,7 +43,7 @@ export const makeThreadLaunchInput = Effect.fn("makeThreadLaunchInput")(function
   return {
     commandId: yield* makeCommandId("thread-launch"),
     creationSource: CREATION.creationSource,
-    threadId: ThreadId.make(yield* crypto.randomUUIDv4().pipe(Effect.orDie)),
+    threadId: ThreadId.make(yield* crypto.uuidV4()),
     projectId: input.project.id,
     title: hasTitle ? inputTitle : messageTitle.length > 0 ? messageTitle : "New thread",
     generateTitle: !hasTitle,

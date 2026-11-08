@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Command } from "effect/cli";
 import { createCliCommand } from "./cli/app.ts";
@@ -27,7 +28,7 @@ if (process.env.HOME === undefined || process.env.HOME.trim().length === 0) {
 const VersionLive =
   typeof T3CLI_VERSION === "string" ? T3VersionBundledLive : T3VersionPackageJsonLive;
 
-const PlatformLayer = Layer.mergeAll(NodeServices.layer, CliRuntime.layer);
+const PlatformLayer = Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, CliRuntime.layer);
 
 const CliAppLayer = BaseAppLayer.pipe(
   Layer.provideMerge(CliSelection.layer),

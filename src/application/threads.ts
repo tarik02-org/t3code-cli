@@ -1,4 +1,4 @@
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
@@ -70,10 +70,10 @@ import { waitForShellSequence } from "./shell-sequence.ts";
 
 export const makeThreadApplication = Effect.fn("makeThreadApplication")(function* () {
   const orchestration = yield* T3Orchestration;
-  const crypto = yield* Crypto.Crypto;
+  const crypto = yield* SecureRandom.SecureRandom;
   const path = yield* Path.Path;
   const cliRuntime = yield* CliRuntime;
-  const withCrypto = Effect.provideService(Crypto.Crypto, crypto);
+  const withCrypto = Effect.provideService(SecureRandom.SecureRandom, crypto);
   const awaitShellSequence = (sequence: number) =>
     waitForShellSequence({ sequence }).pipe(Effect.provideService(T3Orchestration, orchestration));
   const awaitThreadCompletion = (threadId: string) =>
@@ -190,7 +190,7 @@ export const makeThreadApplication = Effect.fn("makeThreadApplication")(function
     return projectThreadShow(yield* orchestration.getThreadProjection(threadId));
   });
   const dispatchThreadCommand = <A extends OrchestrationV2Command, E>(
-    command: Effect.Effect<A, E, Crypto.Crypto>,
+    command: Effect.Effect<A, E, SecureRandom.SecureRandom>,
   ) => command.pipe(withCrypto, Effect.flatMap(orchestration.dispatch));
   const archiveThread = Effect.fn("T3ApplicationLive.archiveThread")(function* (threadId: string) {
     const dispatch = yield* dispatchThreadCommand(makeThreadArchiveCommand(threadId));

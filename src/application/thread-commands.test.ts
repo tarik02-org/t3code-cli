@@ -1,13 +1,15 @@
 import "vite-plus/test/config";
 
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 
 import { makeMessageDispatchCommand, makeThreadUnarchiveCommand } from "./thread-commands.ts";
 
 describe("thread command builders", () => {
-  it.layer(NodeServices.layer)("thread command builders", (t) => {
+  it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("thread command builders", (t) => {
     t.effect("makeMessageDispatchCommand lets the server pick delivery by default", () =>
       Effect.gen(function* () {
         const command = yield* makeMessageDispatchCommand({

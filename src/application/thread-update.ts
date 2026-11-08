@@ -1,4 +1,4 @@
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import type { ModelSelection } from "@t3tools/contracts";
 
@@ -15,7 +15,7 @@ import {
 export function makeUpdateThread() {
   return Effect.fn("T3ApplicationLive.updateThread")(function* (input: UpdateThreadInput) {
     const orchestration = yield* T3Orchestration;
-    const crypto = yield* Crypto.Crypto;
+    const crypto = yield* SecureRandom.SecureRandom;
     const hasProvider = input.provider !== undefined && input.provider.length > 0;
     const hasModel = input.model !== undefined && input.model.length > 0;
     const options = input.options;
@@ -73,12 +73,12 @@ export function makeUpdateThread() {
         ...(input.title !== undefined ? { title: input.title } : {}),
         ...(input.branch !== undefined ? { branch: input.branch } : {}),
         ...(input.worktreePath !== undefined ? { worktreePath: input.worktreePath } : {}),
-      }).pipe(Effect.provideService(Crypto.Crypto, crypto));
+      }).pipe(Effect.provideService(SecureRandom.SecureRandom, crypto));
       result = yield* orchestration.dispatch(command);
     }
     if (modelSelection !== undefined) {
       const command = yield* makeThreadModelSelectionCommand(input.threadId, modelSelection).pipe(
-        Effect.provideService(Crypto.Crypto, crypto),
+        Effect.provideService(SecureRandom.SecureRandom, crypto),
       );
       result = yield* orchestration.dispatch(command);
     }

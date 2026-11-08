@@ -1,4 +1,4 @@
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
@@ -36,7 +36,7 @@ type MutablePartial<T> = { -readonly [K in keyof T]?: T[K] };
 export const makeActionApplication = Effect.fn("makeActionApplication")(function* () {
   const orchestration = yield* T3Orchestration;
   const terminalApplication = yield* T3TerminalApplication;
-  const crypto = yield* Crypto.Crypto;
+  const crypto = yield* SecureRandom.SecureRandom;
   const path = yield* Path.Path;
 
   const resolveProject = Effect.fn("T3ActionApplication.resolveProject")(function* (
@@ -62,7 +62,7 @@ export const makeActionApplication = Effect.fn("makeActionApplication")(function
     scripts: ReadonlyArray<ProjectScript>,
   ) {
     const mutation = yield* makeProjectScriptsUpdateMutation({ projectId, scripts }).pipe(
-      Effect.provideService(Crypto.Crypto, crypto),
+      Effect.provideService(SecureRandom.SecureRandom, crypto),
     );
     const project = yield* orchestration.mutateProject(mutation);
     return { project };

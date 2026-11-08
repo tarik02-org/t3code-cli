@@ -373,7 +373,8 @@ const synchronizeConfig = Effect.fn("synchronizeConfig")(function* (
     if (!synchronizedDependencies.some((name) => dependency.startsWith(`${name}@`))) {
       continue;
     }
-    const patchPath = path.join("upstream-t3code", patchFile);
+    // pnpm-workspace.yaml paths stay POSIX on every platform.
+    const patchPath = `upstream-t3code/${patchFile}`;
     const patchExists = yield* fs
       .exists(path.join(root, patchPath))
       .pipe(Effect.mapError(syncError(`failed to inspect '${patchPath}'`)));

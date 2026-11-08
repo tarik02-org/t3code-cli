@@ -2,6 +2,8 @@ import "vite-plus/test/config";
 
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
+import * as Layer from "effect/Layer";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { Command } from "effect/cli";
@@ -59,7 +61,7 @@ describe("CLI config routing", () => {
             }
           });
         }),
-        Effect.provide(NodeServices.layer),
+        Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
         Effect.scoped,
       ),
   );

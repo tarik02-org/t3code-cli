@@ -1,4 +1,4 @@
-import * as Crypto from "effect/Crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 
@@ -11,7 +11,7 @@ import { T3ProjectApplication, type T3ProjectApplicationService } from "./servic
 
 export const makeProjectApplication = Effect.fn("makeProjectApplication")(function* () {
   const orchestration = yield* T3Orchestration;
-  const crypto = yield* Crypto.Crypto;
+  const crypto = yield* SecureRandom.SecureRandom;
   const path = yield* Path.Path;
   const cliRuntime = yield* CliRuntime;
   const loadShell: T3ProjectApplicationService["loadShell"] = Effect.fn(
@@ -42,7 +42,10 @@ export const makeProjectApplication = Effect.fn("makeProjectApplication")(functi
     const mutation = yield* makeProjectCreateMutation({
       ...projectInput,
       cwd: cliRuntime.cwd,
-    }).pipe(Effect.provideService(Path.Path, path), Effect.provideService(Crypto.Crypto, crypto));
+    }).pipe(
+      Effect.provideService(Path.Path, path),
+      Effect.provideService(SecureRandom.SecureRandom, crypto),
+    );
     const project = yield* orchestration.mutateProject(mutation);
     return { project };
   });
@@ -52,7 +55,7 @@ export const makeProjectApplication = Effect.fn("makeProjectApplication")(functi
     const mutation = yield* makeProjectDeleteMutation({
       projectId: input.projectId,
       ...(input.force === true ? { force: true } : {}),
-    }).pipe(Effect.provideService(Crypto.Crypto, crypto));
+    }).pipe(Effect.provideService(SecureRandom.SecureRandom, crypto));
     yield* orchestration.mutateProject(mutation);
     return { projectId: input.projectId };
   });
