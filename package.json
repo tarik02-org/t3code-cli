@@ -117,9 +117,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@effect/platform-node": "4.1.2",
+    "@effect/platform-node": "catalog:",
     "@napi-rs/keyring": "^2.1.1",
-    "effect": "4.1.2",
+    "effect": "catalog:",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
     "string-width": "^8.3.0",
