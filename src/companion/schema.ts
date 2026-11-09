@@ -23,8 +23,9 @@ export const allCompanionEventKinds: ReadonlyArray<CompanionEventKind> = [
 export const environmentEventKinds: ReadonlyArray<CompanionEventKind> = ["env-down", "env-up"];
 
 /**
- * How a wake digest reaches the subscriber: `urgent` steers into its running turn, `normal`
- * queues for its next turn, `low` waits until its current turn ends.
+ * How a wake digest reaches the subscriber: `urgent` steers into its running turn at once, with
+ * everything else pending; `normal` and `low` wait until that turn ends and then go out together as
+ * one new turn (sorted after higher priorities). An idle subscriber gets the digest right away.
  */
 export const DeliveryPriority = Schema.Literals(["urgent", "normal", "low"]);
 export type DeliveryPriority = typeof DeliveryPriority.Type;

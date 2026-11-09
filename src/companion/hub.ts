@@ -284,15 +284,18 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     if (first === undefined) {
       return false;
     }
-    // Low items wait for the subscriber's turn to end; anything higher carries them along.
-    if (first.priority === "low" && (yield* isBusy(subscriber))) {
+    // The companion holds the batch itself while the subscriber works, rather than piling one
+    // T3 Code queued turn per event behind it: only urgent items steer into a running turn,
+    // carrying everything else pending; the rest go out as one new turn once it ends.
+    const busy = yield* isBusy(subscriber);
+    if (busy && first.priority !== "urgent") {
       return false;
     }
     const environment = yield* environments.resolve(subscriber.environment);
     yield* environment.application.sendThread({
       threadId: subscriber.threadId,
       message: formatDigest(pending),
-      mode: first.priority === "urgent" ? "steer" : "queue",
+      mode: first.priority === "urgent" ? "steer" : "auto",
       author: { kind: "agent" },
     });
     yield* store.markWoken(pending.map((row) => row.id));

@@ -15,7 +15,7 @@ import type { Orchestration } from "../orchestration/service.ts";
 import { type CompanionEnvironment, CompanionEnvironments } from "./environments.ts";
 import { CompanionHub, makeCompanionHub, wakeCoalesceWindow } from "./hub.ts";
 import type { ThreadEvent } from "./schema.ts";
-import { idleCandidate } from "./state.ts";
+import { idleCandidate, immediateEvents } from "./state.ts";
 import { makePullRequest, makeShell } from "./state.test-utils.ts";
 import { CompanionStore, makeCompanionStore } from "./store.ts";
 
@@ -93,6 +93,36 @@ const idleEvent = (shell: OrchestrationV2ThreadShell): ThreadEvent => {
   return candidate.event;
 };
 
+const busySubscriber = makeShell({
+  id: ThreadId.make("orchestrator"),
+  activityRunStatus: "running",
+});
+const idleSubscriber = makeShell({ id: ThreadId.make("orchestrator") });
+
+const subscribeTo = (
+  hub: CompanionHub["Service"],
+  threadId: string,
+  priorities: Record<string, "urgent" | "normal" | "low">,
+) =>
+  hub.subscribe({
+    subscriber: orchestrator,
+    source: { threadId },
+    events: ["idle", "failed"],
+    wake: true,
+    priorities,
+  });
+
+const openIds = (hub: CompanionHub["Service"]) =>
+  hub
+    .listInbox({ subscriber: orchestrator, includeResolved: false, afterId: 0, limit: 10 })
+    .pipe(Effect.map((rows) => rows.map((row) => row.id).toSorted((a, b) => a - b)));
+
+/** The inbox ids a digest lists, as `- [id] …` lines. */
+const digestIds = (input: SendThreadInput | undefined) =>
+  [...(input?.message ?? "").matchAll(/^- \[(\d+)\]/gm)]
+    .map((match) => Number(match[1]))
+    .toSorted((a, b) => a - b);
+
 describe("CompanionHub", () => {
   it.effect("reports a source that failed before the subscription, and steers it in", () =>
     withHub((hub, fixture) =>
@@ -124,29 +154,75 @@ describe("CompanionHub", () => {
     ),
   );
 
-  it.effect("queues a finished idle, and holds a low one until the subscriber's turn ends", () =>
+  it.effect("holds a low item until the subscriber's turn ends", () =>
     withHub((hub, fixture) =>
       Effect.gen(function* () {
-        yield* hub.subscribe({
-          subscriber: orchestrator,
-          source: { threadId: "thread-a" },
-          events: ["idle"],
-          wake: true,
-          priorities: { idle: "low" },
-        });
-        yield* hub.observe(
-          "local",
-          makeShell({ id: ThreadId.make("orchestrator"), activityRunStatus: "running" }),
-        );
+        yield* subscribeTo(hub, "thread-a", { idle: "low" });
+        yield* hub.observe("local", busySubscriber);
         yield* hub.publish(idleEvent(makeShell()));
         yield* afterWindow;
         assert.lengthOf(yield* Ref.get(fixture.sent), 0);
 
-        yield* hub.observe("local", makeShell({ id: ThreadId.make("orchestrator") }));
+        yield* hub.observe("local", idleSubscriber);
         yield* afterWindow;
         const sent = yield* Ref.get(fixture.sent);
         assert.lengthOf(sent, 1);
-        assert.equal(sent[0]?.mode, "queue");
+        assert.equal(sent[0]?.mode, "auto");
+      }),
+    ),
+  );
+
+  it.effect("batches normal items from an active turn into one digest after it ends", () =>
+    withHub((hub, fixture) =>
+      Effect.gen(function* () {
+        yield* subscribeTo(hub, "thread-a", {});
+        yield* subscribeTo(hub, "thread-b", {});
+        yield* hub.observe("local", busySubscriber);
+        yield* hub.publish(idleEvent(makeShell()));
+        yield* afterWindow;
+        yield* hub.publish(idleEvent(makeShell({ id: ThreadId.make("thread-b") })));
+        yield* afterWindow;
+        assert.lengthOf(yield* Ref.get(fixture.sent), 0);
+
+        yield* hub.observe("local", idleSubscriber);
+        yield* afterWindow;
+        const sent = yield* Ref.get(fixture.sent);
+        assert.lengthOf(sent, 1);
+        assert.equal(sent[0]?.mode, "auto");
+        assert.deepEqual(digestIds(sent[0]), yield* openIds(hub));
+        assert.lengthOf(yield* openIds(hub), 2);
+      }),
+    ),
+  );
+
+  it.effect("steers an urgent item into the active turn with everything pending", () =>
+    withHub((hub, fixture) =>
+      Effect.gen(function* () {
+        yield* subscribeTo(hub, "thread-a", {});
+        yield* subscribeTo(hub, "thread-b", {});
+        yield* hub.observe("local", busySubscriber);
+        yield* hub.publish(idleEvent(makeShell()));
+        yield* hub.publish(idleEvent(makeShell({ id: ThreadId.make("thread-b") })));
+        yield* afterWindow;
+        assert.lengthOf(yield* Ref.get(fixture.sent), 0);
+
+        const [failed] = immediateEvents(
+          "local",
+          makeShell({ status: "failed", latestRunId: RunId.make("run-2") }),
+        );
+        assert.isDefined(failed);
+        yield* hub.publish(failed);
+        yield* afterWindow;
+        const sent = yield* Ref.get(fixture.sent);
+        assert.lengthOf(sent, 1);
+        assert.equal(sent[0]?.mode, "steer");
+        assert.deepEqual(digestIds(sent[0]), yield* openIds(hub));
+        assert.lengthOf(yield* openIds(hub), 3);
+
+        // The turn ending afterwards sends nothing again.
+        yield* hub.observe("local", idleSubscriber);
+        yield* afterWindow;
+        assert.lengthOf(yield* Ref.get(fixture.sent), 1);
       }),
     ),
   );

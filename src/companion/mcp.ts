@@ -42,7 +42,7 @@ const Wake = Schema.optional(Schema.Boolean).annotate({
 
 const Priorities = Schema.optional(Schema.Record(Schema.String, DeliveryPriority)).annotate({
   description:
-    'Per-kind digest priority overrides, e.g. {"idle": "low"}. urgent steers into your running turn, normal queues for your next turn, low waits until your turn ends. Defaults: failed and needs-input urgent; idle and env-down normal; settled, env-up, pauses and snoozed items low.',
+    'Per-kind digest priority overrides, e.g. {"idle": "low"}. urgent steers into your running turn at once, carrying everything else pending; normal and low wait until your turn ends and arrive together as one new turn. Defaults: failed and needs-input urgent; idle and env-down normal; settled, env-up, pauses and snoozed items low.',
 });
 
 const Ids = Schema.Array(Schema.Int);
