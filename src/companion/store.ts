@@ -6,6 +6,7 @@ import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 
 import { CompanionStoreError } from "./error.ts";
+import type { ChecksRecord } from "./state.ts";
 import {
   CompanionEventKind,
   DeliveryPriority,
@@ -28,6 +29,7 @@ const SubscriptionRow = Schema.Struct({
   events: Schema.fromJsonString(Schema.Array(CompanionEventKind)),
   wake: Schema.Number,
   priorities: Schema.fromJsonString(Priorities),
+  follow: Schema.Number,
   created_at: Schema.String,
 });
 const decodeSubscriptionRows = Schema.decodeUnknownEffect(Schema.Array(SubscriptionRow));
@@ -47,12 +49,20 @@ const InboxRow = Schema.Struct({
 });
 const decodeInboxRows = Schema.decodeUnknownEffect(Schema.Array(InboxRow));
 
+const ChecksRow = Schema.Struct({
+  pr_key: Schema.String,
+  head: Schema.NullOr(Schema.String),
+  state: Schema.NullOr(Schema.Literals(["pass", "pending", "fail"])),
+  cycle: Schema.String,
+});
+const decodeChecksRows = Schema.decodeUnknownEffect(Schema.Array(ChecksRow));
+
 const encodeEvents = Schema.encodeEffect(Schema.fromJsonString(Schema.Array(CompanionEventKind)));
 const encodePriorities = Schema.encodeEffect(Schema.fromJsonString(Priorities));
 const encodeEvent = Schema.encodeEffect(Schema.fromJsonString(ThreadEvent));
 
 /** Inbox schema version, kept in `PRAGMA user_version`. */
-const schemaVersion = 2;
+const schemaVersion = 3;
 
 export interface AddSubscriptionInput {
   readonly subscriber: ThreadRef;
@@ -60,6 +70,7 @@ export interface AddSubscriptionInput {
   readonly events: ReadonlyArray<CompanionEventKind>;
   readonly wake: boolean;
   readonly priorities: Readonly<Record<string, DeliveryPriority>>;
+  readonly follow: boolean;
 }
 
 export interface InboxQuery {
@@ -116,6 +127,27 @@ export class CompanionStore extends Context.Service<
     /** Open items from wake subscriptions that no digest has announced yet. */
     readonly pendingWakes: () => Effect.Effect<ReadonlyArray<InboxEvent>, CompanionStoreError>;
     readonly markWoken: (ids: ReadonlyArray<number>) => Effect.Effect<void, CompanionStoreError>;
+    /** Rewrites an item's event, for a digest that refreshed it from the source's current state. */
+    readonly updateEvent: (
+      id: number,
+      event: ThreadEvent,
+    ) => Effect.Effect<void, CompanionStoreError>;
+    /** True when another item already brought this subscriber this exact message from the thread. */
+    readonly hasDeliveredMessage: (input: {
+      readonly subscriber: ThreadRef;
+      readonly threadId: string;
+      readonly message: string;
+      readonly exceptEventId: string;
+    }) => Effect.Effect<boolean, CompanionStoreError>;
+    readonly loadChecks: (
+      environment: string,
+      threadId: string,
+    ) => Effect.Effect<ReadonlyMap<string, ChecksRecord>, CompanionStoreError>;
+    readonly saveChecks: (
+      environment: string,
+      threadId: string,
+      records: ReadonlyArray<ChecksRecord>,
+    ) => Effect.Effect<void, CompanionStoreError>;
   }
 >()("t3cli/companion/CompanionStore") {}
 
@@ -129,6 +161,7 @@ const toSubscription = (row: typeof SubscriptionRow.Type): Subscription => ({
   },
   events: row.events,
   wake: row.wake === 1,
+  follow: row.follow === 1,
   priorities: row.priorities,
   createdAt: row.created_at,
 });
@@ -197,19 +230,50 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
         events TEXT NOT NULL,
         wake INTEGER NOT NULL,
         priorities TEXT NOT NULL DEFAULT '{}',
+        follow INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         CHECK ((source_thread IS NULL) <> (source_project IS NULL))
       )
     `;
-    const [version] = yield* sql<{ readonly user_version: number }>`PRAGMA user_version`;
-    if ((version?.user_version ?? 0) >= schemaVersion) {
+    const [stored] = yield* sql<{ readonly user_version: number }>`PRAGMA user_version`;
+    const version = stored?.user_version ?? 0;
+    if (version >= schemaVersion) {
       return;
     }
     yield* sql.withTransaction(
       Effect.gen(function* () {
-        const columns = yield* sql<{ readonly name: string }>`PRAGMA table_info(subscriptions)`;
-        if (!columns.some((column) => column.name === "priorities")) {
+        const columns = new Set(
+          (yield* sql<{ readonly name: string }>`PRAGMA table_info(subscriptions)`).map(
+            (column) => column.name,
+          ),
+        );
+        if (!columns.has("priorities")) {
           yield* sql`ALTER TABLE subscriptions ADD COLUMN priorities TEXT NOT NULL DEFAULT '{}'`;
+        }
+        if (!columns.has("follow")) {
+          yield* sql`ALTER TABLE subscriptions ADD COLUMN follow INTEGER NOT NULL DEFAULT 0`;
+        }
+        if (version < 3) {
+          // Version 3 added the pr-checks event; existing subscriptions get it like new ones.
+          yield* sql`
+            UPDATE subscriptions SET events = json_insert(events, '$[#]', 'pr-checks')
+            WHERE NOT EXISTS (SELECT 1 FROM json_each(subscriptions.events) WHERE value = 'pr-checks')
+          `;
+        }
+        yield* sql`
+          CREATE TABLE IF NOT EXISTS pr_checks (
+            environment TEXT NOT NULL,
+            thread_id TEXT NOT NULL,
+            pr_key TEXT NOT NULL,
+            head TEXT,
+            state TEXT,
+            cycle TEXT NOT NULL,
+            PRIMARY KEY (environment, thread_id, pr_key)
+          )
+        `;
+        if (version >= 2) {
+          yield* sql`PRAGMA user_version = ${sql.literal(String(schemaVersion))}`;
+          return;
         }
         const existing = yield* sql<{
           readonly name: string;
@@ -263,7 +327,7 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
       const rows = yield* sql`
         INSERT INTO subscriptions
           (subscriber_env, subscriber_thread, source_env, source_thread, source_project, events, wake,
-           priorities, created_at)
+           priorities, follow, created_at)
         VALUES (
           ${input.subscriber.environment},
           ${input.subscriber.threadId},
@@ -273,6 +337,7 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
           ${events},
           ${input.wake ? 1 : 0},
           ${priorities},
+          ${input.follow ? 1 : 0},
           ${createdAt}
         )
         RETURNING *
@@ -465,6 +530,66 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
     Effect.mapError(storeError("markWoken")),
   );
 
+  const updateEvent = Effect.fn("CompanionStore.updateEvent")(
+    function* (id: number, event: ThreadEvent) {
+      yield* sql`UPDATE inbox SET event = ${yield* encodeEvent(event)} WHERE id = ${id}`;
+    },
+    Effect.mapError(storeError("updateEvent")),
+  );
+
+  const hasDeliveredMessage = Effect.fn("CompanionStore.hasDeliveredMessage")(
+    function* (input: {
+      readonly subscriber: ThreadRef;
+      readonly threadId: string;
+      readonly message: string;
+      readonly exceptEventId: string;
+    }) {
+      const rows = yield* sql`
+        SELECT 1 FROM inbox
+        WHERE subscriber_env = ${input.subscriber.environment}
+          AND subscriber_thread = ${input.subscriber.threadId}
+          AND source_thread = ${input.threadId}
+          AND event_id <> ${input.exceptEventId}
+          AND json_extract(event, '$.lastMessage') = ${input.message}
+        LIMIT 1
+      `;
+      return rows.length > 0;
+    },
+    Effect.mapError(storeError("hasDeliveredMessage")),
+  );
+
+  const loadChecks = Effect.fn("CompanionStore.loadChecks")(
+    function* (environment: string, threadId: string) {
+      const rows = yield* decodeChecksRows(
+        yield* sql`
+          SELECT pr_key, head, state, cycle FROM pr_checks
+          WHERE environment = ${environment} AND thread_id = ${threadId}
+        `,
+      );
+      return new Map(
+        rows.map((row) => [
+          row.pr_key,
+          { key: row.pr_key, head: row.head, state: row.state, cycle: row.cycle },
+        ]),
+      );
+    },
+    Effect.mapError(storeError("loadChecks")),
+  );
+
+  const saveChecks = Effect.fn("CompanionStore.saveChecks")(
+    function* (environment: string, threadId: string, records: ReadonlyArray<ChecksRecord>) {
+      for (const record of records) {
+        yield* sql`
+          INSERT INTO pr_checks (environment, thread_id, pr_key, head, state, cycle)
+          VALUES (${environment}, ${threadId}, ${record.key}, ${record.head}, ${record.state}, ${record.cycle})
+          ON CONFLICT (environment, thread_id, pr_key)
+          DO UPDATE SET head = excluded.head, state = excluded.state, cycle = excluded.cycle
+        `;
+      }
+    },
+    Effect.mapError(storeError("saveChecks")),
+  );
+
   return CompanionStore.of({
     addSubscription,
     removeSubscriptions,
@@ -478,6 +603,10 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
     redeliver,
     pendingWakes,
     markWoken,
+    updateEvent,
+    hasDeliveredMessage,
+    loadChecks,
+    saveChecks,
   });
 });
 

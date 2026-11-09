@@ -44,6 +44,7 @@ export class CompanionRpcs extends RpcGroup.make(
       events: Schema.Array(CompanionEventKind),
       wake: Schema.Boolean,
       priorities: Schema.Record(Schema.String, DeliveryPriority),
+      follow: Schema.optional(Schema.Boolean),
     },
     success: SubscribeResult,
     error: RequestError,

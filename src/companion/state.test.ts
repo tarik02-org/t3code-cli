@@ -78,6 +78,14 @@ describe("pull requests", () => {
       readyToMark(summaries).map((pr) => pr.number),
       [1],
     );
+    const merged = pullRequestSummaries(
+      makeShell({
+        pullRequests: [
+          makePullRequest({ number: 4, isDraft: false, checksState: "passing", state: "merged" }),
+        ],
+      }),
+    );
+    assert.isNull(merged[0]?.mergeable);
   });
 });
 

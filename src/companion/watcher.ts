@@ -67,6 +67,7 @@ export const runCompanionWatcher = Effect.fn("runCompanionWatcher")(function* ()
   ) {
     const key = `${environment.name}/${shell.id}`;
     const relevance = yield* hub.relevance(environment.name, shell.id, shell.projectId);
+    yield* hub.discover(environment.name, shell);
     if (relevance.source || relevance.subscriber) {
       yield* hub.observe(environment.name, shell);
     }
@@ -77,6 +78,7 @@ export const runCompanionWatcher = Effect.fn("runCompanionWatcher")(function* ()
     for (const event of immediateEvents(environment.name, shell)) {
       yield* hub.publish(event);
     }
+    yield* hub.trackChecks(environment.name, shell);
     const nowMs = yield* Clock.currentTimeMillis;
     const candidate = idleCandidate(environment.name, shell, nowMs);
     if (candidate === null) {

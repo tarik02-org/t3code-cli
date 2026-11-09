@@ -26,7 +26,9 @@ import {
   type ThreadStatus,
 } from "./schema.ts";
 import {
+  checksTransitions,
   deliveryPriority,
+  pullRequestSummaries,
   idleCandidate,
   immediateEvents,
   readyToMark,
@@ -38,8 +40,8 @@ export const wakeCoalesceWindow = Duration.seconds(5);
 export const maxWaitSeconds = 600;
 /** How often snoozed items are checked for their time having passed. */
 export const snoozeCheckInterval = Duration.seconds(15);
-const lastMessageLength = 1500;
-const digestMessageLength = 400;
+/** The longest last message an event carries; digests include it whole. */
+export const lastMessageLength = 10_000;
 
 export interface ThreadRefInput {
   readonly environment?: string | undefined;
@@ -56,6 +58,8 @@ export interface SubscribeInput {
   readonly events: ReadonlyArray<CompanionEventKind>;
   readonly wake: boolean;
   readonly priorities: Readonly<Record<string, DeliveryPriority>>;
+  /** With a project source: follow the subscriber's own new threads in it instead. */
+  readonly follow?: boolean | undefined;
 }
 
 export interface SubscribeResult {
@@ -144,6 +148,16 @@ export class CompanionHub extends Context.Service<
       shell: OrchestrationV2ThreadShell,
     ) => Effect.Effect<void, CompanionStoreError>;
     readonly publish: (event: ThreadEvent) => Effect.Effect<void, CompanionStoreError>;
+    /** Compares a source's linked PRs' checks with the last seen state; finished checks publish. */
+    readonly trackChecks: (
+      environment: string,
+      shell: OrchestrationV2ThreadShell,
+    ) => Effect.Effect<void, CompanionStoreError>;
+    /** Subscribes follow subscribers to a new thread they launched; checked once per thread. */
+    readonly discover: (
+      environment: string,
+      shell: OrchestrationV2ThreadShell,
+    ) => Effect.Effect<void, CompanionInvalidRequestError | CompanionStoreError>;
     /** Sends digests that a previous run recorded but never announced. */
     readonly flushPendingWakes: Effect.Effect<void, CompanionStoreError>;
     /** Brings back snoozed items whose time passed while their source is idle; runs forever. */
@@ -160,6 +174,8 @@ const matches = (subscription: Subscription, event: ThreadEvent) =>
     : matchesThread(subscription, event));
 
 const matchesThread = (subscription: Subscription, event: ThreadEvent) =>
+  // A follow subscription only creates thread subscriptions; it takes no events itself.
+  !subscription.follow &&
   (subscription.source.threadId === null
     ? subscription.source.projectId === event.projectId
     : subscription.source.threadId === event.threadId) &&
@@ -185,9 +201,9 @@ function formatDigestItem(row: InboxEvent): string {
     );
   }
   if (event.lastMessage !== null) {
-    const excerpt = event.lastMessage.slice(0, digestMessageLength).replace(/\s+/g, " ");
     lines.push(
-      `    last message: ${excerpt}${event.lastMessage.length > digestMessageLength ? "…" : ""}`,
+      "    last message:",
+      ...event.lastMessage.split("\n").map((line) => `      ${line}`),
     );
   }
   return lines.join("\n");
@@ -272,14 +288,61 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     return { ...event, lastMessage };
   });
 
-  const sendDigest = Effect.fn("CompanionHub.sendDigest")(function* (subscriber: ThreadRef) {
-    const pending = (yield* store.pendingWakes())
-      .filter((row) => refKey(row.subscriber) === refKey(subscriber))
-      .toSorted((a, b) =>
-        a.priority === b.priority
-          ? a.id - b.id
-          : priorityRank[a.priority] - priorityRank[b.priority],
+  /**
+   * Re-checks each item against its source's latest shell row: an idle or settled the source
+   * moved past (a newer run) is resolved as superseded, and PR states are brought up to date.
+   */
+  const freshen = Effect.fn("CompanionHub.freshen")(function* (rows: ReadonlyArray<InboxEvent>) {
+    const current = yield* Ref.get(threads);
+    const kept: Array<InboxEvent> = [];
+    for (const row of rows) {
+      const event = row.event;
+      const latest =
+        event.threadId === null
+          ? undefined
+          : current.get(refKey({ environment: event.environment, threadId: event.threadId }));
+      if (latest === undefined) {
+        kept.push(row);
+        continue;
+      }
+      const runId = event.runId ?? null;
+      if (
+        (event.kind === "idle" || event.kind === "settled") &&
+        runId !== null &&
+        latest.shell.latestRunId !== runId
+      ) {
+        yield* store.resolve({
+          subscriber: row.subscriber,
+          ids: [row.id],
+          disposition: "auto: superseded, the source started a new run",
+        });
+        continue;
+      }
+      const now = pullRequestSummaries(latest.shell);
+      const pullRequests = event.pullRequests.map(
+        (pr) =>
+          now.find(
+            (candidate) => candidate.number === pr.number && candidate.repository === pr.repository,
+          ) ?? pr,
       );
+      const refreshed = event.kind === "pr-checks" ? pullRequests : now;
+      if (JSON.stringify(refreshed) === JSON.stringify(event.pullRequests)) {
+        kept.push(row);
+        continue;
+      }
+      const updated = { ...event, pullRequests: refreshed };
+      yield* store.updateEvent(row.id, updated);
+      kept.push({ ...row, event: updated });
+    }
+    return kept;
+  });
+
+  const sendDigest = Effect.fn("CompanionHub.sendDigest")(function* (subscriber: ThreadRef) {
+    const pending = (yield* freshen(
+      (yield* store.pendingWakes()).filter((row) => refKey(row.subscriber) === refKey(subscriber)),
+    )).toSorted((a, b) =>
+      a.priority === b.priority ? a.id - b.id : priorityRank[a.priority] - priorityRank[b.priority],
+    );
     const first = pending[0];
     if (first === undefined) {
       return false;
@@ -333,6 +396,27 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     if (row === null) {
       return;
     }
+    if (event.kind === "settled" && event.threadId !== null) {
+      const sourceThreadId = event.threadId;
+      const prsDone = event.pullRequests.every((pr) => pr.state !== "open");
+      const messageSeen =
+        event.lastMessage === null ||
+        (yield* store.hasDeliveredMessage({
+          subscriber: subscription.subscriber,
+          threadId: sourceThreadId,
+          message: event.lastMessage,
+          exceptEventId: event.eventId,
+        }));
+      if (prsDone && messageSeen) {
+        yield* store.resolve({
+          subscriber: subscription.subscriber,
+          ids: [row.id],
+          disposition: "auto: nothing new, PRs done and the last message already delivered",
+        });
+        yield* Effect.logInfo(`inbox ${row.id}: ${event.eventId} resolved as nothing new`);
+        return;
+      }
+    }
     yield* Effect.logInfo(
       `inbox ${row.id}: ${event.eventId} -> ${refKey(row.subscriber)} (${row.priority})`,
     );
@@ -376,6 +460,12 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     if (input.events.length === 0) {
       return yield* new CompanionInvalidRequestError({ message: "events must not be empty" });
     }
+    const follow = input.follow === true;
+    if (follow && !hasProject) {
+      return yield* new CompanionInvalidRequestError({
+        message: "follow needs a project source: it follows your new threads in that project",
+      });
+    }
     const sourceEnvironment = yield* environments
       .resolve(input.source.environment)
       .pipe(
@@ -392,6 +482,7 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
       events: input.events,
       wake: input.wake,
       priorities: input.priorities,
+      follow,
     });
     yield* refreshSubscriptions;
     if (source.threadId === null) {
@@ -524,6 +615,7 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
       Effect.map((all) => ({
         source: all.some(
           (subscription) =>
+            !subscription.follow &&
             subscription.source.environment === environment &&
             (subscription.source.threadId === null
               ? subscription.source.projectId === projectId
@@ -604,6 +696,93 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     return items;
   });
 
+  const trackChecks = Effect.fn("CompanionHub.trackChecks")(function* (
+    environment: string,
+    shell: OrchestrationV2ThreadShell,
+  ) {
+    if ((shell.pullRequests ?? []).length === 0) {
+      return;
+    }
+    const previous = yield* store.loadChecks(environment, shell.id);
+    const transitions = checksTransitions(environment, shell, previous, yield* nowIso);
+    yield* store.saveChecks(
+      environment,
+      shell.id,
+      transitions.map((transition) => transition.record),
+    );
+    for (const transition of transitions) {
+      if (transition.event !== null) {
+        yield* publish(transition.event);
+      }
+    }
+  });
+
+  // Threads already checked against follow subscriptions, by subscription and thread.
+  const followChecked = new Set<string>();
+
+  const discover = Effect.fn("CompanionHub.discover")(function* (
+    environment: string,
+    shell: OrchestrationV2ThreadShell,
+  ) {
+    const createdAt = DateTime.formatIso(shell.createdAt);
+    const all = yield* Ref.get(subscriptions);
+    const follows = all.filter(
+      (subscription) =>
+        subscription.follow &&
+        subscription.source.environment === environment &&
+        subscription.source.projectId === shell.projectId &&
+        subscription.subscriber.threadId !== shell.id &&
+        createdAt >= subscription.createdAt &&
+        !followChecked.has(`${subscription.id}/${shell.id}`),
+    );
+    if (follows.length === 0) {
+      return;
+    }
+    // T3 Code stamps the launching thread on the new thread's first message, not on the thread.
+    const sender = yield* environments.resolve(environment).pipe(
+      Effect.flatMap((env) => env.orchestration.getThreadBoundedSnapshot(shell.id)),
+      Effect.map((snapshot) => {
+        const first = snapshot.projection.turnItems.find((item) => item.type === "user_message");
+        return first === undefined
+          ? undefined
+          : "senderThreadId" in first
+            ? (first.senderThreadId ?? null)
+            : null;
+      }),
+      Effect.catchCause((cause) =>
+        Effect.logWarning(`could not read who launched ${shell.id}`, cause).pipe(
+          Effect.as(undefined),
+        ),
+      ),
+    );
+    // No first message yet: look again on the thread's next update.
+    if (sender === undefined) {
+      return;
+    }
+    for (const follow of follows) {
+      followChecked.add(`${follow.id}/${shell.id}`);
+      const already = all.some(
+        (subscription) =>
+          refKey(subscription.subscriber) === refKey(follow.subscriber) &&
+          subscription.source.environment === environment &&
+          subscription.source.threadId === shell.id,
+      );
+      if (sender !== follow.subscriber.threadId || already) {
+        continue;
+      }
+      yield* Effect.logInfo(
+        `following ${environment}/${shell.id} for ${refKey(follow.subscriber)}`,
+      );
+      yield* subscribe({
+        subscriber: follow.subscriber,
+        source: { environment, threadId: shell.id },
+        events: follow.events,
+        wake: follow.wake,
+        priorities: follow.priorities,
+      });
+    }
+  });
+
   const flushPendingWakes = Effect.gen(function* () {
     const pending = yield* store.pendingWakes();
     const subscribers = new Map(pending.map((row) => [refKey(row.subscriber), row.subscriber]));
@@ -631,6 +810,8 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     relevance,
     observe,
     publish,
+    trackChecks,
+    discover,
     flushPendingWakes,
     runSnoozes,
   });

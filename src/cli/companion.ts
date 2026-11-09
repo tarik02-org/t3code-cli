@@ -474,6 +474,10 @@ export const subscribeCommand = Command.make(
       Flag.withDefault(false),
     ),
     priority: priorityFlag,
+    follow: Flag.Boolean("follow").pipe(
+      Flag.withDescription("With --project: follow the subscriber's own new threads in it"),
+      Flag.withDefault(false),
+    ),
     format: formatFlag,
     ...extraArgsConfig,
   },
@@ -495,6 +499,7 @@ export const subscribeCommand = Command.make(
           events: input.event.length === 0 ? allCompanionEventKinds : input.event,
           wake: input.wake,
           priorities,
+          follow: input.follow,
         }),
       );
       if (resolveOutputFormat(input.format, cliRuntime, t3CliEnv, "json") === "json") {

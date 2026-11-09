@@ -37,6 +37,7 @@ describe("CompanionStore", () => {
         events: ["idle"],
         wake: true,
         priorities: { idle: "low" },
+        follow: false,
       });
       assert.deepEqual(subscription.priorities, { idle: "low" });
       const row = yield* store.deliver(subscription, event("e1"), "normal");
@@ -66,6 +67,7 @@ describe("CompanionStore", () => {
         events: ["idle"],
         wake: true,
         priorities: {},
+        follow: false,
       });
       const row = yield* store.deliver(subscription, event("e1"), "normal");
       assert.isNotNull(row);
@@ -127,6 +129,15 @@ describe("CompanionStore", () => {
       const store = yield* makeCompanionStore();
       const [subscription] = yield* store.listSubscriptions(null);
       assert.deepEqual(subscription?.priorities, {});
+      assert.isFalse(subscription?.follow);
+      assert.deepEqual(subscription?.events, ["idle", "failed", "pr-checks"]);
+      yield* store.saveChecks("local", "thread-a", [
+        { key: "acme/repo#9", head: "abc", state: "pending", cycle: "2026-01-01T00:00:00.000Z" },
+      ]);
+      assert.equal(
+        (yield* store.loadChecks("local", "thread-a")).get("acme/repo#9")?.state,
+        "pending",
+      );
       const rows = yield* store.listInbox({
         subscriber,
         includeResolved: true,

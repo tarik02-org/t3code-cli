@@ -32,7 +32,7 @@ const Caller = {
 
 const Events = Schema.optional(Schema.Array(CompanionEventKind)).annotate({
   description:
-    "Events to deliver: idle, failed, needs-input, settled (env-down and env-up always come). Defaults to all.",
+    "Events to deliver: idle, failed, needs-input, settled, pr-checks (env-down and env-up always come). Defaults to all.",
 });
 
 const Wake = Schema.optional(Schema.Boolean).annotate({
@@ -57,6 +57,10 @@ const SubscribeTool = Tool.make("subscribe", {
     }),
     threadId: Schema.optional(Schema.String),
     projectId: Schema.optional(Schema.String),
+    follow: Schema.optional(Schema.Boolean).annotate({
+      description:
+        "With projectId: instead of every thread's events, subscribe you to each new thread you launch in that project, with these events and settings.",
+    }),
     events: Events,
     wake: Wake,
     priorities: Priorities,
@@ -243,6 +247,7 @@ const CompanionToolkitHandlers = CompanionToolkit.toLayer(
             events: input.events ?? allCompanionEventKinds,
             wake: input.wake ?? false,
             priorities: input.priorities ?? {},
+            follow: input.follow ?? false,
           })
           .pipe(asToolError("subscribe")),
       unsubscribe: (input) =>

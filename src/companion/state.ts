@@ -86,22 +86,101 @@ export const pendingTaskLabels = (shell: OrchestrationV2ThreadShell): Array<stri
 
 const checksRollup = { passing: "pass", pending: "pending", failing: "fail" } as const;
 
+type PullRequestLink = NonNullable<OrchestrationV2ThreadShell["pullRequests"]>[number];
+
+const linkedPullRequests = (shell: OrchestrationV2ThreadShell) =>
+  (shell.pullRequests ?? []).filter((link) => link.source !== "stack-dismissed");
+
+function summarizePullRequest(link: PullRequestLink): PullRequestSummary {
+  const state = link.snapshot?.state ?? "open";
+  return {
+    number: link.number,
+    repository: link.repository,
+    url: link.url,
+    state,
+    draft: link.snapshot?.isDraft ?? false,
+    // A merged or closed PR's mergeability is meaningless (GitHub reports it as unknown).
+    mergeable: state === "open" ? (link.snapshot?.mergeability ?? null) : null,
+    checks:
+      link.snapshot?.checksState === null || link.snapshot?.checksState === undefined
+        ? null
+        : checksRollup[link.snapshot.checksState],
+  };
+}
+
 /** The thread's linked pull requests, from the snapshot the server last synced. */
-export function pullRequestSummaries(shell: OrchestrationV2ThreadShell): Array<PullRequestSummary> {
-  return (shell.pullRequests ?? [])
-    .filter((link) => link.source !== "stack-dismissed")
-    .map((link) => ({
-      number: link.number,
-      repository: link.repository,
-      url: link.url,
-      state: link.snapshot?.state ?? "open",
-      draft: link.snapshot?.isDraft ?? false,
-      mergeable: link.snapshot?.mergeability ?? null,
-      checks:
-        link.snapshot?.checksState === null || link.snapshot?.checksState === undefined
-          ? null
-          : checksRollup[link.snapshot.checksState],
-    }));
+export const pullRequestSummaries = (
+  shell: OrchestrationV2ThreadShell,
+): Array<PullRequestSummary> => linkedPullRequests(shell).map(summarizePullRequest);
+
+const pullRequestKey = (link: Pick<PullRequestLink, "repository" | "number">) =>
+  `${link.repository.toLowerCase()}#${link.number}`;
+
+/** The checks state last seen on one linked PR; `cycle` marks when its current run of checks began. */
+export interface ChecksRecord {
+  readonly key: string;
+  readonly head: string | null;
+  readonly state: PullRequestSummary["checks"];
+  readonly cycle: string;
+}
+
+export interface ChecksTransition {
+  readonly record: ChecksRecord;
+  /** Set when the checks reached a final state: after pending, or already final on a new head. */
+  readonly event: ThreadEvent | null;
+}
+
+/**
+ * Follows one linked PR's checks across shell updates. The head comes from T3 Code's PR watch
+ * when there is one; without it, a return to pending starts the next cycle.
+ */
+export function checksTransitions(
+  environment: string,
+  shell: OrchestrationV2ThreadShell,
+  previous: ReadonlyMap<string, ChecksRecord>,
+  nowIso: string,
+): Array<ChecksTransition> {
+  return linkedPullRequests(shell).map((link) => {
+    const key = pullRequestKey(link);
+    const summary = summarizePullRequest(link);
+    const head = link.watch?.headSha ?? null;
+    const before = previous.get(key);
+    if (before === undefined) {
+      return { record: { key, head, state: summary.checks, cycle: nowIso }, event: null };
+    }
+    const newHead = head !== null && before.head !== null && head !== before.head;
+    const restarted = summary.checks === "pending" && before.state !== "pending";
+    const record = {
+      key,
+      head: head ?? before.head,
+      state: summary.checks,
+      cycle: newHead || restarted ? nowIso : before.cycle,
+    };
+    const final = summary.checks === "pass" || summary.checks === "fail";
+    if (!final || !(before.state === "pending" || newHead)) {
+      return { record, event: null };
+    }
+    const headLabel = head?.slice(0, 10) ?? link.snapshot?.headBranch ?? "its head";
+    const failed = link.watch?.failedChecks ?? [];
+    const outcome =
+      summary.checks === "pass"
+        ? "pass"
+        : `fail${failed.length === 0 ? "" : ` (failed jobs: ${failed.join(", ")})`}`;
+    return {
+      record,
+      event: {
+        ...makeEvent(
+          environment,
+          shell,
+          "pr-checks",
+          `${key}@${head ?? record.cycle}`,
+          nowIso,
+          `PR #${link.number} checks finished on ${headLabel}: ${outcome}`,
+        ),
+        pullRequests: [summary],
+      },
+    };
+  });
 }
 
 /** Draft pull requests whose checks pass: the ones waiting to be marked ready. */
@@ -162,6 +241,7 @@ const makeEvent = (
   title: shell.title,
   occurredAt,
   summary,
+  runId: shell.latestRunId,
   pause: pendingTasks.length > 0,
   pendingTasks,
   // Shell rows carry no message text; the hub reads it when the event is delivered.
@@ -260,6 +340,7 @@ const defaultPriorities: Record<CompanionEventKind, DeliveryPriority> = {
   failed: "urgent",
   "needs-input": "urgent",
   idle: "normal",
+  "pr-checks": "normal",
   "env-down": "normal",
   settled: "low",
   "env-up": "low",

@@ -5,6 +5,7 @@ export const CompanionEventKind = Schema.Literals([
   "failed",
   "needs-input",
   "settled",
+  "pr-checks",
   "env-down",
   "env-up",
 ]);
@@ -15,6 +16,7 @@ export const allCompanionEventKinds: ReadonlyArray<CompanionEventKind> = [
   "failed",
   "needs-input",
   "settled",
+  "pr-checks",
   "env-down",
   "env-up",
 ];
@@ -50,6 +52,11 @@ export const Subscription = Schema.Struct({
   source: SubscriptionSource,
   events: Schema.Array(CompanionEventKind),
   wake: Schema.Boolean,
+  /**
+   * On a project subscription: instead of every thread's events, subscribe the subscriber to each
+   * new thread in the project that it launched, with this subscription's events and settings.
+   */
+  follow: Schema.Boolean,
   /** Per-kind overrides of the default priority, keyed by event kind. */
   priorities: Schema.Record(Schema.String, DeliveryPriority),
   createdAt: Schema.String,
@@ -97,6 +104,8 @@ export const ThreadEvent = Schema.Struct({
   title: Schema.String,
   occurredAt: Schema.String,
   summary: Schema.String,
+  /** The source's latest run when the event was taken; a newer run makes idle and settled stale. */
+  runId: Schema.optionalKey(Schema.NullOr(Schema.String)),
   /** An idle whose run ended while background tasks were still pending: a pause, not done. */
   pause: Schema.Boolean,
   pendingTasks: Schema.Array(Schema.String),

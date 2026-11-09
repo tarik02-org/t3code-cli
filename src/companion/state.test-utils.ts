@@ -32,6 +32,7 @@ export function makeShell(
     settledAt: null,
     archivedAt: null,
     deletedAt: null,
+    createdAt: completedAt,
     updatedAt: completedAt,
     ...rest,
   });
@@ -47,15 +48,22 @@ export function makePullRequest(input: {
   readonly number: number;
   readonly isDraft: boolean;
   readonly checksState: "passing" | "failing" | "pending" | null;
+  readonly state?: "open" | "closed" | "merged";
+  readonly headSha?: string;
+  readonly failedChecks?: ReadonlyArray<string>;
 }): NonNullable<Shell["pullRequests"]>[number] {
   return fromPartial({
+    ...(input.headSha === undefined
+      ? {}
+      : { watch: { headSha: input.headSha, failedChecks: input.failedChecks ?? [] } }),
     host: "github.com",
     repository: "acme/repo",
     number: input.number,
     url: `https://github.com/acme/repo/pull/${input.number}`,
     source: "agent",
     snapshot: {
-      state: "open",
+      state: input.state ?? "open",
+      headBranch: "feature",
       isDraft: input.isDraft,
       checksState: input.checksState,
       mergeability: "mergeable",
