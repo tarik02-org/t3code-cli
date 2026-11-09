@@ -5,6 +5,7 @@ import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
@@ -13,7 +14,9 @@ import { fromPartial } from "@total-typescript/shoehorn";
 
 import type { SendThreadInput, T3Application } from "../application/service.ts";
 import type { Orchestration } from "../orchestration/service.ts";
+import type { AgentSender } from "./agent-sender.ts";
 import { type CompanionEnvironment, CompanionEnvironments } from "./environments.ts";
+import { CompanionAgentSendError } from "./error.ts";
 import { CompanionHub, makeCompanionHub, wakeCoalesceWindow } from "./hub.ts";
 import type { CompanionEventKind, ThreadEvent } from "./schema.ts";
 import { idleCandidate, immediateEvents } from "./state.ts";
@@ -28,6 +31,8 @@ interface Fixture {
   readonly shells: Ref.Ref<ReadonlyArray<OrchestrationV2ThreadShell>>;
   /** Turn items of each thread's bounded snapshot; others get two assistant messages. */
   readonly turnItems: Ref.Ref<Readonly<Record<string, ReadonlyArray<unknown>>>>;
+  /** Digests sent agent-marked through the environment's MCP sender. */
+  readonly agentSent: Ref.Ref<ReadonlyArray<{ readonly message: string; readonly mode: string }>>;
 }
 
 const defaultTurnItems = [
@@ -35,47 +40,64 @@ const defaultTurnItems = [
   { type: "assistant_message", text: "final report" },
 ];
 
-const makeFixture = Effect.gen(function* () {
-  const sent = yield* Ref.make<ReadonlyArray<SendThreadInput>>([]);
-  const shells = yield* Ref.make<ReadonlyArray<OrchestrationV2ThreadShell>>([]);
-  const turnItems = yield* Ref.make<Readonly<Record<string, ReadonlyArray<unknown>>>>({});
-  const environment = fromPartial<CompanionEnvironment>({
-    name: "local",
-    aliases: [],
-    url: "http://127.0.0.1:3774",
-    orchestration: fromPartial<Orchestration>({
-      getShellSnapshot: () =>
-        Ref.get(shells).pipe(Effect.map((threads) => fromPartial({ threads }))),
-      getThreadBoundedSnapshot: (threadId: string) =>
-        Ref.get(turnItems).pipe(
-          Effect.map((all) =>
-            fromPartial({ projection: { turnItems: all[threadId] ?? defaultTurnItems } }),
+const makeFixture = (agent: "none" | "working" | "failing" = "none") =>
+  Effect.gen(function* () {
+    const sent = yield* Ref.make<ReadonlyArray<SendThreadInput>>([]);
+    const shells = yield* Ref.make<ReadonlyArray<OrchestrationV2ThreadShell>>([]);
+    const turnItems = yield* Ref.make<Readonly<Record<string, ReadonlyArray<unknown>>>>({});
+    const agentSent = yield* Ref.make<
+      ReadonlyArray<{ readonly message: string; readonly mode: string }>
+    >([]);
+    const agentSender: AgentSender = {
+      send: (input) =>
+        agent === "failing"
+          ? Effect.fail(
+              new CompanionAgentSendError({ message: "refused", operation: "send", cause: null }),
+            )
+          : Ref.update(agentSent, (all) => [...all, { message: input.message, mode: input.mode }]),
+    };
+    const environment = fromPartial<CompanionEnvironment>({
+      name: "local",
+      aliases: [],
+      url: "http://127.0.0.1:3774",
+      agentSender:
+        agent === "none" ? Option.none<AgentSender>() : Option.some<AgentSender>(agentSender),
+      orchestration: fromPartial<Orchestration>({
+        getShellSnapshot: () =>
+          Ref.get(shells).pipe(Effect.map((threads) => fromPartial({ threads }))),
+        getThreadBoundedSnapshot: (threadId: string) =>
+          Ref.get(turnItems).pipe(
+            Effect.map((all) =>
+              fromPartial({ projection: { turnItems: all[threadId] ?? defaultTurnItems } }),
+            ),
           ),
-        ),
-    }),
-    application: fromPartial<T3Application["Service"]>({
-      sendThread: (input: SendThreadInput) =>
-        Ref.update(sent, (all) => [...all, input]).pipe(
-          Effect.as(fromPartial({ threadId: input.threadId })),
-        ),
-    }),
+      }),
+      application: fromPartial<T3Application["Service"]>({
+        sendThread: (input: SendThreadInput) =>
+          Ref.update(sent, (all) => [...all, input]).pipe(
+            Effect.as(fromPartial({ threadId: input.threadId })),
+          ),
+      }),
+    });
+    const environments = CompanionEnvironments.of({
+      all: Effect.succeed([environment]),
+      changes: Stream.make([environment]),
+      resolve: () => Effect.succeed(environment),
+      statuses: Effect.succeed([]),
+      reload: Effect.void,
+    });
+    return { sent, shells, turnItems, agentSent, environments } satisfies Fixture & {
+      environments: unknown;
+    };
   });
-  const environments = CompanionEnvironments.of({
-    all: Effect.succeed([environment]),
-    changes: Stream.make([environment]),
-    resolve: () => Effect.succeed(environment),
-    statuses: Effect.succeed([]),
-    reload: Effect.void,
-  });
-  return { sent, shells, turnItems, environments } satisfies Fixture & { environments: unknown };
-});
 
 /** Builds the hub over an in-memory store and the fixture environment. */
 const withHub = <A, E>(
   body: (hub: CompanionHub["Service"], fixture: Fixture) => Effect.Effect<A, E, CompanionStore>,
+  agent: "none" | "working" | "failing" = "none",
 ) =>
   Effect.gen(function* () {
-    const fixture = yield* makeFixture;
+    const fixture = yield* makeFixture(agent);
     const store = yield* makeCompanionStore();
     const hub = yield* makeCompanionHub().pipe(
       Effect.provideService(CompanionStore, store),
@@ -401,6 +423,35 @@ describe("CompanionHub", () => {
         const all = yield* hub.listInbox({ ...openQuery, includeResolved: true });
         assert.include(all[1]?.disposition ?? "", "auto: nothing new");
       }),
+    ),
+  );
+
+  it.effect("sends digests agent-marked through the MCP sender when the environment has one", () =>
+    withHub(
+      (hub, fixture) =>
+        Effect.gen(function* () {
+          yield* subscribeTo(hub, "thread-a", {});
+          yield* hub.publish(idleEvent(makeShell()));
+          yield* afterWindow;
+          const agentSent = yield* Ref.get(fixture.agentSent);
+          assert.lengthOf(agentSent, 1);
+          assert.equal(agentSent[0]?.mode, "auto");
+          assert.lengthOf(yield* Ref.get(fixture.sent), 0);
+        }),
+      "working",
+    ),
+  );
+
+  it.effect("falls back to a plain send when the agent-marked send fails", () =>
+    withHub(
+      (hub, fixture) =>
+        Effect.gen(function* () {
+          yield* subscribeTo(hub, "thread-a", {});
+          yield* hub.publish(idleEvent(makeShell()));
+          yield* afterWindow;
+          assert.lengthOf(yield* Ref.get(fixture.sent), 1);
+        }),
+      "failing",
     ),
   );
 

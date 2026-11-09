@@ -68,3 +68,12 @@ export class CompanionAutostartError extends Schema.TaggedError<CompanionAutosta
     output: Schema.String,
   },
 ) {}
+
+export class CompanionAgentSendError extends Schema.TaggedError<CompanionAgentSendError>()(
+  "CompanionAgentSendError",
+  {
+    message: Schema.String,
+    operation: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {}

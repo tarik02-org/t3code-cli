@@ -13,6 +13,7 @@ import { T3Application } from "../application/service.ts";
 import { T3Config } from "../config/config.ts";
 import type { ConfigError } from "../config/error.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
+import type { AgentSender } from "./agent-sender.ts";
 import { CompanionEnvironmentError, CompanionUnknownEnvironmentError } from "./error.ts";
 import type { CompanionEnvironmentStatus } from "./schema.ts";
 
@@ -26,12 +27,21 @@ export interface CompanionEnvironment {
   readonly status: Ref.Ref<Omit<CompanionEnvironmentStatus, "name" | "aliases" | "url">>;
   /** Owns the environment's connection; closed when the environment leaves the config. */
   readonly scope: Scope.Closeable;
+  /** Sends digests as agent messages; none where the companion holds no MCP client session. */
+  readonly agentSender: Option.Option<AgentSender>;
 }
 
 /** Builds the t3cli service stack bound to one stored environment. */
 export type ConnectEnvironment<E, R> = (
   environmentName: string,
 ) => Layer.Layer<T3Orchestration | T3Application, E, R>;
+
+/** Sets up agent-marked sends for a stored environment, where this machine can. */
+export type MakeAgentSender<R> = (environment: {
+  readonly name: string;
+  readonly url: string;
+  readonly local: boolean;
+}) => Effect.Effect<Option.Option<AgentSender>, never, R>;
 
 export const environmentKey = (environment: Pick<CompanionEnvironment, "name" | "url">) =>
   `${environment.name}|${environment.url}`;
@@ -56,19 +66,25 @@ export class CompanionEnvironments extends Context.Service<
   }
 >()("t3cli/companion/CompanionEnvironments") {}
 
-export const makeCompanionEnvironments = Effect.fn("makeCompanionEnvironments")(function* <E, R>(
+export const makeCompanionEnvironments = Effect.fn("makeCompanionEnvironments")(function* <
+  E,
+  R,
+  RA,
+>(
   connect: ConnectEnvironment<E, R>,
+  makeAgentSender: MakeAgentSender<RA>,
   only: ReadonlyArray<string>,
 ) {
   const config = yield* T3Config;
   const parentScope = yield* Scope.Scope;
-  const context = yield* Effect.context<R>();
+  const context = yield* Effect.context<R | RA>();
   const state = yield* SubscriptionRef.make<EnvironmentSet>({ all: [], defaultName: "" });
   const reloading = yield* Semaphore.make(1);
 
   const build = Effect.fn("CompanionEnvironments.build")(function* (
     name: string,
     url: string,
+    local: boolean,
     aliases: ReadonlyArray<string>,
   ) {
     const scope = yield* Scope.fork(parentScope);
@@ -109,6 +125,7 @@ export const makeCompanionEnvironments = Effect.fn("makeCompanionEnvironments")(
         lastError: null,
       }),
       scope,
+      agentSender: yield* makeAgentSender({ name, url, local }).pipe(Effect.provide(context)),
     });
   });
 
@@ -139,7 +156,7 @@ export const makeCompanionEnvironments = Effect.fn("makeCompanionEnvironments")(
         next.push({ ...kept, aliases });
         continue;
       }
-      const built = yield* build(preferred.name, url, aliases);
+      const built = yield* build(preferred.name, url, preferred.local, aliases);
       if (Option.isSome(built)) {
         yield* Effect.logInfo(`environment ${preferred.name} added (${url})`);
         next.push(built.value);
@@ -213,7 +230,8 @@ export const makeCompanionEnvironments = Effect.fn("makeCompanionEnvironments")(
   });
 });
 
-export const CompanionEnvironmentsLive = <E, R>(
+export const CompanionEnvironmentsLive = <E, R, RA>(
   connect: ConnectEnvironment<E, R>,
+  makeAgentSender: MakeAgentSender<RA>,
   only: ReadonlyArray<string>,
-) => Layer.effect(CompanionEnvironments, makeCompanionEnvironments(connect, only));
+) => Layer.effect(CompanionEnvironments, makeCompanionEnvironments(connect, makeAgentSender, only));

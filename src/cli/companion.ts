@@ -26,6 +26,7 @@ import {
   companionProcessId,
   connectStoredEnvironment,
   isProcessAlive,
+  makeCompanionAgentSender,
   spawnDetachedCompanion,
 } from "../companion/runtime.ts";
 import {
@@ -146,6 +147,7 @@ const runCommand = Command.make(
           environments: env,
         },
         connectStoredEnvironment,
+        makeCompanionAgentSender,
       ).pipe(
         Effect.provide(companionDaemonPlatformLayer(port)),
         // A daemon that is still shutting down, or a stale socket, holds the port for a moment.

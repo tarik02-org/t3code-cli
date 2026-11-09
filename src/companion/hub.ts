@@ -355,12 +355,30 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
       return false;
     }
     const environment = yield* environments.resolve(subscriber.environment);
-    yield* environment.application.sendThread({
-      threadId: subscriber.threadId,
-      message: formatDigest(pending),
-      mode: first.priority === "urgent" ? "steer" : "auto",
-      author: { kind: "agent" },
+    const message = formatDigest(pending);
+    const mode = first.priority === "urgent" ? "steer" : "auto";
+    // Through T3 Code's MCP the digest shows as from an agent; a websocket send shows as the user's.
+    const asAgent = yield* Option.match(environment.agentSender, {
+      onNone: () => Effect.succeed(false),
+      onSome: (sender) =>
+        sender.send({ threadId: subscriber.threadId, message, mode }).pipe(
+          Effect.as(true),
+          Effect.catchCause((cause) =>
+            Effect.logWarning(
+              `agent-marked digest to ${refKey(subscriber)} failed; sending it as a plain message`,
+              cause,
+            ).pipe(Effect.as(false)),
+          ),
+        ),
     });
+    if (!asAgent) {
+      yield* environment.application.sendThread({
+        threadId: subscriber.threadId,
+        message,
+        mode,
+        author: { kind: "agent" },
+      });
+    }
     yield* store.markWoken(pending.map((row) => row.id));
     yield* Effect.logInfo(
       `sent ${first.priority} digest to ${refKey(subscriber)} for inbox ${pending.map((row) => row.id).join(", ")}`,

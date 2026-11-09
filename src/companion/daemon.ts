@@ -19,6 +19,7 @@ import {
   CompanionEnvironments,
   CompanionEnvironmentsLive,
   type ConnectEnvironment,
+  type MakeAgentSender,
 } from "./environments.ts";
 import { CompanionStoreError } from "./error.ts";
 import { CompanionHub, CompanionHubLive, maxWaitSeconds } from "./hub.ts";
@@ -42,9 +43,10 @@ export interface CompanionDaemonOptions {
  * Runs the companion until `POST /shutdown` or interruption. The entry point provides the
  * `HttpServer` that listens on `options.port`, so this module stays platform-neutral.
  */
-export const runCompanionDaemon = Effect.fn("runCompanionDaemon")(function* <E, R>(
+export const runCompanionDaemon = Effect.fn("runCompanionDaemon")(function* <E, R, RA>(
   options: CompanionDaemonOptions,
   connect: ConnectEnvironment<E, R>,
+  makeAgentSender: MakeAgentSender<RA>,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const paths = yield* resolveCompanionPaths();
@@ -65,7 +67,10 @@ export const runCompanionDaemon = Effect.fn("runCompanionDaemon")(function* <E, 
 
   const core = CompanionHubLive.pipe(
     Layer.provideMerge(
-      Layer.mergeAll(CompanionStoreLive, CompanionEnvironmentsLive(connect, options.environments)),
+      Layer.mergeAll(
+        CompanionStoreLive,
+        CompanionEnvironmentsLive(connect, makeAgentSender, options.environments),
+      ),
     ),
     Layer.provide(Layer.succeed(SqlClient.SqlClient, sql)),
   );
