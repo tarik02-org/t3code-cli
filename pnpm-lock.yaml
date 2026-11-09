@@ -91,13 +91,13 @@ importers:
   .:
     dependencies:
       '@effect/platform-node':
-        specifier: 'catalog:'
+        specifier: ^4.1.2
         version: 4.1.2(effect@4.1.2)(redis@6.3.0)
       '@napi-rs/keyring':
         specifier: ^2.1.1
         version: 2.1.1
       effect:
-        specifier: 'catalog:'
+        specifier: ^4.1.2
         version: 4.1.2
       marked:
         specifier: ^15.0.12

@@ -1,6 +1,6 @@
 {
   "name": "t3code-cli",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "description": "CLI for t3code",
   "keywords": [
     "claude",
@@ -117,9 +117,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@effect/platform-node": "catalog:",
+    "@effect/platform-node": "^4.1.2",
     "@napi-rs/keyring": "^2.1.1",
-    "effect": "catalog:",
+    "effect": "^4.1.2",
     "marked": "^15.0.12",
     "marked-terminal": "^7.3.0",
     "string-width": "^8.3.0",

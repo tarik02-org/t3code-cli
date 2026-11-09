@@ -4,9 +4,9 @@ import * as NodeSocket from "@effect/platform-node/NodeSocket";
 
 import { T3CodeRpcLayer } from "../connection/index.ts";
 
-const NodeConnectionPlatformLayer = Layer.mergeAll(
+export const T3CodeNodePlatformLayer = Layer.mergeAll(
   NodeHttpClient.layerUndici,
   NodeSocket.layerWebSocketConstructor,
 );
 
-export const T3CodeNodeRpcLayer = T3CodeRpcLayer.pipe(Layer.provide(NodeConnectionPlatformLayer));
+export const T3CodeNodeRpcLayer = T3CodeRpcLayer.pipe(Layer.provide(T3CodeNodePlatformLayer));

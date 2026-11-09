@@ -34,31 +34,26 @@ export const makeT3RpcLayer: () => Effect.Effect<
   const sessions = yield* T3RpcSessionFactory;
   const parentScope = yield* Scope.Scope;
   const connection = yield* SynchronizedRef.make(Option.none<Connection>());
-
-  // A closed socket leaves the client unusable; forget it so the next call reconnects.
-  const forgetOnClose = (current: Connection) =>
-    current.closed.pipe(
-      Effect.ignore,
-      Effect.andThen(
-        SynchronizedRef.modify(connection, (stored) =>
-          Option.isSome(stored) && stored.value === current
-            ? [true, Option.none<Connection>()]
-            : [false, stored],
-        ),
-      ),
-      Effect.flatMap((forgotten) =>
-        forgotten ? Scope.close(current.scope, Exit.void) : Effect.void,
-      ),
-    );
-
   const openConnection = Effect.fn("T3RpcLive.openConnection")(function* () {
     const scope = yield* Scope.fork(parentScope);
-    const opened = yield* Effect.gen(function* () {
+    return yield* Effect.gen(function* () {
       const prepared = yield* preparedConnectionProvider.get;
       const session = yield* sessions
         .connect(prepared)
         .pipe(Effect.provideService(Scope.Scope, scope));
       yield* session.ready;
+      // Forget a dropped socket so the next call reconnects instead of failing on a dead client.
+      yield* session.closed.pipe(
+        Effect.ignore,
+        Effect.andThen(
+          SynchronizedRef.update(
+            connection,
+            Option.filter((current) => current.scope !== scope),
+          ),
+        ),
+        Effect.andThen(Effect.forkIn(Scope.close(scope, Exit.void), parentScope)),
+        Effect.forkIn(scope),
+      );
       const closed = session.closed.pipe(
         Effect.mapError((cause) => new RpcError({ message: cause.message, cause })),
       );
@@ -68,8 +63,6 @@ export const makeT3RpcLayer: () => Effect.Effect<
       Effect.onError(() => Scope.close(scope, Exit.void)),
       Effect.mapError((error) => new RpcError({ message: error.message, cause: error })),
     );
-    yield* Effect.forkIn(forgetOnClose(opened), parentScope);
-    return opened;
   });
 
   const disconnect = Effect.fn("T3RpcLive.disconnect")(function* () {

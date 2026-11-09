@@ -1,5 +1,16 @@
 # t3code-cli
 
+## 0.19.0
+
+### Minor Changes
+
+- 0543bb4: make t3cli usable as a library: `makeT3CodeClient` builds a per-environment client in the caller's scope, `t3code-cli/contracts` re-exports all upstream contracts, `t3code-cli/node` exports `T3CodeNodePlatformLayer`, more rpc and connection services are exported, and Effect is a caret range so hosts on the same Effect dedupe it
+
+### Patch Changes
+
+- 0543bb4: reconnect on the next call after the server drops the WebSocket, instead of failing on the dead connection
+- 4cae1c7: update to the latest T3 Code main and Effect 4.1.2, so t3cli works against current servers
+
 ## 0.18.0
 
 ### Minor Changes
