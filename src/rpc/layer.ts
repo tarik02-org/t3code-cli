@@ -43,6 +43,18 @@ export const makeT3RpcLayer: () => Effect.Effect<
         .connect(prepared)
         .pipe(Effect.provideService(Scope.Scope, scope));
       yield* session.ready;
+      // Forget a dropped socket so the next call reconnects instead of failing on a dead client.
+      yield* session.closed.pipe(
+        Effect.ignore,
+        Effect.andThen(
+          SynchronizedRef.update(
+            connection,
+            Option.filter((current) => current.scope !== scope),
+          ),
+        ),
+        Effect.andThen(Effect.forkIn(Scope.close(scope, Exit.void), parentScope)),
+        Effect.forkIn(scope),
+      );
       const client: WsClient = session.client;
       return { scope, client } satisfies Connection;
     }).pipe(

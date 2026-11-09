@@ -1,1 +1,1 @@
-export { T3CodeNodeRpcLayer } from "./connection.ts";
+export { T3CodeNodePlatformLayer, T3CodeNodeRpcLayer } from "./connection.ts";
