@@ -92,6 +92,12 @@ export interface InboxSelection {
   readonly ids: ReadonlyArray<number>;
 }
 
+/** Items to resolve: some by id, or the subscriber's open item for one event. */
+export type ResolveInput = {
+  readonly subscriber: ThreadRef;
+  readonly disposition: string | null;
+} & ({ readonly ids: ReadonlyArray<number> } | { readonly eventId: string });
+
 export class CompanionStore extends Context.Service<
   CompanionStore,
   {
@@ -128,9 +134,7 @@ export class CompanionStore extends Context.Service<
     readonly listInbox: (
       query: InboxQuery,
     ) => Effect.Effect<ReadonlyArray<InboxEvent>, CompanionStoreError>;
-    readonly resolve: (
-      input: InboxSelection & { readonly disposition: string | null },
-    ) => Effect.Effect<number, CompanionStoreError>;
+    readonly resolve: (input: ResolveInput) => Effect.Effect<number, CompanionStoreError>;
     readonly snooze: (
       input: InboxSelection & { readonly until: string },
     ) => Effect.Effect<number, CompanionStoreError>;
@@ -147,12 +151,6 @@ export class CompanionStore extends Context.Service<
     /** Subscribers holding an unannounced item that may start a digest. */
     readonly subscribersToWake: () => Effect.Effect<ReadonlyArray<ThreadRef>, CompanionStoreError>;
     readonly markWoken: (ids: ReadonlyArray<number>) => Effect.Effect<void, CompanionStoreError>;
-    /** Resolves the subscriber's open item for one event, if there is one. */
-    readonly resolveEvent: (input: {
-      readonly subscriber: ThreadRef;
-      readonly eventId: string;
-      readonly disposition: string;
-    }) => Effect.Effect<number, CompanionStoreError>;
     /** Rewrites an item's event, for a digest that refreshed it from the source's current state. */
     readonly updateEvent: (
       id: number,
@@ -323,6 +321,11 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
       Semaphore.withPermits(writing, 1),
     );
 
+  const ofSubscriber = (ref: ThreadRef) =>
+    sql`subscriber_env = ${ref.environment} AND subscriber_thread = ${ref.threadId}`;
+  // Open and never announced: what digests still owe the subscriber.
+  const unannounced = sql`woken_at IS NULL AND resolved_at IS NULL AND snoozed_until IS NULL`;
+
   const upsertSubscription = Effect.fn("CompanionStore.upsertSubscription")(
     function* (input: SubscriptionInput) {
       const createdAt = yield* nowIso;
@@ -333,8 +336,7 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
           Effect.gen(function* () {
             const [existing] = yield* sql<{ readonly id: number }>`
               SELECT id FROM subscriptions
-              WHERE subscriber_env = ${input.subscriber.environment}
-                AND subscriber_thread = ${input.subscriber.threadId}
+              WHERE ${ofSubscriber(input.subscriber)}
                 AND source_env = ${input.source.environment}
                 AND source_thread IS ${input.source.threadId}
                 AND source_project IS ${input.source.projectId}
@@ -388,9 +390,7 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
       }
       const rows = yield* writeSubscriptions(sql`
         DELETE FROM subscriptions
-        WHERE subscriber_env = ${input.subscriber.environment}
-          AND subscriber_thread = ${input.subscriber.threadId}
-          AND ${sql.in("id", input.ids)}
+        WHERE ${ofSubscriber(input.subscriber)} AND ${sql.in("id", input.ids)}
         RETURNING id
       `);
       return rows.length;
@@ -407,21 +407,14 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
       if (input.ids.length === 0) {
         return 0;
       }
-      const rows = yield* writeSubscriptions(
-        input.subscriber === undefined
-          ? sql`
-              UPDATE subscriptions SET armed = ${input.armed ? 1 : 0}
-              WHERE ${sql.in("id", input.ids)}
-              RETURNING id
-            `
-          : sql`
-              UPDATE subscriptions SET armed = ${input.armed ? 1 : 0}
-              WHERE subscriber_env = ${input.subscriber.environment}
-                AND subscriber_thread = ${input.subscriber.threadId}
-                AND ${sql.in("id", input.ids)}
-              RETURNING id
-            `,
-      );
+      const rows = yield* writeSubscriptions(sql`
+        UPDATE subscriptions SET armed = ${input.armed ? 1 : 0}
+        WHERE ${sql.and([
+          sql.in("id", input.ids),
+          ...(input.subscriber === undefined ? [] : [ofSubscriber(input.subscriber)]),
+        ])}
+        RETURNING id
+      `);
       return rows.length;
     },
     Effect.mapError(storeError("setArmed")),
@@ -464,14 +457,10 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
 
   const deliveredTo = Effect.fn("CompanionStore.deliveredTo")(
     function* (eventId: string) {
-      const rows = yield* sql<{
-        readonly subscriber_env: string;
-        readonly subscriber_thread: string;
-      }>`SELECT subscriber_env, subscriber_thread FROM inbox WHERE event_id = ${eventId}`;
-      return rows.map((row) => ({
-        environment: row.subscriber_env,
-        threadId: row.subscriber_thread,
-      }));
+      return yield* sql<ThreadRef>`
+      SELECT subscriber_env AS environment, subscriber_thread AS "threadId"
+      FROM inbox WHERE event_id = ${eventId}
+    `;
     },
     Effect.mapError(storeError("deliveredTo")),
   );
@@ -480,8 +469,7 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
     function* (query: InboxQuery) {
       const rows = yield* sql`
         SELECT * FROM inbox
-        WHERE subscriber_env = ${query.subscriber.environment}
-          AND subscriber_thread = ${query.subscriber.threadId}
+        WHERE ${ofSubscriber(query.subscriber)}
           AND id > ${query.afterId}
           AND (${query.includeResolved ? 1 : 0} = 1 OR (resolved_at IS NULL AND snoozed_until IS NULL))
         ORDER BY id
@@ -493,18 +481,17 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
   );
 
   const resolve = Effect.fn("CompanionStore.resolve")(
-    function* (input: InboxSelection & { readonly disposition: string | null }) {
-      if (input.ids.length === 0) {
+    function* (input: ResolveInput) {
+      if ("ids" in input && input.ids.length === 0) {
         return 0;
       }
       const resolvedAt = yield* nowIso;
       const rows = yield* sql`
         UPDATE inbox SET resolved_at = ${resolvedAt}, disposition = ${input.disposition},
           snoozed_until = NULL
-        WHERE subscriber_env = ${input.subscriber.environment}
-          AND subscriber_thread = ${input.subscriber.threadId}
+        WHERE ${ofSubscriber(input.subscriber)}
           AND resolved_at IS NULL
-          AND ${sql.in("id", input.ids)}
+          AND ${"ids" in input ? sql.in("id", input.ids) : sql`event_id = ${input.eventId}`}
         RETURNING id
       `;
       return rows.length;
@@ -519,8 +506,7 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
       }
       const rows = yield* sql`
         UPDATE inbox SET snoozed_until = ${input.until}
-        WHERE subscriber_env = ${input.subscriber.environment}
-          AND subscriber_thread = ${input.subscriber.threadId}
+        WHERE ${ofSubscriber(input.subscriber)}
           AND resolved_at IS NULL
           AND ${sql.in("id", input.ids)}
         RETURNING id
@@ -561,9 +547,7 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
     function* (subscriber: ThreadRef) {
       const rows = yield* sql`
         SELECT * FROM inbox
-        WHERE subscriber_env = ${subscriber.environment}
-          AND subscriber_thread = ${subscriber.threadId}
-          AND wake = 1 AND woken_at IS NULL AND resolved_at IS NULL AND snoozed_until IS NULL
+        WHERE ${ofSubscriber(subscriber)} AND wake = 1 AND ${unannounced}
         ORDER BY id
       `;
       return (yield* decodeInboxRows(rows)).map(toInboxEvent);
@@ -573,18 +557,10 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
 
   const subscribersToWake = Effect.fn("CompanionStore.subscribersToWake")(
     function* () {
-      const rows = yield* sql<{
-        readonly subscriber_env: string;
-        readonly subscriber_thread: string;
-      }>`
-        SELECT DISTINCT subscriber_env, subscriber_thread FROM inbox
-        WHERE wake = 1 AND passive = 0
-          AND woken_at IS NULL AND resolved_at IS NULL AND snoozed_until IS NULL
-      `;
-      return rows.map((row) => ({
-        environment: row.subscriber_env,
-        threadId: row.subscriber_thread,
-      }));
+      return yield* sql<ThreadRef>`
+      SELECT DISTINCT subscriber_env AS environment, subscriber_thread AS "threadId"
+      FROM inbox WHERE wake = 1 AND passive = 0 AND ${unannounced}
+    `;
     },
     Effect.mapError(storeError("subscribersToWake")),
   );
@@ -598,27 +574,6 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
       yield* sql`UPDATE inbox SET woken_at = ${wokenAt} WHERE ${sql.in("id", ids)}`;
     },
     Effect.mapError(storeError("markWoken")),
-  );
-
-  const resolveEvent = Effect.fn("CompanionStore.resolveEvent")(
-    function* (input: {
-      readonly subscriber: ThreadRef;
-      readonly eventId: string;
-      readonly disposition: string;
-    }) {
-      const resolvedAt = yield* nowIso;
-      const rows = yield* sql`
-        UPDATE inbox SET resolved_at = ${resolvedAt}, disposition = ${input.disposition},
-          snoozed_until = NULL
-        WHERE subscriber_env = ${input.subscriber.environment}
-          AND subscriber_thread = ${input.subscriber.threadId}
-          AND event_id = ${input.eventId}
-          AND resolved_at IS NULL
-        RETURNING id
-      `;
-      return rows.length;
-    },
-    Effect.mapError(storeError("resolveEvent")),
   );
 
   const updateEvent = Effect.fn("CompanionStore.updateEvent")(
@@ -637,8 +592,7 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
     }) {
       const rows = yield* sql`
         SELECT 1 FROM inbox
-        WHERE subscriber_env = ${input.subscriber.environment}
-          AND subscriber_thread = ${input.subscriber.threadId}
+        WHERE ${ofSubscriber(input.subscriber)}
           AND source_thread = ${input.threadId}
           AND event_id <> ${input.exceptEventId}
           AND json_extract(event, '$.lastMessage') = ${input.message}
@@ -696,7 +650,6 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
     pendingDigest,
     subscribersToWake,
     markWoken,
-    resolveEvent,
     updateEvent,
     hasDeliveredMessage,
     loadChecks,

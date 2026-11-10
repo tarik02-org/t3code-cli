@@ -6,12 +6,21 @@ import {
   type ThreadEvent,
 } from "./schema.ts";
 
-const takesThreadEvent = (subscription: Subscription, event: ThreadEvent) =>
+const hasSource = (
+  subscription: Subscription,
+  environment: string,
+  threadId: string | null,
+  projectId: string | null,
+) =>
   // A follow subscription only creates thread subscriptions; it takes no events itself.
   !subscription.follow &&
+  subscription.source.environment === environment &&
   (subscription.source.threadId === null
-    ? subscription.source.projectId === event.projectId
-    : subscription.source.threadId === event.threadId) &&
+    ? subscription.source.projectId === projectId
+    : subscription.source.threadId === threadId);
+
+const takesThreadEvent = (subscription: Subscription, event: ThreadEvent) =>
+  hasSource(subscription, event.environment, event.threadId, event.projectId) &&
   subscription.events.includes(event.kind) &&
   // A thread never wakes itself.
   !(
@@ -73,13 +82,8 @@ export const relevance = (
   threadId: string,
   projectId: string,
 ): Relevance => ({
-  source: subscriptions.some(
-    (subscription) =>
-      !subscription.follow &&
-      subscription.source.environment === environment &&
-      (subscription.source.threadId === null
-        ? subscription.source.projectId === projectId
-        : subscription.source.threadId === threadId),
+  source: subscriptions.some((subscription) =>
+    hasSource(subscription, environment, threadId, projectId),
   ),
   subscriber: subscriptions.some(
     (subscription) =>

@@ -29,10 +29,10 @@ const windowsTaskName = "t3cli companion";
 const systemdUnit = "t3cli-companion.service";
 const launchdLabel = "dev.t3cli.companion";
 
-const quotePowerShell = (value: string) => `'${value.replace(/'/g, "''")}'`;
+export const quotePowerShell = (value: string) => `'${value.replace(/'/g, "''")}'`;
 
 // CommandLineToArgvW quoting: backslashes double only before a quote or the closing quote.
-const quoteWindowsArg = (arg: string) =>
+export const quoteWindowsArg = (arg: string) =>
   `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`;
 
 const quoteSystemdArg = (arg: string) =>

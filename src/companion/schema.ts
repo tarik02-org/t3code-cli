@@ -11,15 +11,7 @@ export const CompanionEventKind = Schema.Literals([
 ]);
 export type CompanionEventKind = typeof CompanionEventKind.Type;
 
-export const allCompanionEventKinds: ReadonlyArray<CompanionEventKind> = [
-  "idle",
-  "failed",
-  "needs-input",
-  "settled",
-  "pr-checks",
-  "env-down",
-  "env-up",
-];
+export const allCompanionEventKinds = CompanionEventKind.literals;
 
 /** Environment events reach every subscription on that environment, whatever it asked for. */
 export const environmentEventKinds: ReadonlyArray<CompanionEventKind> = ["env-down", "env-up"];

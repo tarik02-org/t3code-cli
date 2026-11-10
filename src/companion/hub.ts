@@ -9,6 +9,7 @@ import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 import { deliveryPriority, itemWakes, relevance, subscriptionTakes } from "./delivery.ts";
 import { makeDigests } from "./digest.ts";
@@ -104,13 +105,16 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     Ref.get(threads).pipe(Effect.map((all) => all.get(threadRefKey(ref))));
   const digests = yield* makeDigests(latestShell);
 
-  /** Resolves env aliases to the canonical name the store keys on. */
-  const normalizeRef = Effect.fn("CompanionHub.normalizeRef")(function* (ref: ThreadRefInput) {
-    const environment = yield* environments
-      .resolve(ref.environment)
+  const environmentOf = (name: string | undefined) =>
+    environments
+      .resolve(name)
       .pipe(
         Effect.mapError((error) => new CompanionInvalidRequestError({ message: error.message })),
       );
+
+  /** Resolves env aliases to the canonical name the store keys on. */
+  const normalizeRef = Effect.fn("CompanionHub.normalizeRef")(function* (ref: ThreadRefInput) {
+    const environment = yield* environmentOf(ref.environment);
     if (ref.threadId.length === 0) {
       return yield* new CompanionInvalidRequestError({ message: "thread id must not be empty" });
     }
@@ -186,7 +190,7 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
       `inbox ${row.id}: ${event.eventId} -> ${threadRefKey(row.subscriber)} (${row.priority})`,
     );
     if (event.kind === "idle" && !event.pause) {
-      yield* store.resolveEvent({
+      yield* store.resolve({
         subscriber: subscription.subscriber,
         eventId: `${event.eventId}/pause`,
         disposition: "auto: superseded, the run's background work finished",
@@ -292,11 +296,7 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
         message: "follow needs a project source: it follows your new threads in that project",
       });
     }
-    const sourceEnvironment = yield* environments
-      .resolve(input.source.environment)
-      .pipe(
-        Effect.mapError((error) => new CompanionInvalidRequestError({ message: error.message })),
-      );
+    const sourceEnvironment = yield* environmentOf(input.source.environment);
     const source: SubscriptionSource = {
       environment: sourceEnvironment.name,
       threadId: hasThread ? (input.source.threadId ?? null) : null,
@@ -397,15 +397,12 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     if (existing.length > 0) {
       return existing;
     }
-    const next = yield* Effect.gen(function* () {
-      while (true) {
-        const row = yield* PubSub.take(live);
-        if (wanted(row)) {
-          return [row];
-        }
-      }
-    }).pipe(Effect.timeoutOption(timeout));
-    return Option.getOrElse(next, () => []);
+    const next = yield* Stream.fromSubscription(live).pipe(
+      Stream.filter(wanted),
+      Stream.runHead,
+      Effect.timeoutOption(timeout),
+    );
+    return Option.toArray(Option.flatten(next));
   }, Effect.scoped);
 
   const openWork = Effect.fn("CompanionHub.openWork")(function* (input: SubscriberRequest) {

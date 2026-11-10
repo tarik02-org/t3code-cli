@@ -322,34 +322,26 @@ const CompanionToolkitHandlers = CompanionToolkit.toLayer(
           asToolError("open_work"),
         ),
       thread_send: Effect.fn("CompanionMcp.threadSend")(function* (input) {
-        const environment = yield* environments
-          .resolve(input.environment)
-          .pipe(asToolError("thread_send"));
+        const environment = yield* environments.resolve(input.environment);
         // Subscribe first so the run this message starts cannot finish unobserved.
         const subscribed = yield* subscribeTo(input, {
           environment: environment.name,
           threadId: input.threadId,
-        }).pipe(asToolError("thread_send"));
-        yield* environment.application
-          .sendThread({
-            threadId: input.threadId,
-            message: input.message,
-            author: { kind: "agent", senderThreadId: input.callerThreadId },
-          })
-          .pipe(asToolError("thread_send"));
+        });
+        yield* environment.application.sendThread({
+          threadId: input.threadId,
+          message: input.message,
+          author: { kind: "agent", senderThreadId: input.callerThreadId },
+        });
         return { threadId: input.threadId, ...subscribed };
-      }),
+      }, asToolError("thread_send")),
       thread_start: Effect.fn("CompanionMcp.threadStart")(function* (input) {
-        const environment = yield* environments
-          .resolve(input.environment)
-          .pipe(asToolError("thread_start"));
-        const started = yield* environment.application
-          .startThread({
-            message: input.message,
-            ...(input.project === undefined ? {} : { projectRef: input.project }),
-            ...(input.title === undefined ? {} : { title: input.title }),
-          })
-          .pipe(asToolError("thread_start"));
+        const environment = yield* environments.resolve(input.environment);
+        const started = yield* environment.application.startThread({
+          message: input.message,
+          ...(input.project === undefined ? {} : { projectRef: input.project }),
+          ...(input.title === undefined ? {} : { title: input.title }),
+        });
         if (input.subscribe === false) {
           return { threadId: started.threadId, subscription: null, source: null };
         }
@@ -357,9 +349,9 @@ const CompanionToolkitHandlers = CompanionToolkit.toLayer(
         const subscribed = yield* subscribeTo(input, {
           environment: environment.name,
           threadId: started.threadId,
-        }).pipe(asToolError("thread_start"));
+        });
         return { threadId: started.threadId, ...subscribed };
-      }),
+      }, asToolError("thread_start")),
     });
   }),
 );

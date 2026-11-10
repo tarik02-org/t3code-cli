@@ -16,6 +16,7 @@ import {
   CompanionEnvironments,
   environmentKey,
 } from "./environments.ts";
+import { type ConnectionReport, type ConnectionSignal, stepConnection } from "./connection.ts";
 import { CompanionHub } from "./hub.ts";
 import type { ThreadEvent } from "./schema.ts";
 
@@ -84,68 +85,57 @@ export const runCompanionWatcher = Effect.fn("runCompanionWatcher")(function* ()
   const watchEnvironment = Effect.fn("CompanionWatcher.watchEnvironment")(function* (
     environment: CompanionEnvironment,
   ) {
-    // Starts as an outage, so an environment that never connects is reported too.
-    const outage = yield* Ref.make<{ readonly sinceMs: number; reported: boolean } | null>({
-      sinceMs: yield* Clock.currentTimeMillis,
-      reported: false,
-    });
+    const transition = (signal: ConnectionSignal) =>
+      Clock.currentTimeMillis.pipe(
+        Effect.flatMap((nowMs) =>
+          Ref.modify(environment.connection, (state) => stepConnection(state, signal, nowMs)),
+        ),
+      );
 
-    const reportDown = Effect.gen(function* () {
-      const current = yield* Ref.get(outage);
-      if (current === null || current.reported) {
+    const announce = Effect.fn("CompanionWatcher.announce")(function* (
+      report: ConnectionReport | null,
+    ) {
+      if (report === null) {
         return;
       }
       const nowMs = yield* Clock.currentTimeMillis;
-      const status = yield* Ref.get(environment.status);
-      yield* Ref.set(outage, { sinceMs: current.sinceMs, reported: true });
-      yield* Effect.logWarning(`environment ${environment.name} is down`);
+      const seconds = Math.round((nowMs - report.sinceMs) / 1000);
+      const down = report.kind === "env-down";
+      yield* down
+        ? Effect.logWarning(`environment ${environment.name} is down`)
+        : Effect.logInfo(`environment ${environment.name} is back after ${seconds}s`);
       yield* hub.publish(
         environmentEvent(
           environment,
-          "env-down",
-          current.sinceMs,
+          report.kind,
+          report.sinceMs,
           nowMs,
-          `environment ${environment.name} unreachable${status.lastError === null ? "" : `: ${status.lastError}`}`,
+          down
+            ? `environment ${environment.name} unreachable${report.lastError === null ? "" : `: ${report.lastError}`}`
+            : `environment ${environment.name} reachable again after ${seconds}s`,
         ),
       );
     });
 
-    const markDown = Effect.gen(function* () {
-      const nowMs = yield* Clock.currentTimeMillis;
-      yield* Ref.update(outage, (current) => current ?? { sinceMs: nowMs, reported: false });
-      yield* FiberMap.run(
-        downTimers,
-        environment.name,
-        Effect.sleep(environmentDownGrace).pipe(Effect.andThen(reportDown)),
-        { onlyIfMissing: true },
-      );
-    });
+    const startGrace = FiberMap.run(
+      downTimers,
+      environment.name,
+      Effect.sleep(environmentDownGrace).pipe(
+        Effect.andThen(transition({ kind: "grace-elapsed" })),
+        Effect.flatMap(announce),
+      ),
+      { onlyIfMissing: true },
+    );
 
-    const markUp = Effect.gen(function* () {
-      yield* FiberMap.remove(downTimers, environment.name);
-      const current = yield* Ref.getAndSet(outage, null);
-      yield* Ref.set(environment.status, { state: "connected", lastError: null });
-      if (current === null || !current.reported) {
-        return;
-      }
-      const nowMs = yield* Clock.currentTimeMillis;
-      const seconds = Math.round((nowMs - current.sinceMs) / 1000);
-      yield* Effect.logInfo(`environment ${environment.name} is back after ${seconds}s`);
-      yield* hub.publish(
-        environmentEvent(
-          environment,
-          "env-up",
-          current.sinceMs,
-          nowMs,
-          `environment ${environment.name} reachable again after ${seconds}s`,
-        ),
-      );
-    });
+    const connected = FiberMap.remove(downTimers, environment.name).pipe(
+      Effect.andThen(transition({ kind: "connected" })),
+      Effect.flatMap(announce),
+    );
 
     const handleItem = (item: OrchestrationV2ShellStreamItem) => {
       switch (item.kind) {
         case "snapshot":
-          return markUp.pipe(
+          return connected.pipe(
             Effect.andThen(
               Effect.forEach(item.snapshot.threads, (shell) => processThread(environment, shell), {
                 discard: true,
@@ -166,24 +156,29 @@ export const runCompanionWatcher = Effect.fn("runCompanionWatcher")(function* ()
       return Effect.void;
     };
 
-    yield* markDown;
+    yield* startGrace;
     return yield* environment.orchestration.watchShell().pipe(
       Stream.runForEach(handleItem),
       Effect.scoped,
-      Effect.catchCause((cause) =>
-        Ref.set(environment.status, {
-          state: "disconnected",
-          // A closed socket tears its connection scope down, which surfaces as an interrupt.
-          lastError: Cause.hasInterruptsOnly(cause)
-            ? "connection closed"
-            : (Cause.pretty(cause).split("\n")[0] ?? "disconnected"),
-        }).pipe(
-          Effect.andThen(
-            Effect.logWarning(`environment ${environment.name} stream ended; reconnecting`, cause),
+      Effect.matchCauseEffect({
+        onSuccess: () => transition({ kind: "dropped", error: "connection closed" }),
+        onFailure: (cause) =>
+          transition({
+            kind: "dropped",
+            // A closed socket tears its connection scope down, which surfaces as an interrupt.
+            error: Cause.hasInterruptsOnly(cause)
+              ? "connection closed"
+              : (Cause.pretty(cause).split("\n")[0] ?? "disconnected"),
+          }).pipe(
+            Effect.andThen(
+              Effect.logWarning(
+                `environment ${environment.name} stream ended; reconnecting`,
+                cause,
+              ),
+            ),
           ),
-        ),
-      ),
-      Effect.andThen(markDown),
+      }),
+      Effect.andThen(startGrace),
       Effect.andThen(Effect.sleep(reconnectDelay)),
       Effect.forever,
       // A removed environment must not report an outage after it is gone.

@@ -1,3 +1,4 @@
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -14,7 +15,8 @@ import { T3Config } from "../config/config.ts";
 import type { ConfigError } from "../config/error.ts";
 import { T3Orchestration } from "../orchestration/service.ts";
 import type { AgentSender } from "./agent-sender.ts";
-import { CompanionEnvironmentError, CompanionUnknownEnvironmentError } from "./error.ts";
+import { type Connection, connectionStatus, initialConnection } from "./connection.ts";
+import { CompanionUnknownEnvironmentError } from "./error.ts";
 import type { CompanionEnvironmentStatus } from "./schema.ts";
 
 export interface CompanionEnvironment {
@@ -24,7 +26,8 @@ export interface CompanionEnvironment {
   readonly url: string;
   readonly orchestration: T3Orchestration["Service"];
   readonly application: T3Application["Service"];
-  readonly status: Ref.Ref<Omit<CompanionEnvironmentStatus, "name" | "aliases" | "url">>;
+  /** Written only by the watcher, through `stepConnection`. */
+  readonly connection: Ref.Ref<Connection>;
   /** Owns the environment's connection; closed when the environment leaves the config. */
   readonly scope: Scope.Closeable;
   /** Sends digests as agent messages; none where the companion holds no MCP client session. */
@@ -96,16 +99,8 @@ export const makeCompanionEnvironments = Effect.fn("makeCompanionEnvironments")(
       scope,
     ).pipe(
       Effect.provide(context),
-      Effect.mapError(
-        (cause) =>
-          new CompanionEnvironmentError({
-            message: `failed to prepare environment ${name}`,
-            environment: name,
-            cause,
-          }),
-      ),
       Effect.tapError((error) =>
-        Effect.logWarning(error.message, error.cause).pipe(
+        Effect.logWarning(`failed to prepare environment ${name}`, error).pipe(
           Effect.andThen(Scope.close(scope, Exit.void)),
         ),
       ),
@@ -120,10 +115,7 @@ export const makeCompanionEnvironments = Effect.fn("makeCompanionEnvironments")(
       url,
       orchestration: Context.get(built.value, T3Orchestration),
       application: Context.get(built.value, T3Application),
-      status: yield* Ref.make<Omit<CompanionEnvironmentStatus, "name" | "aliases" | "url">>({
-        state: "connecting",
-        lastError: null,
-      }),
+      connection: yield* Ref.make(initialConnection(yield* Clock.currentTimeMillis)),
       scope,
       agentSender: yield* makeAgentSender({ name, url, local }).pipe(Effect.provide(context)),
     });
@@ -208,15 +200,7 @@ export const makeCompanionEnvironments = Effect.fn("makeCompanionEnvironments")(
   const statuses = all.pipe(
     Effect.flatMap((current) =>
       Effect.forEach(current, (env) =>
-        Ref.get(env.status).pipe(
-          Effect.map((status) => ({
-            name: env.name,
-            aliases: env.aliases,
-            url: env.url,
-            state: status.state,
-            lastError: status.lastError,
-          })),
-        ),
+        Ref.get(env.connection).pipe(Effect.map((connection) => connectionStatus(env, connection))),
       ),
     ),
   );

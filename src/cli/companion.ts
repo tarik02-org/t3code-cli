@@ -44,6 +44,16 @@ const envsFlag = Flag.String("env").pipe(
   Flag.atLeast(0),
 );
 
+const runArguments = (port: number, env: ReadonlyArray<string>, logFile: string) => [
+  "companion",
+  "run",
+  "--port",
+  String(port),
+  "--log-file",
+  logFile,
+  ...env.flatMap((name) => ["--env", name]),
+];
+
 const startupRetry = { schedule: Schedule.spaced(Duration.millis(250)), times: 60 };
 
 const withHttp = Effect.provide(FetchHttpClient.layer);
@@ -145,15 +155,7 @@ const startCommand = Command.make(
       }
       const paths = yield* resolveCompanionPaths();
       yield* (yield* FileSystem.FileSystem).makeDirectory(paths.stateDir, { recursive: true });
-      yield* spawnDetachedCompanion([
-        "companion",
-        "run",
-        "--port",
-        String(port),
-        "--log-file",
-        paths.logFile,
-        ...env.flatMap((name) => ["--env", name]),
-      ]);
+      yield* spawnDetachedCompanion(runArguments(port, env, paths.logFile));
       const health = yield* runningHealth.pipe(
         Effect.retry(startupRetry),
         Effect.mapError(
@@ -230,15 +232,7 @@ const installCommand = Command.make(
       const t3CliEnv = yield* loadT3CliEnv;
       const paths = yield* resolveCompanionPaths();
       yield* (yield* FileSystem.FileSystem).makeDirectory(paths.stateDir, { recursive: true });
-      const target = yield* companionAutostartTarget([
-        "companion",
-        "run",
-        "--port",
-        String(port),
-        "--log-file",
-        paths.logFile,
-        ...env.flatMap((name) => ["--env", name]),
-      ]);
+      const target = yield* companionAutostartTarget(runArguments(port, env, paths.logFile));
       const result = yield* installAutostart(target);
       if (resolveOutputFormat(format, cliRuntime, t3CliEnv, "json") === "json") {
         return yield* output.printJson({ ...result, command: target.command });

@@ -17,15 +17,6 @@ export class CompanionUnknownEnvironmentError extends Schema.TaggedError<Compani
   },
 ) {}
 
-export class CompanionEnvironmentError extends Schema.TaggedError<CompanionEnvironmentError>()(
-  "CompanionEnvironmentError",
-  {
-    message: Schema.String,
-    environment: Schema.String,
-    cause: Schema.Defect(),
-  },
-) {}
-
 export class CompanionInvalidRequestError extends Schema.TaggedError<CompanionInvalidRequestError>()(
   "CompanionInvalidRequestError",
   {

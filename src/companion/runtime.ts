@@ -15,7 +15,12 @@ import { T3ConfigSelection } from "../config/selection/service.ts";
 import { BaseAppLayer, T3LocalAuthOriginLayer, T3LocalAuthTokenLayer } from "../runtime/layer.ts";
 import { NodeSqlClientFactoryLive } from "../sql/node-sqlite-client.ts";
 import { CompanionClientError } from "./error.ts";
-import type { AutostartPlatform, AutostartTarget } from "./autostart.ts";
+import {
+  type AutostartPlatform,
+  type AutostartTarget,
+  quotePowerShell,
+  quoteWindowsArg,
+} from "./autostart.ts";
 import { type AgentSender, makeLocalAgentSender } from "./agent-sender.ts";
 import type { ConnectEnvironment } from "./environments.ts";
 
@@ -63,11 +68,13 @@ export const makeCompanionAgentSender = (environment: {
 
 export const companionProcessId = () => process.pid;
 
-// CommandLineToArgvW quoting: backslashes double only before a quote or the closing quote.
-const quoteWindowsArg = (arg: string) =>
-  `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`;
-
-const quotePowerShell = (value: string) => `'${value.replace(/'/g, "''")}'`;
+const entryScript = () => {
+  const entry = process.argv[1];
+  if (entry === undefined) {
+    throw new Error("cannot locate the t3cli entry script");
+  }
+  return entry;
+};
 
 /**
  * Re-runs this CLI as `companion run` in the background; the daemon writes its own log file.
@@ -78,10 +85,7 @@ const quotePowerShell = (value: string) => `'${value.replace(/'/g, "''")}'`;
 export const spawnDetachedCompanion = (args: ReadonlyArray<string>) =>
   Effect.try({
     try: () => {
-      const entry = process.argv[1];
-      if (entry === undefined) {
-        throw new Error("cannot locate the t3cli entry script");
-      }
+      const entry = entryScript();
       if (process.platform === "win32") {
         const argumentList = [entry, ...args].map(quoteWindowsArg).join(" ");
         const result = spawnSync(
@@ -116,10 +120,6 @@ export const spawnDetachedCompanion = (args: ReadonlyArray<string>) =>
 export const companionAutostartTarget = (args: ReadonlyArray<string>) =>
   Effect.try({
     try: (): AutostartTarget => {
-      const entry = process.argv[1];
-      if (entry === undefined) {
-        throw new Error("cannot locate the t3cli entry script");
-      }
       const platform: AutostartPlatform | undefined =
         process.platform === "win32"
           ? "windows"
@@ -135,7 +135,7 @@ export const companionAutostartTarget = (args: ReadonlyArray<string>) =>
         platform,
         homeDir: homedir(),
         uid: process.getuid?.() ?? 0,
-        command: [process.execPath, entry, ...args],
+        command: [process.execPath, entryScript(), ...args],
       };
     },
     catch: (cause) =>
