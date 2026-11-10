@@ -38,6 +38,8 @@ export const ThreadRef = Schema.Struct({
 });
 export type ThreadRef = typeof ThreadRef.Type;
 
+export const threadRefKey = (ref: ThreadRef) => `${ref.environment}/${ref.threadId}`;
+
 /** A whole project when `threadId` is null, otherwise one thread. */
 export const SubscriptionSource = Schema.Struct({
   environment: Schema.String,
@@ -86,7 +88,19 @@ export const ThreadStatus = Schema.Struct({
   threadId: Schema.String,
   projectId: Schema.String,
   title: Schema.String,
-  state: Schema.Literals(["running", "idle", "failed", "needs-input", "settled", "archived"]),
+  /**
+   * `paused`: the run ended but the thread's own background work is still pending, like an idle
+   * event marked `pause`.
+   */
+  state: Schema.Literals([
+    "running",
+    "paused",
+    "idle",
+    "failed",
+    "needs-input",
+    "settled",
+    "archived",
+  ]),
   /** The shell's run status: `idle` or the latest run's status. */
   latestRunStatus: Schema.String,
   /** Background work the thread is waiting on, such as a command, monitor, or PR watch. */
@@ -126,8 +140,8 @@ export const InboxEvent = Schema.Struct({
   subscriber: ThreadRef,
   event: ThreadEvent,
   priority: DeliveryPriority,
-  /** May start a digest; a passive item only rides along with one. */
-  wakes: Schema.Boolean,
+  /** Never starts a digest; on a wake subscription it rides along in one another item starts. */
+  passive: Schema.Boolean,
   deliveredAt: Schema.String,
   /** While set, the item is hidden; it comes back once this passes and the source is idle. */
   snoozedUntil: Schema.NullOr(Schema.String),
@@ -147,6 +161,76 @@ export const OpenWorkItem = Schema.Struct({
   readyToMark: Schema.Array(PullRequestSummary),
 });
 export type OpenWorkItem = typeof OpenWorkItem.Type;
+
+/** A thread as a caller names it; the daemon resolves environment aliases and the default. */
+export const ThreadRefInput = Schema.Struct({
+  environment: Schema.optional(Schema.String),
+  threadId: Schema.String,
+});
+export type ThreadRefInput = typeof ThreadRefInput.Type;
+
+export const SubscriberRequest = Schema.Struct({ subscriber: ThreadRefInput });
+export type SubscriberRequest = typeof SubscriberRequest.Type;
+
+export const SubscribeRequest = Schema.Struct({
+  subscriber: ThreadRefInput,
+  /** Exactly one of a thread or a project. */
+  source: Schema.Struct({
+    environment: Schema.optional(Schema.String),
+    threadId: Schema.optional(Schema.String),
+    projectId: Schema.optional(Schema.String),
+  }),
+  events: Schema.Array(CompanionEventKind),
+  wake: Schema.Boolean,
+  priorities: Schema.Record(Schema.String, DeliveryPriority),
+  /** With a project source: follow the subscriber's own new threads in it instead. */
+  follow: Schema.optional(Schema.Boolean),
+});
+export type SubscribeRequest = typeof SubscribeRequest.Type;
+
+export const SubscribeResult = Schema.Struct({
+  subscription: Subscription,
+  /** The source thread's state when the subscription was made; null for a project or unknown thread. */
+  source: Schema.NullOr(ThreadStatus),
+});
+export type SubscribeResult = typeof SubscribeResult.Type;
+
+/** Subscriptions or inbox items of one subscriber, by id. */
+export const SelectionRequest = Schema.Struct({
+  subscriber: ThreadRefInput,
+  ids: Schema.Array(Schema.Int),
+});
+export type SelectionRequest = typeof SelectionRequest.Type;
+
+export const InboxListRequest = Schema.Struct({
+  subscriber: ThreadRefInput,
+  /** Also lists resolved and snoozed items. */
+  includeResolved: Schema.Boolean,
+  afterId: Schema.Int,
+  limit: Schema.Int,
+});
+export type InboxListRequest = typeof InboxListRequest.Type;
+
+export const ResolveRequest = Schema.Struct({
+  ...SelectionRequest.fields,
+  disposition: Schema.NullOr(Schema.String),
+});
+export type ResolveRequest = typeof ResolveRequest.Type;
+
+export const SnoozeRequest = Schema.Struct({
+  ...SelectionRequest.fields,
+  minSeconds: Schema.Int,
+});
+export type SnoozeRequest = typeof SnoozeRequest.Type;
+
+export const WaitRequest = Schema.Struct({
+  subscriber: ThreadRefInput,
+  afterId: Schema.Int,
+  /** Kinds to wait for; empty means any. */
+  events: Schema.Array(CompanionEventKind),
+  timeoutSeconds: Schema.Int,
+});
+export type WaitRequest = typeof WaitRequest.Type;
 
 export const CompanionEnvironmentStatus = Schema.Struct({
   name: Schema.String,

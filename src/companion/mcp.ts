@@ -1,4 +1,3 @@
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -9,14 +8,15 @@ import * as Toolkit from "effect/ai/Toolkit";
 
 import { CompanionEnvironments } from "./environments.ts";
 import { CompanionToolError } from "./error.ts";
-import { CompanionHub, maxWaitSeconds, type ThreadRefInput } from "./hub.ts";
-import { SubscribeResult } from "./rpc.ts";
+import { CompanionHub, maxWaitSeconds } from "./hub.ts";
 import {
   CompanionEventKind,
   DeliveryPriority,
   InboxEvent,
   OpenWorkItem,
+  SubscribeResult,
   Subscription,
+  type ThreadRefInput,
   allCompanionEventKinds,
 } from "./schema.ts";
 
@@ -49,7 +49,7 @@ const Ids = Schema.Array(Schema.Int);
 
 const SubscribeTool = Tool.make("subscribe", {
   description:
-    "Subscribe your thread to another thread (or every thread of a project) so its events land in your inbox instead of polling it. Subscribing again to the same source updates and re-arms that subscription. Returns the source's current state; if it already failed, needs input, or finished, that item is in your inbox right away.",
+    "Subscribe your thread to another thread (or every thread of a project) so its events land in your inbox instead of polling it. Subscribing again to the same source updates and re-arms that subscription. Returns the source's current state (paused: its run ended and only its own background work is pending); if it already failed, needs input, or finished, that item is in your inbox right away.",
   parameters: Schema.Struct({
     ...Caller,
     environment: Schema.optional(Schema.String).annotate({
@@ -270,7 +270,7 @@ const CompanionToolkitHandlers = CompanionToolkit.toLayer(
           asToolError("unsubscribe"),
         ),
       subscriptions_list: (input) =>
-        hub.listSubscriptions(callerRef(input)).pipe(
+        hub.listSubscriptions({ subscriber: callerRef(input) }).pipe(
           Effect.map((subscriptions) => ({ subscriptions })),
           asToolError("subscriptions_list"),
         ),
@@ -309,17 +309,15 @@ const CompanionToolkitHandlers = CompanionToolkit.toLayer(
           .wait({
             subscriber: callerRef(input),
             afterId: input.afterId ?? 0,
-            kinds: input.events ?? [],
-            timeout: Duration.seconds(
-              Math.min(Math.max(input.timeoutSeconds ?? 60, 0), maxWaitSeconds),
-            ),
+            events: input.events ?? [],
+            timeoutSeconds: input.timeoutSeconds ?? 60,
           })
           .pipe(
             Effect.map((events) => ({ events, timedOut: events.length === 0 })),
             asToolError("inbox_wait"),
           ),
       open_work: (input) =>
-        hub.openWork(callerRef(input)).pipe(
+        hub.openWork({ subscriber: callerRef(input) }).pipe(
           Effect.map((threads) => ({ threads })),
           asToolError("open_work"),
         ),

@@ -22,7 +22,7 @@ import {
   type MakeAgentSender,
 } from "./environments.ts";
 import { CompanionStoreError } from "./error.ts";
-import { CompanionHub, CompanionHubLive, maxWaitSeconds } from "./hub.ts";
+import { CompanionHub, CompanionHubLive } from "./hub.ts";
 import { CompanionMcpLive, companionMcpPath } from "./mcp.ts";
 import { resolveCompanionPaths } from "./paths.ts";
 import { CompanionRpcs, companionRpcPath } from "./rpc.ts";
@@ -92,20 +92,10 @@ export const runCompanionDaemon = Effect.fn("runCompanionDaemon")(function* <E, 
           ),
         shutdown: () => Deferred.succeed(shutdown, undefined).pipe(Effect.asVoid),
         subscribe: (input) => hub.subscribe(input),
-        arm: (input) => hub.arm(input),
-        unsubscribe: (input) => hub.unsubscribe(input),
-        subscriptions: (input) => hub.listSubscriptions(input.subscriber),
         inbox: (input) => hub.listInbox(input),
         resolve: (input) => hub.resolve(input),
         snooze: (input) => hub.snooze(input),
-        wait: (input) =>
-          hub.wait({
-            subscriber: input.subscriber,
-            afterId: input.afterId,
-            kinds: input.events,
-            timeout: Duration.seconds(Math.min(Math.max(input.timeoutSeconds, 0), maxWaitSeconds)),
-          }),
-        openWork: (input) => hub.openWork(input.subscriber),
+        wait: (input) => hub.wait(input),
       });
     }),
   );

@@ -3,9 +3,7 @@ import * as DateTime from "effect/DateTime";
 
 import type {
   CompanionEventKind,
-  DeliveryPriority,
   PullRequestSummary,
-  Subscription,
   ThreadEvent,
   ThreadStatus,
 } from "./schema.ts";
@@ -14,11 +12,10 @@ import type {
 const queuedTurnStartGraceMs = 2 * 60_000;
 
 /**
- * A source with background tasks (Claude `Monitor`, a `run_in_background` command, a subagent)
- * counts as running for this long after its run ended, e.g. for snoozes waiting on it; dev
- * servers and PR watches can run for hours.
+ * How long a paused source keeps a snooze waiting after its run ended. Its background work
+ * (a dev server, a PR watch) can run for hours, and a snoozed item has to come back.
  */
-export const backgroundTaskIdleCapMs = 30 * 60_000;
+export const snoozePauseCapMs = 30 * 60_000;
 
 const activeRunStatuses: ReadonlySet<string> = new Set([
   "preparing",
@@ -76,6 +73,13 @@ export function busyReasons(shell: OrchestrationV2ThreadShell, nowMs: number): A
   }
   return reasons;
 }
+
+/**
+ * Whether a subscriber is in a turn. Unlike a source's state, its own background work does not
+ * count: an orchestrator usually has delegates running between turns and must still be woken.
+ */
+export const inTurn = (shell: OrchestrationV2ThreadShell, nowMs: number) =>
+  busyReasons(shell, nowMs).length > 0;
 
 const taskLabel = (
   task: NonNullable<OrchestrationV2ThreadShell["pendingBackgroundTasks"]>[number],
@@ -187,41 +191,52 @@ export function checksTransitions(
 export const readyToMark = (pullRequests: ReadonlyArray<PullRequestSummary>) =>
   pullRequests.filter((pr) => pr.state === "open" && pr.draft && pr.checks === "pass");
 
-/**
- * Where a thread stands. Pending background tasks count as running until the idle cap passes
- * after the run completed, matching when `idleCandidate` lets idle fire.
- */
+function threadState(shell: OrchestrationV2ThreadShell, nowMs: number): ThreadStatus["state"] {
+  if (shell.archivedAt !== null || shell.deletedAt !== null) {
+    return "archived";
+  }
+  if (shell.pendingRuntimeRequest !== null) {
+    return "needs-input";
+  }
+  if (shell.status === "failed") {
+    return "failed";
+  }
+  if (busyReasons(shell, nowMs).length > 0) {
+    return "running";
+  }
+  if ((shell.pendingBackgroundTasks ?? []).length > 0) {
+    return "paused";
+  }
+  return shell.settledOverride === "settled" ? "settled" : "idle";
+}
+
+/** Where a thread stands, in the same terms as its events: a pause here is an idle with `pause`. */
 export function threadStatus(
   environment: string,
   shell: OrchestrationV2ThreadShell,
   nowMs: number,
 ): ThreadStatus {
-  const pendingTasks = pendingTaskLabels(shell);
-  const completedMs = DateTime.toEpochMillis(shell.latestRunCompletedAt ?? shell.updatedAt);
-  const waitingOnTasks = pendingTasks.length > 0 && nowMs < completedMs + backgroundTaskIdleCapMs;
-  const state: ThreadStatus["state"] =
-    shell.archivedAt !== null || shell.deletedAt !== null
-      ? "archived"
-      : shell.pendingRuntimeRequest !== null
-        ? "needs-input"
-        : shell.status === "failed"
-          ? "failed"
-          : busyReasons(shell, nowMs).length > 0 || waitingOnTasks
-            ? "running"
-            : shell.settledOverride === "settled"
-              ? "settled"
-              : "idle";
   return {
     environment,
     threadId: shell.id,
     projectId: shell.projectId,
     title: shell.title,
-    state,
+    state: threadState(shell, nowMs),
     latestRunStatus: shell.status,
-    pendingTasks,
+    pendingTasks: pendingTaskLabels(shell),
     pullRequests: pullRequestSummaries(shell),
     updatedAt: DateTime.formatIso(shell.updatedAt),
   };
+}
+
+/** Whether a source keeps its snoozed items hidden: it works, or it paused only recently. */
+export function holdsSnooze(shell: OrchestrationV2ThreadShell, nowMs: number): boolean {
+  const state = threadState(shell, nowMs);
+  if (state !== "paused") {
+    return state === "running";
+  }
+  const endedMs = DateTime.toEpochMillis(shell.latestRunCompletedAt ?? shell.updatedAt);
+  return nowMs < endedMs + snoozePauseCapMs;
 }
 
 const makeEvent = (
@@ -291,12 +306,6 @@ export function immediateEvents(
   return events;
 }
 
-export interface IdleCandidate {
-  readonly event: ThreadEvent;
-  /** Epoch ms before which the event must not fire; the caller adds the debounce on top. */
-  readonly notBeforeMs: number;
-}
-
 /**
  * The idle event the shell would produce once it stays quiet, or null while a run is active. A
  * run that ends with background tasks still pending is a pause, carrying the tasks; once they end
@@ -307,7 +316,7 @@ export function idleCandidate(
   environment: string,
   shell: OrchestrationV2ThreadShell,
   nowMs: number,
-): IdleCandidate | null {
+): ThreadEvent | null {
   if (shell.latestRunId === null || shell.status === "failed") {
     return null;
   }
@@ -317,39 +326,24 @@ export function idleCandidate(
   const completedAt = iso(shell.latestRunCompletedAt) ?? DateTime.formatIso(shell.updatedAt);
   const pendingTasks = pendingTaskLabels(shell);
   const pause = pendingTasks.length > 0;
-  return {
-    event: makeEvent(
-      environment,
-      shell,
-      "idle",
-      `${shell.latestRunId}@${completedAt}${pause ? "/pause" : ""}`,
-      completedAt,
-      pause
-        ? `run ended; background task still pending: ${pendingTasks.join(", ")}`
-        : "run finished",
-      pendingTasks,
-    ),
-    notBeforeMs: nowMs,
-  };
+  return makeEvent(
+    environment,
+    shell,
+    "idle",
+    `${shell.latestRunId}@${completedAt}${pause ? "/pause" : ""}`,
+    completedAt,
+    pause ? `run ended; background task still pending: ${pendingTasks.join(", ")}` : "run finished",
+    pendingTasks,
+  );
 }
 
-const defaultPriorities: Record<CompanionEventKind, DeliveryPriority> = {
-  failed: "urgent",
-  "needs-input": "urgent",
-  idle: "normal",
-  "pr-checks": "normal",
-  "env-down": "normal",
-  settled: "low",
-  "env-up": "low",
-};
-
-/**
- * The priority one subscription delivers an event at. A pause is always low: the thread is only
- * waiting on its own background work, which wakes it again.
- */
-export function deliveryPriority(subscription: Subscription, event: ThreadEvent): DeliveryPriority {
-  if (event.pause) {
-    return "low";
-  }
-  return subscription.priorities[event.kind] ?? defaultPriorities[event.kind];
+/** The events a thread's current state already implies, for a subscription made just now. */
+export function currentEvents(
+  environment: string,
+  shell: OrchestrationV2ThreadShell,
+  nowMs: number,
+): Array<ThreadEvent> {
+  const events = immediateEvents(environment, shell).filter((event) => event.kind !== "settled");
+  const idle = idleCandidate(environment, shell, nowMs);
+  return idle === null ? events : [...events, idle];
 }
