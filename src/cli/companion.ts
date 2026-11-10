@@ -514,7 +514,7 @@ export const subscribeCommand = Command.make(
           : `thread ${subscription.source.threadId}`;
       return yield* output.printInfo(
         [
-          `subscription ${subscription.id}: ${subscription.subscriber.environment}/${subscription.subscriber.threadId} <- ${subscription.source.environment} ${source} [${subscription.events.join(", ")}]${subscription.wake ? " +wake" : ""}`,
+          `subscription ${subscription.id}: ${subscription.subscriber.environment}/${subscription.subscriber.threadId} <- ${subscription.source.environment} ${source} [${subscription.events.join(", ")}]${subscription.wake ? (subscription.armed ? " +wake (armed)" : " +wake (disarmed)") : ""}`,
           ...(status === null
             ? []
             : [

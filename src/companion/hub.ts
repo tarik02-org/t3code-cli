@@ -93,6 +93,11 @@ export class CompanionHub extends Context.Service<
     readonly subscribe: (
       input: SubscribeInput,
     ) => Effect.Effect<SubscribeResult, CompanionInvalidRequestError | CompanionStoreError>;
+    /** Arms the caller's subscriptions so the next event from each wakes it once. */
+    readonly arm: (input: {
+      readonly subscriber: ThreadRefInput;
+      readonly ids: ReadonlyArray<number>;
+    }) => Effect.Effect<number, CompanionInvalidRequestError | CompanionStoreError>;
     readonly unsubscribe: (input: {
       readonly subscriber: ThreadRefInput;
       readonly ids: ReadonlyArray<number>;
@@ -186,6 +191,19 @@ const matchesThread = (subscription: Subscription, event: ThreadEvent) =>
     subscription.subscriber.environment === event.environment &&
     subscription.subscriber.threadId === event.threadId
   );
+
+/**
+ * Whether an item may start a digest. Failures and questions block work, so they always wake;
+ * environment drops wake no one, since they concern every subscription there; anything else wakes
+ * only an armed subscription.
+ */
+export const itemWakes = (
+  subscription: Subscription,
+  event: ThreadEvent,
+  priority: DeliveryPriority,
+) =>
+  subscription.wake &&
+  (priority === "urgent" || (subscription.armed && !environmentEventKinds.includes(event.kind)));
 
 const priorityRank: Record<DeliveryPriority, number> = { urgent: 0, normal: 1, low: 2 };
 
@@ -353,7 +371,7 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
       a.priority === b.priority ? a.id - b.id : priorityRank[a.priority] - priorityRank[b.priority],
     );
     const first = pending[0];
-    if (first === undefined) {
+    if (first === undefined || !pending.some((row) => row.wakes)) {
       return false;
     }
     // The companion holds the batch itself while the subscriber works, rather than piling one
@@ -419,7 +437,9 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     subscription: Subscription,
     event: ThreadEvent,
   ) {
-    const row = yield* store.deliver(subscription, event, deliveryPriority(subscription, event));
+    const priority = deliveryPriority(subscription, event);
+    const waking = itemWakes(subscription, event, priority);
+    const row = yield* store.deliver(subscription, event, priority, waking);
     if (row === null) {
       return;
     }
@@ -455,9 +475,19 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
       });
     }
     yield* PubSub.publish(delivered, row);
-    if (subscription.wake) {
-      yield* scheduleWake(subscription.subscriber);
+    if (!waking) {
+      return;
     }
+    // One wake per arm; failures and questions wake without spending it.
+    if (priority !== "urgent") {
+      yield* store.setArmed({ ids: [subscription.id], armed: false });
+      yield* Ref.update(subscriptions, (all) =>
+        all.map((candidate) =>
+          candidate.id === subscription.id ? { ...candidate, armed: false } : candidate,
+        ),
+      );
+    }
+    yield* scheduleWake(subscription.subscriber);
   });
 
   const publish = Effect.fn("CompanionHub.publish")(function* (event: ThreadEvent) {
@@ -510,15 +540,41 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
       threadId: hasThread ? (input.source.threadId ?? null) : null,
       projectId: hasProject ? (input.source.projectId ?? null) : null,
     };
-    const subscription = yield* store.addSubscription({
-      subscriber,
-      source,
-      events: input.events,
-      wake: input.wake,
-      priorities: input.priorities,
-      follow,
-    });
+    const existing = (yield* Ref.get(subscriptions)).find(
+      (candidate) =>
+        refKey(candidate.subscriber) === refKey(subscriber) &&
+        candidate.follow === follow &&
+        candidate.source.environment === source.environment &&
+        candidate.source.threadId === source.threadId &&
+        candidate.source.projectId === source.projectId,
+    );
+    if (existing !== undefined) {
+      yield* store.updateSubscription({
+        id: existing.id,
+        events: input.events,
+        wake: input.wake,
+        priorities: input.priorities,
+      });
+      yield* store.setArmed({ ids: [existing.id], armed: true });
+    }
+    const added =
+      existing === undefined
+        ? yield* store.addSubscription({
+            subscriber,
+            source,
+            events: input.events,
+            wake: input.wake,
+            priorities: input.priorities,
+            follow,
+          })
+        : undefined;
     yield* refreshSubscriptions;
+    const subscription = (yield* Ref.get(subscriptions)).find(
+      (candidate) => candidate.id === (existing ?? added)?.id,
+    );
+    if (subscription === undefined) {
+      return yield* Effect.die("the subscription just written is missing");
+    }
     if (source.threadId === null) {
       return { subscription, source: null } satisfies SubscribeResult;
     }
@@ -549,6 +605,16 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
       subscription,
       source: threadStatus(sourceEnvironment.name, shell.value, nowMs),
     } satisfies SubscribeResult;
+  });
+
+  const arm = Effect.fn("CompanionHub.arm")(function* (input: {
+    readonly subscriber: ThreadRefInput;
+    readonly ids: ReadonlyArray<number>;
+  }) {
+    const subscriber = yield* normalizeRef(input.subscriber);
+    const armed = yield* store.setArmed({ subscriber, ids: input.ids, armed: true });
+    yield* refreshSubscriptions;
+    return armed;
   });
 
   const unsubscribe = Effect.fn("CompanionHub.unsubscribe")(function* (input: {
@@ -638,7 +704,11 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
       return;
     }
     // A turn ended: release this subscriber's waiting digests and its sources' snoozes.
-    if ((yield* store.pendingWakes()).some((row) => refKey(row.subscriber) === refKey(ref))) {
+    if (
+      (yield* store.pendingWakes()).some(
+        (row) => row.wakes && refKey(row.subscriber) === refKey(ref),
+      )
+    ) {
       yield* scheduleWake(ref);
     }
     yield* redeliverDue();
@@ -834,6 +904,7 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
   return CompanionHub.of({
     normalizeRef,
     subscribe,
+    arm,
     unsubscribe,
     listSubscriptions,
     listInbox,

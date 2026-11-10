@@ -49,6 +49,11 @@ export class CompanionRpcs extends RpcGroup.make(
     success: SubscribeResult,
     error: RequestError,
   }),
+  Rpc.make("arm", {
+    payload: { subscriber: ThreadRefInput, ids: Schema.Array(Schema.Int) },
+    success: Schema.Int,
+    error: RequestError,
+  }),
   Rpc.make("unsubscribe", {
     payload: { subscriber: ThreadRefInput, ids: Schema.Array(Schema.Int) },
     success: Schema.Int,

@@ -37,7 +37,7 @@ const Events = Schema.optional(Schema.Array(CompanionEventKind)).annotate({
 
 const Wake = Schema.optional(Schema.Boolean).annotate({
   description:
-    "Also send your thread a digest message when events arrive, so an idle thread resumes. Events always go to the inbox.",
+    "Let events wake your thread with a digest message. Each subscription wakes you once, then disarms until you arm it (or subscribe to the same source again); later events still reach your inbox and ride along in other digests. Failures and questions always wake. Events always go to the inbox.",
 });
 
 const Priorities = Schema.optional(Schema.Record(Schema.String, DeliveryPriority)).annotate({
@@ -49,7 +49,7 @@ const Ids = Schema.Array(Schema.Int);
 
 const SubscribeTool = Tool.make("subscribe", {
   description:
-    "Subscribe your thread to another thread (or every thread of a project) so its events land in your inbox instead of polling it. Returns the source's current state; if it already failed, needs input, or finished, that item is in your inbox right away.",
+    "Subscribe your thread to another thread (or every thread of a project) so its events land in your inbox instead of polling it. Subscribing again to the same source updates and re-arms that subscription. Returns the source's current state; if it already failed, needs input, or finished, that item is in your inbox right away.",
   parameters: Schema.Struct({
     ...Caller,
     environment: Schema.optional(Schema.String).annotate({
@@ -66,6 +66,14 @@ const SubscribeTool = Tool.make("subscribe", {
     priorities: Priorities,
   }),
   success: SubscribeResult,
+  failure: CompanionToolError,
+});
+
+const ArmTool = Tool.make("arm", {
+  description:
+    "Arm your subscriptions by id so the next event from each wakes you once. A wake disarms a subscription; until you arm it again (or subscribe to the same source again), its events reach your inbox and your digests without waking you. Failures and questions always wake.",
+  parameters: Schema.Struct({ ...Caller, ids: Ids }),
+  success: Schema.Struct({ armed: Schema.Int }),
   failure: CompanionToolError,
 });
 
@@ -186,6 +194,7 @@ const ThreadStartTool = Tool.make("thread_start", {
 
 export const CompanionToolkit = Toolkit.make(
   SubscribeTool,
+  ArmTool,
   UnsubscribeTool,
   SubscriptionsListTool,
   InboxListTool,
@@ -250,6 +259,11 @@ const CompanionToolkitHandlers = CompanionToolkit.toLayer(
             follow: input.follow ?? false,
           })
           .pipe(asToolError("subscribe")),
+      arm: (input) =>
+        hub.arm({ subscriber: callerRef(input), ids: input.ids }).pipe(
+          Effect.map((armed) => ({ armed })),
+          asToolError("arm"),
+        ),
       unsubscribe: (input) =>
         hub.unsubscribe({ subscriber: callerRef(input), ids: input.ids }).pipe(
           Effect.map((removed) => ({ removed })),
