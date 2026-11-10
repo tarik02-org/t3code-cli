@@ -4,166 +4,87 @@ import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as FiberMap from "effect/FiberMap";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
 
+import { deliveryPriority, itemWakes, relevance, subscriptionTakes } from "./delivery.ts";
+import { makeDigests } from "./digest.ts";
 import { CompanionEnvironments } from "./environments.ts";
 import { CompanionInvalidRequestError, type CompanionStoreError } from "./error.ts";
 import {
-  environmentEventKinds,
-  type CompanionEventKind,
-  type DeliveryPriority,
+  threadRefKey,
   type InboxEvent,
+  type InboxListRequest,
   type OpenWorkItem,
+  type ResolveRequest,
+  type SelectionRequest,
+  type SnoozeRequest,
+  type SubscribeRequest,
+  type SubscribeResult,
+  type SubscriberRequest,
   type Subscription,
   type SubscriptionSource,
   type ThreadEvent,
   type ThreadRef,
-  type ThreadStatus,
+  type ThreadRefInput,
+  type WaitRequest,
 } from "./schema.ts";
 import {
-  busyReasons,
   checksTransitions,
-  deliveryPriority,
-  pullRequestSummaries,
+  currentEvents,
+  holdsSnooze,
   idleCandidate,
   immediateEvents,
+  inTurn,
   readyToMark,
   threadStatus,
 } from "./state.ts";
 import { CompanionStore } from "./store.ts";
 
-export const wakeCoalesceWindow = Duration.seconds(5);
 export const maxWaitSeconds = 600;
 /** How often snoozed items are checked for their time having passed. */
 export const snoozeCheckInterval = Duration.seconds(15);
 /** The longest last message an event carries; digests include it whole. */
 export const lastMessageLength = 10_000;
 
-export interface ThreadRefInput {
-  readonly environment?: string | undefined;
-  readonly threadId: string;
-}
-
-export interface SubscribeInput {
-  readonly subscriber: ThreadRefInput;
-  readonly source: {
-    readonly environment?: string | undefined;
-    readonly threadId?: string | undefined;
-    readonly projectId?: string | undefined;
-  };
-  readonly events: ReadonlyArray<CompanionEventKind>;
-  readonly wake: boolean;
-  readonly priorities: Readonly<Record<string, DeliveryPriority>>;
-  /** With a project source: follow the subscriber's own new threads in it instead. */
-  readonly follow?: boolean | undefined;
-}
-
-export interface SubscribeResult {
-  readonly subscription: Subscription;
-  /** The source thread's state when the subscription was made; null for a project or unknown thread. */
-  readonly source: ThreadStatus | null;
-}
-
-export interface WaitInput {
-  readonly subscriber: ThreadRef;
-  readonly afterId: number;
-  readonly kinds: ReadonlyArray<CompanionEventKind>;
-  readonly timeout: Duration.Duration;
-}
-
-export interface Relevance {
-  /** Some subscription wants this thread's events. */
-  readonly source: boolean;
-  /** The thread subscribes to something, so its turn ends gate low-priority digests. */
-  readonly subscriber: boolean;
-}
+type RequestError = CompanionInvalidRequestError | CompanionStoreError;
 
 export class CompanionHub extends Context.Service<
   CompanionHub,
   {
-    /** Resolves env aliases to the canonical name the store keys on. */
-    readonly normalizeRef: (
-      ref: ThreadRefInput,
-    ) => Effect.Effect<ThreadRef, CompanionInvalidRequestError>;
-    readonly subscribe: (
-      input: SubscribeInput,
-    ) => Effect.Effect<SubscribeResult, CompanionInvalidRequestError | CompanionStoreError>;
+    readonly subscribe: (input: SubscribeRequest) => Effect.Effect<SubscribeResult, RequestError>;
     /** Arms the caller's subscriptions so the next event from each wakes it once. */
-    readonly arm: (input: {
-      readonly subscriber: ThreadRefInput;
-      readonly ids: ReadonlyArray<number>;
-    }) => Effect.Effect<number, CompanionInvalidRequestError | CompanionStoreError>;
-    readonly unsubscribe: (input: {
-      readonly subscriber: ThreadRefInput;
-      readonly ids: ReadonlyArray<number>;
-    }) => Effect.Effect<number, CompanionInvalidRequestError | CompanionStoreError>;
+    readonly arm: (input: SelectionRequest) => Effect.Effect<number, RequestError>;
+    readonly unsubscribe: (input: SelectionRequest) => Effect.Effect<number, RequestError>;
     readonly listSubscriptions: (
-      subscriber: ThreadRefInput,
-    ) => Effect.Effect<
-      ReadonlyArray<Subscription>,
-      CompanionInvalidRequestError | CompanionStoreError
-    >;
-    readonly listInbox: (input: {
-      readonly subscriber: ThreadRefInput;
-      readonly includeResolved: boolean;
-      readonly afterId: number;
-      readonly limit: number;
-    }) => Effect.Effect<
-      ReadonlyArray<InboxEvent>,
-      CompanionInvalidRequestError | CompanionStoreError
-    >;
-    readonly resolve: (input: {
-      readonly subscriber: ThreadRefInput;
-      readonly ids: ReadonlyArray<number>;
-      readonly disposition: string | null;
-    }) => Effect.Effect<number, CompanionInvalidRequestError | CompanionStoreError>;
-    readonly snooze: (input: {
-      readonly subscriber: ThreadRefInput;
-      readonly ids: ReadonlyArray<number>;
-      readonly minSeconds: number;
-    }) => Effect.Effect<number, CompanionInvalidRequestError | CompanionStoreError>;
-    readonly wait: (input: {
-      readonly subscriber: ThreadRefInput;
-      readonly afterId: number;
-      readonly kinds: ReadonlyArray<CompanionEventKind>;
-      readonly timeout: Duration.Duration;
-    }) => Effect.Effect<
-      ReadonlyArray<InboxEvent>,
-      CompanionInvalidRequestError | CompanionStoreError
-    >;
+      input: SubscriberRequest,
+    ) => Effect.Effect<ReadonlyArray<Subscription>, RequestError>;
+    readonly listInbox: (
+      input: InboxListRequest,
+    ) => Effect.Effect<ReadonlyArray<InboxEvent>, RequestError>;
+    readonly resolve: (input: ResolveRequest) => Effect.Effect<number, RequestError>;
+    readonly snooze: (input: SnoozeRequest) => Effect.Effect<number, RequestError>;
+    /** Open items newer than `afterId`; with none, waits for the first until the timeout. */
+    readonly wait: (input: WaitRequest) => Effect.Effect<ReadonlyArray<InboxEvent>, RequestError>;
     /** The caller's subscribed threads with draft pull requests whose checks pass. */
     readonly openWork: (
-      subscriber: ThreadRefInput,
-    ) => Effect.Effect<
-      ReadonlyArray<OpenWorkItem>,
-      CompanionInvalidRequestError | CompanionStoreError
-    >;
-    readonly relevance: (
-      environment: string,
-      threadId: string,
-      projectId: string,
-    ) => Effect.Effect<Relevance>;
-    /** Records a thread's latest shell row; a subscriber's turn end releases its low digests. */
-    readonly observe: (
+      input: SubscriberRequest,
+    ) => Effect.Effect<ReadonlyArray<OpenWorkItem>, RequestError>;
+    /**
+     * Takes a thread's latest shell row from the watcher: follows a new thread for whoever
+     * launched it, records the row, and publishes what a source's row already shows. Returns the
+     * idle event to publish once the thread has stayed quiet, or null when it is not idle.
+     */
+    readonly ingest: (
       environment: string,
       shell: OrchestrationV2ThreadShell,
-    ) => Effect.Effect<void, CompanionStoreError>;
+    ) => Effect.Effect<ThreadEvent | null, RequestError>;
+    /** Drops what is remembered about a thread that no longer exists. */
+    readonly forget: (environment: string, threadId: string) => Effect.Effect<void>;
     readonly publish: (event: ThreadEvent) => Effect.Effect<void, CompanionStoreError>;
-    /** Compares a source's linked PRs' checks with the last seen state; finished checks publish. */
-    readonly trackChecks: (
-      environment: string,
-      shell: OrchestrationV2ThreadShell,
-    ) => Effect.Effect<void, CompanionStoreError>;
-    /** Subscribes follow subscribers to a new thread they launched; checked once per thread. */
-    readonly discover: (
-      environment: string,
-      shell: OrchestrationV2ThreadShell,
-    ) => Effect.Effect<void, CompanionInvalidRequestError | CompanionStoreError>;
     /** Sends digests that a previous run recorded but never announced. */
     readonly flushPendingWakes: Effect.Effect<void, CompanionStoreError>;
     /** Brings back snoozed items whose time passed while their source is idle; runs forever. */
@@ -171,90 +92,19 @@ export class CompanionHub extends Context.Service<
   }
 >()("t3cli/companion/CompanionHub") {}
 
-const refKey = (ref: ThreadRef) => `${ref.environment}/${ref.threadId}`;
-
-const matches = (subscription: Subscription, event: ThreadEvent) =>
-  subscription.source.environment === event.environment &&
-  (event.threadId === null
-    ? environmentEventKinds.includes(event.kind)
-    : matchesThread(subscription, event));
-
-const matchesThread = (subscription: Subscription, event: ThreadEvent) =>
-  // A follow subscription only creates thread subscriptions; it takes no events itself.
-  !subscription.follow &&
-  (subscription.source.threadId === null
-    ? subscription.source.projectId === event.projectId
-    : subscription.source.threadId === event.threadId) &&
-  subscription.events.includes(event.kind) &&
-  // A thread never wakes itself.
-  !(
-    subscription.subscriber.environment === event.environment &&
-    subscription.subscriber.threadId === event.threadId
-  );
-
-/**
- * Whether an item may start a digest. Failures and questions block work, so they always wake;
- * environment drops wake no one, since they concern every subscription there; anything else wakes
- * only an armed subscription.
- */
-export const itemWakes = (
-  subscription: Subscription,
-  event: ThreadEvent,
-  priority: DeliveryPriority,
-) =>
-  subscription.wake &&
-  (priority === "urgent" || (subscription.armed && !environmentEventKinds.includes(event.kind)));
-
-const priorityRank: Record<DeliveryPriority, number> = { urgent: 0, normal: 1, low: 2 };
-
-function formatDigestItem(row: InboxEvent): string {
-  const event = row.event;
-  const source = `${event.environment}${event.threadId === null ? "" : `/${event.threadId}`}`;
-  const redelivered = row.redelivered > 0 ? ", snoozed item back" : "";
-  const lines = [
-    `- [${row.id}] ${row.priority} ${event.kind}${event.pause ? " (pause)" : ""}${redelivered}: "${event.title}" (${source}) ${event.summary}`,
-  ];
-  for (const pr of event.pullRequests) {
-    lines.push(
-      `    PR #${pr.number} ${pr.state}${pr.draft ? " draft" : ""}, checks ${pr.checks ?? "unknown"}, ${pr.mergeable ?? "mergeability unknown"}: ${pr.url}`,
-    );
-  }
-  if (event.lastMessage !== null) {
-    lines.push(
-      "    last message:",
-      ...event.lastMessage.split("\n").map((line) => `      ${line}`),
-    );
-  }
-  return lines.join("\n");
-}
-
-function formatDigest(rows: ReadonlyArray<InboxEvent>): string {
-  return [
-    `t3 companion: ${rows.length} subscribed thread event${rows.length === 1 ? "" : "s"}.`,
-    ...rows.map(formatDigestItem),
-    "Full messages are in inbox_list. Close items with inbox_resolve, or inbox_snooze them until the source is idle again.",
-  ].join("\n");
-}
-
 const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
-
-/** The events a thread's current state already implies, for a subscription made just now. */
-const currentEvents = (environment: string, shell: OrchestrationV2ThreadShell, nowMs: number) => {
-  const events = immediateEvents(environment, shell).filter((event) => event.kind !== "settled");
-  const idle = idleCandidate(environment, shell, nowMs);
-  return idle !== null && idle.notBeforeMs <= nowMs ? [...events, idle.event] : events;
-};
 
 export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
   const store = yield* CompanionStore;
   const environments = yield* CompanionEnvironments;
-  const subscriptions = yield* Ref.make(yield* store.listSubscriptions(null));
-  const threads = yield* Ref.make(
-    new Map<string, { readonly environment: string; readonly shell: OrchestrationV2ThreadShell }>(),
-  );
+  const threads = yield* Ref.make(new Map<string, OrchestrationV2ThreadShell>());
   const delivered = yield* PubSub.unbounded<InboxEvent>();
-  const wakes = yield* FiberMap.make<string>();
 
+  const latestShell = (ref: ThreadRef) =>
+    Ref.get(threads).pipe(Effect.map((all) => all.get(threadRefKey(ref))));
+  const digests = yield* makeDigests(latestShell);
+
+  /** Resolves env aliases to the canonical name the store keys on. */
   const normalizeRef = Effect.fn("CompanionHub.normalizeRef")(function* (ref: ThreadRefInput) {
     const environment = yield* environments
       .resolve(ref.environment)
@@ -267,28 +117,14 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     return { environment: environment.name, threadId: ref.threadId };
   });
 
-  const refreshSubscriptions = store
-    .listSubscriptions(null)
-    .pipe(Effect.flatMap((all) => Ref.set(subscriptions, all)));
-
-  const statusOf = Effect.fn("CompanionHub.statusOf")(function* (ref: ThreadRef) {
-    const entry = (yield* Ref.get(threads)).get(refKey(ref));
-    if (entry === undefined) {
-      return null;
-    }
-    return threadStatus(entry.environment, entry.shell, yield* Clock.currentTimeMillis);
-  });
-
-  /**
-   * Whether a subscriber is in a turn. Unlike a source's state, its own background work does not
-   * count: an orchestrator usually has delegates running between turns and must still be woken.
-   */
-  const inTurn = Effect.fn("CompanionHub.inTurn")(function* (ref: ThreadRef) {
-    const entry = (yield* Ref.get(threads)).get(refKey(ref));
-    return (
-      entry !== undefined && busyReasons(entry.shell, yield* Clock.currentTimeMillis).length > 0
+  const subscriptionsOf = (subscriber: ThreadRef) =>
+    store.subscriptions.pipe(
+      Effect.map((all) =>
+        all.filter(
+          (subscription) => threadRefKey(subscription.subscriber) === threadRefKey(subscriber),
+        ),
+      ),
     );
-  });
 
   /** Fills in the source thread's last assistant message; the shell row carries no text. */
   const withLastMessage = Effect.fn("CompanionHub.withLastMessage")(function* (event: ThreadEvent) {
@@ -315,131 +151,13 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     return { ...event, lastMessage };
   });
 
-  /**
-   * Re-checks each item against its source's latest shell row: an idle or settled the source
-   * moved past (a newer run) is resolved as superseded, and PR states are brought up to date.
-   */
-  const freshen = Effect.fn("CompanionHub.freshen")(function* (rows: ReadonlyArray<InboxEvent>) {
-    const current = yield* Ref.get(threads);
-    const kept: Array<InboxEvent> = [];
-    for (const row of rows) {
-      const event = row.event;
-      const latest =
-        event.threadId === null
-          ? undefined
-          : current.get(refKey({ environment: event.environment, threadId: event.threadId }));
-      if (latest === undefined) {
-        kept.push(row);
-        continue;
-      }
-      const runId = event.runId ?? null;
-      if (
-        (event.kind === "idle" || event.kind === "settled") &&
-        runId !== null &&
-        latest.shell.latestRunId !== runId
-      ) {
-        yield* store.resolve({
-          subscriber: row.subscriber,
-          ids: [row.id],
-          disposition: "auto: superseded, the source started a new run",
-        });
-        continue;
-      }
-      const now = pullRequestSummaries(latest.shell);
-      const pullRequests = event.pullRequests.map(
-        (pr) =>
-          now.find(
-            (candidate) => candidate.number === pr.number && candidate.repository === pr.repository,
-          ) ?? pr,
-      );
-      const refreshed = event.kind === "pr-checks" ? pullRequests : now;
-      if (JSON.stringify(refreshed) === JSON.stringify(event.pullRequests)) {
-        kept.push(row);
-        continue;
-      }
-      const updated = { ...event, pullRequests: refreshed };
-      yield* store.updateEvent(row.id, updated);
-      kept.push({ ...row, event: updated });
-    }
-    return kept;
-  });
-
-  const sendDigest = Effect.fn("CompanionHub.sendDigest")(function* (subscriber: ThreadRef) {
-    const pending = (yield* freshen(
-      (yield* store.pendingWakes()).filter((row) => refKey(row.subscriber) === refKey(subscriber)),
-    )).toSorted((a, b) =>
-      a.priority === b.priority ? a.id - b.id : priorityRank[a.priority] - priorityRank[b.priority],
-    );
-    const first = pending[0];
-    if (first === undefined || !pending.some((row) => row.wakes)) {
-      return false;
-    }
-    // The companion holds the batch itself while the subscriber works, rather than piling one
-    // T3 Code queued turn per event behind it: only urgent items steer into a running turn,
-    // carrying everything else pending; the rest go out as one new turn once it ends.
-    const busy = yield* inTurn(subscriber);
-    if (busy && first.priority !== "urgent") {
-      return false;
-    }
-    const environment = yield* environments.resolve(subscriber.environment);
-    const message = formatDigest(pending);
-    const mode = first.priority === "urgent" ? "steer" : "auto";
-    // Through T3 Code's MCP the digest shows as from an agent; a websocket send shows as the user's.
-    const asAgent = yield* Option.match(environment.agentSender, {
-      onNone: () => Effect.succeed(false),
-      onSome: (sender) =>
-        sender.send({ threadId: subscriber.threadId, message, mode }).pipe(
-          Effect.as(true),
-          Effect.catchCause((cause) =>
-            Effect.logWarning(
-              `agent-marked digest to ${refKey(subscriber)} failed; sending it as a plain message`,
-              cause,
-            ).pipe(Effect.as(false)),
-          ),
-        ),
-    });
-    if (!asAgent) {
-      yield* environment.application.sendThread({
-        threadId: subscriber.threadId,
-        message,
-        mode,
-        author: { kind: "agent" },
-      });
-    }
-    yield* store.markWoken(pending.map((row) => row.id));
-    yield* Effect.logInfo(
-      `sent ${first.priority} digest to ${refKey(subscriber)} for inbox ${pending.map((row) => row.id).join(", ")}`,
-    );
-    return true;
-  });
-
-  // One digest per window: events that land while a digest is pending join it, and events
-  // that land during the send start the next window.
-  const scheduleWake = (subscriber: ThreadRef) =>
-    FiberMap.run(
-      wakes,
-      refKey(subscriber),
-      Effect.gen(function* () {
-        let sent = true;
-        while (sent) {
-          yield* Effect.sleep(wakeCoalesceWindow);
-          sent = yield* sendDigest(subscriber);
-        }
-      }).pipe(
-        Effect.catchCause((cause) =>
-          Effect.logWarning(`wake digest to ${refKey(subscriber)} failed; it stays pending`, cause),
-        ),
-      ),
-      { onlyIfMissing: true },
-    );
-
   const deliverTo = Effect.fn("CompanionHub.deliverTo")(function* (
     subscription: Subscription,
     event: ThreadEvent,
   ) {
     const priority = deliveryPriority(subscription, event);
     const waking = itemWakes(subscription, event, priority);
-    const row = yield* store.deliver(subscription, event, priority, waking);
+    const row = yield* store.deliver(subscription, event, priority, !waking);
     if (row === null) {
       return;
     }
@@ -465,7 +183,7 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
       }
     }
     yield* Effect.logInfo(
-      `inbox ${row.id}: ${event.eventId} -> ${refKey(row.subscriber)} (${row.priority})`,
+      `inbox ${row.id}: ${event.eventId} -> ${threadRefKey(row.subscriber)} (${row.priority})`,
     );
     if (event.kind === "idle" && !event.pause) {
       yield* store.resolveEvent({
@@ -481,27 +199,23 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     // One wake per arm; failures and questions wake without spending it.
     if (priority !== "urgent") {
       yield* store.setArmed({ ids: [subscription.id], armed: false });
-      yield* Ref.update(subscriptions, (all) =>
-        all.map((candidate) =>
-          candidate.id === subscription.id ? { ...candidate, armed: false } : candidate,
-        ),
-      );
     }
-    yield* scheduleWake(subscription.subscriber);
+    yield* digests.schedule(subscription.subscriber);
   });
 
   const publish = Effect.fn("CompanionHub.publish")(function* (event: ThreadEvent) {
     // Subscribing does not replay state that already held before the subscription existed.
-    const matching = (yield* Ref.get(subscriptions)).filter(
-      (subscription) => matches(subscription, event) && event.occurredAt >= subscription.createdAt,
+    const matching = (yield* store.subscriptions).filter(
+      (subscription) =>
+        subscriptionTakes(subscription, event) && event.occurredAt >= subscription.createdAt,
     );
     if (matching.length === 0) {
       return;
     }
     // Snapshot replays repeat events; skip the message read when every inbox already has it.
-    const already = new Set((yield* store.deliveredTo(event.eventId)).map(refKey));
+    const already = new Set((yield* store.deliveredTo(event.eventId)).map(threadRefKey));
     const targets = matching.filter(
-      (subscription) => !already.has(refKey(subscription.subscriber)),
+      (subscription) => !already.has(threadRefKey(subscription.subscriber)),
     );
     if (targets.length === 0) {
       return;
@@ -512,7 +226,55 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     }
   });
 
-  const subscribe = Effect.fn("CompanionHub.subscribe")(function* (input: SubscribeInput) {
+  const redeliverDue = Effect.fn("CompanionHub.redeliverDue")(function* () {
+    const nowMs = yield* Clock.currentTimeMillis;
+    for (const row of yield* store.dueSnoozes(yield* nowIso)) {
+      const source =
+        row.event.threadId === null
+          ? undefined
+          : yield* latestShell({
+              environment: row.event.environment,
+              threadId: row.event.threadId,
+            });
+      // A snooze waits for the source to stop working, not only for the time to pass.
+      if (source !== undefined && holdsSnooze(source, nowMs)) {
+        continue;
+      }
+      const back = yield* store.redeliver(row.id);
+      if (back === null) {
+        continue;
+      }
+      yield* Effect.logInfo(`inbox ${back.id}: snooze over -> ${threadRefKey(back.subscriber)}`);
+      yield* PubSub.publish(delivered, back);
+      const subscription = (yield* store.subscriptions).find(
+        (candidate) => candidate.id === back.subscriptionId,
+      );
+      if (subscription?.wake === true) {
+        yield* digests.schedule(back.subscriber);
+      }
+    }
+  });
+
+  /** Records a thread's latest shell row; a subscriber's turn end releases what waited on it. */
+  const observe = Effect.fn("CompanionHub.observe")(function* (
+    environment: string,
+    shell: OrchestrationV2ThreadShell,
+  ) {
+    const ref = { environment, threadId: shell.id };
+    const nowMs = yield* Clock.currentTimeMillis;
+    const previous = yield* latestShell(ref);
+    yield* Ref.update(threads, (current) => new Map(current).set(threadRefKey(ref), shell));
+    if (previous === undefined || !inTurn(previous, nowMs) || inTurn(shell, nowMs)) {
+      return;
+    }
+    // A turn ended: release this subscriber's waiting digests and its sources' snoozes.
+    if ((yield* store.pendingDigest(ref)).some((row) => !row.passive)) {
+      yield* digests.schedule(ref);
+    }
+    yield* redeliverDue();
+  });
+
+  const subscribe = Effect.fn("CompanionHub.subscribe")(function* (input: SubscribeRequest) {
     const subscriber = yield* normalizeRef(input.subscriber);
     const hasThread = input.source.threadId !== undefined && input.source.threadId.length > 0;
     const hasProject = input.source.projectId !== undefined && input.source.projectId.length > 0;
@@ -540,41 +302,14 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
       threadId: hasThread ? (input.source.threadId ?? null) : null,
       projectId: hasProject ? (input.source.projectId ?? null) : null,
     };
-    const existing = (yield* Ref.get(subscriptions)).find(
-      (candidate) =>
-        refKey(candidate.subscriber) === refKey(subscriber) &&
-        candidate.follow === follow &&
-        candidate.source.environment === source.environment &&
-        candidate.source.threadId === source.threadId &&
-        candidate.source.projectId === source.projectId,
-    );
-    if (existing !== undefined) {
-      yield* store.updateSubscription({
-        id: existing.id,
-        events: input.events,
-        wake: input.wake,
-        priorities: input.priorities,
-      });
-      yield* store.setArmed({ ids: [existing.id], armed: true });
-    }
-    const added =
-      existing === undefined
-        ? yield* store.addSubscription({
-            subscriber,
-            source,
-            events: input.events,
-            wake: input.wake,
-            priorities: input.priorities,
-            follow,
-          })
-        : undefined;
-    yield* refreshSubscriptions;
-    const subscription = (yield* Ref.get(subscriptions)).find(
-      (candidate) => candidate.id === (existing ?? added)?.id,
-    );
-    if (subscription === undefined) {
-      return yield* Effect.die("the subscription just written is missing");
-    }
+    const subscription = yield* store.upsertSubscription({
+      subscriber,
+      source,
+      events: input.events,
+      wake: input.wake,
+      priorities: input.priorities,
+      follow,
+    });
     if (source.threadId === null) {
       return { subscription, source: null } satisfies SubscribeResult;
     }
@@ -597,7 +332,7 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     yield* observe(sourceEnvironment.name, shell.value);
     const nowMs = yield* Clock.currentTimeMillis;
     for (const event of currentEvents(sourceEnvironment.name, shell.value, nowMs)) {
-      if (matches(subscription, event)) {
+      if (subscriptionTakes(subscription, event)) {
         yield* deliverTo(subscription, yield* withLastMessage(event));
       }
     }
@@ -607,54 +342,31 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     } satisfies SubscribeResult;
   });
 
-  const arm = Effect.fn("CompanionHub.arm")(function* (input: {
-    readonly subscriber: ThreadRefInput;
-    readonly ids: ReadonlyArray<number>;
-  }) {
+  const arm = Effect.fn("CompanionHub.arm")(function* (input: SelectionRequest) {
     const subscriber = yield* normalizeRef(input.subscriber);
-    const armed = yield* store.setArmed({ subscriber, ids: input.ids, armed: true });
-    yield* refreshSubscriptions;
-    return armed;
+    return yield* store.setArmed({ subscriber, ids: input.ids, armed: true });
   });
 
-  const unsubscribe = Effect.fn("CompanionHub.unsubscribe")(function* (input: {
-    readonly subscriber: ThreadRefInput;
-    readonly ids: ReadonlyArray<number>;
-  }) {
+  const unsubscribe = Effect.fn("CompanionHub.unsubscribe")(function* (input: SelectionRequest) {
     const subscriber = yield* normalizeRef(input.subscriber);
-    const removed = yield* store.removeSubscriptions({ subscriber, ids: input.ids });
-    yield* refreshSubscriptions;
-    return removed;
+    return yield* store.removeSubscriptions({ subscriber, ids: input.ids });
   });
 
   const listSubscriptions = Effect.fn("CompanionHub.listSubscriptions")(function* (
-    ref: ThreadRefInput,
+    input: SubscriberRequest,
   ) {
-    return yield* store.listSubscriptions(yield* normalizeRef(ref));
+    return yield* subscriptionsOf(yield* normalizeRef(input.subscriber));
   });
 
-  const listInbox = Effect.fn("CompanionHub.listInbox")(function* (input: {
-    readonly subscriber: ThreadRefInput;
-    readonly includeResolved: boolean;
-    readonly afterId: number;
-    readonly limit: number;
-  }) {
+  const listInbox = Effect.fn("CompanionHub.listInbox")(function* (input: InboxListRequest) {
     return yield* store.listInbox({ ...input, subscriber: yield* normalizeRef(input.subscriber) });
   });
 
-  const resolve = Effect.fn("CompanionHub.resolve")(function* (input: {
-    readonly subscriber: ThreadRefInput;
-    readonly ids: ReadonlyArray<number>;
-    readonly disposition: string | null;
-  }) {
+  const resolve = Effect.fn("CompanionHub.resolve")(function* (input: ResolveRequest) {
     return yield* store.resolve({ ...input, subscriber: yield* normalizeRef(input.subscriber) });
   });
 
-  const snooze = Effect.fn("CompanionHub.snooze")(function* (input: {
-    readonly subscriber: ThreadRefInput;
-    readonly ids: ReadonlyArray<number>;
-    readonly minSeconds: number;
-  }) {
+  const snooze = Effect.fn("CompanionHub.snooze")(function* (input: SnoozeRequest) {
     const subscriber = yield* normalizeRef(input.subscriber);
     if (!(input.minSeconds >= 0)) {
       return yield* new CompanionInvalidRequestError({ message: "minSeconds must be at least 0" });
@@ -665,87 +377,15 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     return yield* store.snooze({ subscriber, ids: input.ids, until });
   });
 
-  const redeliverDue = Effect.fn("CompanionHub.redeliverDue")(function* () {
-    for (const row of yield* store.dueSnoozes(yield* nowIso)) {
-      const source =
-        row.event.threadId === null
-          ? null
-          : yield* statusOf({ environment: row.event.environment, threadId: row.event.threadId });
-      // A snooze waits for the source to stop working, not only for the time to pass.
-      if (source !== null && source.state === "running") {
-        continue;
-      }
-      const back = yield* store.redeliver(row.id);
-      if (back === null) {
-        continue;
-      }
-      yield* Effect.logInfo(`inbox ${back.id}: snooze over -> ${refKey(back.subscriber)}`);
-      yield* PubSub.publish(delivered, back);
-      const subscription = (yield* Ref.get(subscriptions)).find(
-        (candidate) => candidate.id === back.subscriptionId,
-      );
-      if (subscription?.wake === true) {
-        yield* scheduleWake(back.subscriber);
-      }
-    }
-  });
-
-  const observe = Effect.fn("CompanionHub.observe")(function* (
-    environment: string,
-    shell: OrchestrationV2ThreadShell,
-  ) {
-    const ref = { environment, threadId: shell.id };
-    const wasBusy = yield* inTurn(ref);
-    yield* Ref.update(threads, (current) =>
-      new Map(current).set(refKey(ref), { environment, shell }),
-    );
-    const nowBusy = yield* inTurn(ref);
-    if (!wasBusy || nowBusy) {
-      return;
-    }
-    // A turn ended: release this subscriber's waiting digests and its sources' snoozes.
-    if (
-      (yield* store.pendingWakes()).some(
-        (row) => row.wakes && refKey(row.subscriber) === refKey(ref),
-      )
-    ) {
-      yield* scheduleWake(ref);
-    }
-    yield* redeliverDue();
-  });
-
-  const relevance = (environment: string, threadId: string, projectId: string) =>
-    Ref.get(subscriptions).pipe(
-      Effect.map((all) => ({
-        source: all.some(
-          (subscription) =>
-            !subscription.follow &&
-            subscription.source.environment === environment &&
-            (subscription.source.threadId === null
-              ? subscription.source.projectId === projectId
-              : subscription.source.threadId === threadId),
-        ),
-        subscriber: all.some(
-          (subscription) =>
-            subscription.subscriber.environment === environment &&
-            subscription.subscriber.threadId === threadId,
-        ),
-      })),
-    );
-
-  const wait = Effect.fn("CompanionHub.wait")(function* (input: {
-    readonly subscriber: ThreadRefInput;
-    readonly afterId: number;
-    readonly kinds: ReadonlyArray<CompanionEventKind>;
-    readonly timeout: Duration.Duration;
-  }) {
+  const wait = Effect.fn("CompanionHub.wait")(function* (input: WaitRequest) {
     const subscriber = yield* normalizeRef(input.subscriber);
+    const timeout = Duration.seconds(Math.min(Math.max(input.timeoutSeconds, 0), maxWaitSeconds));
     const wanted = (row: InboxEvent) =>
-      refKey(row.subscriber) === refKey(subscriber) &&
+      threadRefKey(row.subscriber) === threadRefKey(subscriber) &&
       row.id > input.afterId &&
       row.resolvedAt === null &&
       row.snoozedUntil === null &&
-      (input.kinds.length === 0 || input.kinds.includes(row.event.kind));
+      (input.events.length === 0 || input.events.includes(row.event.kind));
     // Subscribe before reading the store so a row delivered in between is not missed.
     const live = yield* PubSub.subscribe(delivered);
     const existing = (yield* store.listInbox({
@@ -764,28 +404,30 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
           return [row];
         }
       }
-    }).pipe(Effect.timeoutOption(input.timeout));
+    }).pipe(Effect.timeoutOption(timeout));
     return Option.getOrElse(next, () => []);
   }, Effect.scoped);
 
-  const openWork = Effect.fn("CompanionHub.openWork")(function* (ref: ThreadRefInput) {
-    const subscriber = yield* normalizeRef(ref);
+  const openWork = Effect.fn("CompanionHub.openWork")(function* (input: SubscriberRequest) {
+    const subscriber = yield* normalizeRef(input.subscriber);
     const sources = new Map<string, ThreadRef>();
-    for (const subscription of yield* store.listSubscriptions(subscriber)) {
+    for (const subscription of yield* subscriptionsOf(subscriber)) {
       if (subscription.source.threadId !== null) {
         const source = {
           environment: subscription.source.environment,
           threadId: subscription.source.threadId,
         };
-        sources.set(refKey(source), source);
+        sources.set(threadRefKey(source), source);
       }
     }
+    const nowMs = yield* Clock.currentTimeMillis;
     const items: Array<OpenWorkItem> = [];
     for (const source of sources.values()) {
-      const status = yield* statusOf(source);
-      if (status === null) {
+      const shell = yield* latestShell(source);
+      if (shell === undefined) {
         continue;
       }
+      const status = threadStatus(source.environment, shell, nowMs);
       const ready = readyToMark(status.pullRequests);
       if (ready.length > 0) {
         items.push({
@@ -800,6 +442,7 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     return items;
   });
 
+  /** Compares a source's linked PRs' checks with the last seen state; finished checks publish. */
   const trackChecks = Effect.fn("CompanionHub.trackChecks")(function* (
     environment: string,
     shell: OrchestrationV2ThreadShell,
@@ -821,15 +464,18 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     }
   });
 
-  // Threads already checked against follow subscriptions, by subscription and thread.
-  const followChecked = new Set<string>();
+  // The follow subscriptions each thread was already checked against: who launched a thread
+  // never changes, and a subscriber that drops a followed thread must not get it back.
+  const followChecked = new Map<string, Set<number>>();
 
+  /** Subscribes follow subscribers to a new thread they launched; checked once per thread. */
   const discover = Effect.fn("CompanionHub.discover")(function* (
     environment: string,
     shell: OrchestrationV2ThreadShell,
   ) {
+    const key = threadRefKey({ environment, threadId: shell.id });
     const createdAt = DateTime.formatIso(shell.createdAt);
-    const all = yield* Ref.get(subscriptions);
+    const all = yield* store.subscriptions;
     const follows = all.filter(
       (subscription) =>
         subscription.follow &&
@@ -837,7 +483,7 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
         subscription.source.projectId === shell.projectId &&
         subscription.subscriber.threadId !== shell.id &&
         createdAt >= subscription.createdAt &&
-        !followChecked.has(`${subscription.id}/${shell.id}`),
+        followChecked.get(key)?.has(subscription.id) !== true,
     );
     if (follows.length === 0) {
       return;
@@ -863,20 +509,20 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     if (sender === undefined) {
       return;
     }
+    const checked = followChecked.get(key) ?? new Set<number>();
+    followChecked.set(key, checked);
     for (const follow of follows) {
-      followChecked.add(`${follow.id}/${shell.id}`);
+      checked.add(follow.id);
       const already = all.some(
         (subscription) =>
-          refKey(subscription.subscriber) === refKey(follow.subscriber) &&
+          threadRefKey(subscription.subscriber) === threadRefKey(follow.subscriber) &&
           subscription.source.environment === environment &&
           subscription.source.threadId === shell.id,
       );
       if (sender !== follow.subscriber.threadId || already) {
         continue;
       }
-      yield* Effect.logInfo(
-        `following ${environment}/${shell.id} for ${refKey(follow.subscriber)}`,
-      );
+      yield* Effect.logInfo(`following ${key} for ${threadRefKey(follow.subscriber)}`);
       yield* subscribe({
         subscriber: follow.subscriber,
         source: { environment, threadId: shell.id },
@@ -887,13 +533,46 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     }
   });
 
-  const flushPendingWakes = Effect.gen(function* () {
-    const pending = yield* store.pendingWakes();
-    const subscribers = new Map(pending.map((row) => [refKey(row.subscriber), row.subscriber]));
-    for (const subscriber of subscribers.values()) {
-      yield* scheduleWake(subscriber);
+  const ingest = Effect.fn("CompanionHub.ingest")(function* (
+    environment: string,
+    shell: OrchestrationV2ThreadShell,
+  ) {
+    const { source, subscriber } = relevance(
+      yield* store.subscriptions,
+      environment,
+      shell.id,
+      shell.projectId,
+    );
+    yield* discover(environment, shell);
+    if (source || subscriber) {
+      yield* observe(environment, shell);
     }
+    if (!source || shell.deletedAt !== null || shell.archivedAt !== null) {
+      return null;
+    }
+    for (const event of immediateEvents(environment, shell)) {
+      yield* publish(event);
+    }
+    yield* trackChecks(environment, shell);
+    return idleCandidate(environment, shell, yield* Clock.currentTimeMillis);
   });
+
+  const forget = Effect.fn("CompanionHub.forget")(function* (
+    environment: string,
+    threadId: string,
+  ) {
+    const key = threadRefKey({ environment, threadId });
+    followChecked.delete(key);
+    yield* Ref.update(threads, (current) => {
+      const next = new Map(current);
+      next.delete(key);
+      return next;
+    });
+  });
+
+  const flushPendingWakes = store
+    .subscribersToWake()
+    .pipe(Effect.flatMap(Effect.forEach(digests.schedule, { discard: true })));
 
   const runSnoozes = redeliverDue().pipe(
     Effect.catchCause((cause) => Effect.logWarning("snooze check failed", cause)),
@@ -902,7 +581,6 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
   );
 
   return CompanionHub.of({
-    normalizeRef,
     subscribe,
     arm,
     unsubscribe,
@@ -912,11 +590,9 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     snooze,
     wait,
     openWork,
-    relevance,
-    observe,
+    ingest,
+    forget,
     publish,
-    trackChecks,
-    discover,
     flushPendingWakes,
     runSnoozes,
   });

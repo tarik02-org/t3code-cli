@@ -18,7 +18,6 @@ import {
 } from "./environments.ts";
 import { CompanionHub } from "./hub.ts";
 import type { ThreadEvent } from "./schema.ts";
-import { idleCandidate, immediateEvents } from "./state.ts";
 
 /** How long a thread must stay idle before the idle event fires. */
 export const idleDebounce = Duration.seconds(3);
@@ -66,35 +65,18 @@ export const runCompanionWatcher = Effect.fn("runCompanionWatcher")(function* ()
     shell: OrchestrationV2ThreadShell,
   ) {
     const key = `${environment.name}/${shell.id}`;
-    const relevance = yield* hub.relevance(environment.name, shell.id, shell.projectId);
-    yield* hub.discover(environment.name, shell);
-    if (relevance.source || relevance.subscriber) {
-      yield* hub.observe(environment.name, shell);
-    }
-    if (!relevance.source || shell.deletedAt !== null || shell.archivedAt !== null) {
-      yield* FiberMap.remove(idleTimers, key);
-      return;
-    }
-    for (const event of immediateEvents(environment.name, shell)) {
-      yield* hub.publish(event);
-    }
-    yield* hub.trackChecks(environment.name, shell);
-    const nowMs = yield* Clock.currentTimeMillis;
-    const candidate = idleCandidate(environment.name, shell, nowMs);
-    if (candidate === null) {
+    const idle = yield* hub.ingest(environment.name, shell);
+    if (idle === null) {
       yield* FiberMap.remove(idleTimers, key);
       return;
     }
     // Each update restarts the window, so the event fires only after the thread stays quiet.
-    const delay = Duration.max(idleDebounce, Duration.millis(candidate.notBeforeMs - nowMs));
     yield* FiberMap.run(
       idleTimers,
       key,
-      Effect.sleep(delay).pipe(
-        Effect.andThen(hub.publish(candidate.event)),
-        Effect.catchCause((cause) =>
-          Effect.logWarning(`failed to publish ${candidate.event.eventId}`, cause),
-        ),
+      Effect.sleep(idleDebounce).pipe(
+        Effect.andThen(hub.publish(idle)),
+        Effect.catchCause((cause) => Effect.logWarning(`failed to publish ${idle.eventId}`, cause)),
       ),
     );
   });
@@ -173,7 +155,9 @@ export const runCompanionWatcher = Effect.fn("runCompanionWatcher")(function* ()
         case "thread.updated":
           return processThread(environment, item.thread);
         case "thread.removed":
-          return FiberMap.remove(idleTimers, `${environment.name}/${item.threadId}`);
+          return FiberMap.remove(idleTimers, `${environment.name}/${item.threadId}`).pipe(
+            Effect.andThen(hub.forget(environment.name, item.threadId)),
+          );
         case "synchronized":
         case "project.updated":
         case "project.removed":

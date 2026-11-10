@@ -15,9 +15,10 @@ import { fromPartial } from "@total-typescript/shoehorn";
 import type { SendThreadInput, T3Application } from "../application/service.ts";
 import type { Orchestration } from "../orchestration/service.ts";
 import type { AgentSender } from "./agent-sender.ts";
+import { wakeCoalesceWindow } from "./digest.ts";
 import { type CompanionEnvironment, CompanionEnvironments } from "./environments.ts";
 import { CompanionAgentSendError } from "./error.ts";
-import { CompanionHub, makeCompanionHub, wakeCoalesceWindow } from "./hub.ts";
+import { CompanionHub, makeCompanionHub } from "./hub.ts";
 import type { CompanionEventKind, ThreadEvent } from "./schema.ts";
 import { idleCandidate, immediateEvents } from "./state.ts";
 import { makePullRequest, makeShell, monitorTask } from "./state.test-utils.ts";
@@ -116,7 +117,7 @@ const idleEvent = (shell: OrchestrationV2ThreadShell): ThreadEvent => {
   if (candidate === null) {
     throw new Error("fixture shell is not idle");
   }
-  return candidate.event;
+  return candidate;
 };
 
 const busySubscriber = makeShell({
@@ -206,12 +207,12 @@ describe("CompanionHub", () => {
     withHub((hub, fixture) =>
       Effect.gen(function* () {
         yield* subscribeTo(hub, "thread-a", { idle: "low" });
-        yield* hub.observe("local", busySubscriber);
+        yield* hub.ingest("local", busySubscriber);
         yield* hub.publish(idleEvent(makeShell()));
         yield* afterWindow;
         assert.lengthOf(yield* Ref.get(fixture.sent), 0);
 
-        yield* hub.observe("local", idleSubscriber);
+        yield* hub.ingest("local", idleSubscriber);
         yield* afterWindow;
         const sent = yield* Ref.get(fixture.sent);
         assert.lengthOf(sent, 1);
@@ -225,14 +226,14 @@ describe("CompanionHub", () => {
       Effect.gen(function* () {
         yield* subscribeTo(hub, "thread-a", {});
         yield* subscribeTo(hub, "thread-b", {});
-        yield* hub.observe("local", busySubscriber);
+        yield* hub.ingest("local", busySubscriber);
         yield* hub.publish(idleEvent(makeShell()));
         yield* afterWindow;
         yield* hub.publish(idleEvent(makeShell({ id: ThreadId.make("thread-b") })));
         yield* afterWindow;
         assert.lengthOf(yield* Ref.get(fixture.sent), 0);
 
-        yield* hub.observe("local", idleSubscriber);
+        yield* hub.ingest("local", idleSubscriber);
         yield* afterWindow;
         const sent = yield* Ref.get(fixture.sent);
         assert.lengthOf(sent, 1);
@@ -248,7 +249,7 @@ describe("CompanionHub", () => {
       Effect.gen(function* () {
         yield* subscribeTo(hub, "thread-a", {});
         yield* subscribeTo(hub, "thread-b", {});
-        yield* hub.observe("local", busySubscriber);
+        yield* hub.ingest("local", busySubscriber);
         yield* hub.publish(idleEvent(makeShell()));
         yield* hub.publish(idleEvent(makeShell({ id: ThreadId.make("thread-b") })));
         yield* afterWindow;
@@ -268,7 +269,7 @@ describe("CompanionHub", () => {
         assert.lengthOf(yield* openIds(hub), 3);
 
         // The turn ending afterwards sends nothing again.
-        yield* hub.observe("local", idleSubscriber);
+        yield* hub.ingest("local", idleSubscriber);
         yield* afterWindow;
         assert.lengthOf(yield* Ref.get(fixture.sent), 1);
       }),
@@ -297,7 +298,7 @@ describe("CompanionHub", () => {
       Effect.gen(function* () {
         yield* subscribeTo(hub, "thread-a", {});
         yield* subscribeTo(hub, "thread-b", {});
-        yield* hub.observe("local", busySubscriber);
+        yield* hub.ingest("local", busySubscriber);
         yield* hub.publish(idleEvent(makeShell()));
         const threadB = makeShell({
           id: ThreadId.make("thread-b"),
@@ -306,18 +307,18 @@ describe("CompanionHub", () => {
         yield* hub.publish(idleEvent(threadB));
 
         // Thread A starts its next run; thread B's PR checks finish.
-        yield* hub.observe(
+        yield* hub.ingest(
           "local",
           makeShell({ latestRunId: RunId.make("run-2"), activityRunStatus: "running" }),
         );
-        yield* hub.observe(
+        yield* hub.ingest(
           "local",
           makeShell({
             id: ThreadId.make("thread-b"),
             pullRequests: [makePullRequest({ number: 7, isDraft: true, checksState: "passing" })],
           }),
         );
-        yield* hub.observe("local", idleSubscriber);
+        yield* hub.ingest("local", idleSubscriber);
         yield* afterWindow;
 
         const sent = yield* Ref.get(fixture.sent);
@@ -344,10 +345,10 @@ describe("CompanionHub", () => {
     withHub((hub) =>
       Effect.gen(function* () {
         yield* subscribeTo(hub, "thread-a", {}, ["pr-checks"]);
-        yield* hub.trackChecks("local", withChecks("pending", "aaaaaaaaaaaa"));
-        yield* hub.trackChecks("local", withChecks("passing", "aaaaaaaaaaaa"));
-        yield* hub.trackChecks("local", withChecks("passing", "aaaaaaaaaaaa"));
-        yield* hub.trackChecks("local", withChecks("failing", "bbbbbbbbbbbb"));
+        yield* hub.ingest("local", withChecks("pending", "aaaaaaaaaaaa"));
+        yield* hub.ingest("local", withChecks("passing", "aaaaaaaaaaaa"));
+        yield* hub.ingest("local", withChecks("passing", "aaaaaaaaaaaa"));
+        yield* hub.ingest("local", withChecks("failing", "bbbbbbbbbbbb"));
         const rows = yield* hub.listInbox(openQuery);
         assert.deepEqual(
           rows.map((row) => row.event.summary),
@@ -375,10 +376,10 @@ describe("CompanionHub", () => {
         yield* launched(fixture, "mine", "orchestrator");
         yield* launched(fixture, "theirs", "someone-else");
         const created = { completedAtMs: 1000 };
-        yield* hub.discover("local", makeShell({ id: ThreadId.make("mine"), ...created }));
-        yield* hub.discover("local", makeShell({ id: ThreadId.make("theirs"), ...created }));
+        yield* hub.ingest("local", makeShell({ id: ThreadId.make("mine"), ...created }));
+        yield* hub.ingest("local", makeShell({ id: ThreadId.make("theirs"), ...created }));
 
-        const all = yield* hub.listSubscriptions(orchestrator);
+        const all = yield* hub.listSubscriptions({ subscriber: orchestrator });
         const followed = all.filter((candidate) => candidate.id !== subscription.id);
         assert.deepEqual(
           followed.map((candidate) => [
@@ -459,13 +460,13 @@ describe("CompanionHub", () => {
     withHub((hub, fixture) =>
       Effect.gen(function* () {
         yield* subscribeTo(hub, "thread-a", {});
-        yield* hub.observe("local", busySubscriber);
+        yield* hub.ingest("local", busySubscriber);
         yield* hub.publish(idleEvent(makeShell()));
         yield* afterWindow;
         assert.lengthOf(yield* Ref.get(fixture.sent), 0);
 
         // The turn ends with a delegated subagent still running in the subscriber.
-        yield* hub.observe(
+        yield* hub.ingest(
           "local",
           makeShell({
             id: ThreadId.make("orchestrator"),
@@ -525,13 +526,13 @@ describe("CompanionHub", () => {
         yield* hub.publish(idleEvent(makeShell()));
         yield* afterWindow;
         assert.lengthOf(yield* Ref.get(fixture.sent), 1);
-        const [listed] = yield* hub.listSubscriptions(orchestrator);
+        const [listed] = yield* hub.listSubscriptions({ subscriber: orchestrator });
         assert.isFalse(listed?.armed);
 
         // Disarmed: the next run's idle lands in the inbox without a wake, even at turn end.
         yield* hub.publish(idleEvent(makeShell({ latestRunId: RunId.make("run-2") })));
-        yield* hub.observe("local", busySubscriber);
-        yield* hub.observe("local", idleSubscriber);
+        yield* hub.ingest("local", busySubscriber);
+        yield* hub.ingest("local", idleSubscriber);
         yield* afterWindow;
         assert.lengthOf(yield* Ref.get(fixture.sent), 1);
         assert.lengthOf(yield* hub.listInbox(openQuery), 2);
@@ -563,7 +564,7 @@ describe("CompanionHub", () => {
         const again = yield* subscribeTo(hub, "thread-a", {});
         assert.equal(again.subscription.id, subscription.id);
         assert.isTrue(again.subscription.armed);
-        assert.lengthOf(yield* hub.listSubscriptions(orchestrator), 1);
+        assert.lengthOf(yield* hub.listSubscriptions({ subscriber: orchestrator }), 1);
         assert.lengthOf(yield* hub.listInbox(openQuery), 2);
 
         yield* hub.publish(idleEvent(makeShell({ latestRunId: RunId.make("run-3") })));
@@ -574,7 +575,7 @@ describe("CompanionHub", () => {
         assert.deepEqual(digestIds(sent[1]).length, 2);
 
         assert.equal(yield* hub.arm({ subscriber: orchestrator, ids: [subscription.id] }), 1);
-        const [listed] = yield* hub.listSubscriptions(orchestrator);
+        const [listed] = yield* hub.listSubscriptions({ subscriber: orchestrator });
         assert.isTrue(listed?.armed);
       }),
     ),
@@ -610,7 +611,7 @@ describe("CompanionHub", () => {
         yield* hub.publish(failed);
         yield* afterWindow;
         assert.lengthOf(yield* Ref.get(fixture.sent), 1);
-        const [listed] = yield* hub.listSubscriptions(orchestrator);
+        const [listed] = yield* hub.listSubscriptions({ subscriber: orchestrator });
         assert.isTrue(listed?.armed);
       }),
     ),
@@ -634,11 +635,11 @@ describe("CompanionHub", () => {
         assert.lengthOf(yield* hub.listInbox(open), 0);
 
         // The source works through the snooze and is still busy when the time is up.
-        yield* hub.observe("local", makeShell({ activityRunStatus: "running" }));
+        yield* hub.ingest("local", makeShell({ activityRunStatus: "running" }));
         yield* TestClock.adjust("61 seconds");
         assert.lengthOf(yield* hub.listInbox(open), 0);
 
-        yield* hub.observe("local", makeShell({ latestRunId: RunId.make("run-2") }));
+        yield* hub.ingest("local", makeShell({ latestRunId: RunId.make("run-2") }));
         const [back] = yield* hub.listInbox(open);
         assert.equal(back?.id, item.id);
         assert.equal(back?.redelivered, 1);
@@ -663,7 +664,7 @@ describe("CompanionHub", () => {
           wake: false,
           priorities: {},
         });
-        yield* hub.observe(
+        yield* hub.ingest(
           "local",
           makeShell({
             pullRequests: [
@@ -672,7 +673,7 @@ describe("CompanionHub", () => {
             ],
           }),
         );
-        const [work] = yield* hub.openWork(orchestrator);
+        const [work] = yield* hub.openWork({ subscriber: orchestrator });
         assert.equal(work?.threadId, "thread-a");
         assert.deepEqual(
           work?.readyToMark.map((pr) => pr.number),

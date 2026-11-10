@@ -3,36 +3,35 @@ import "vite-plus/test/config";
 import { assert, describe, it } from "@effect/vitest";
 import { fromPartial } from "@total-typescript/shoehorn";
 
+import { deliveryPriority } from "./delivery.ts";
 import type { Subscription, ThreadEvent } from "./schema.ts";
 import {
-  backgroundTaskIdleCapMs,
-  deliveryPriority,
+  holdsSnooze,
   idleCandidate,
   pullRequestSummaries,
   readyToMark,
+  snoozePauseCapMs,
   threadStatus,
 } from "./state.ts";
 import { makePullRequest, makeShell, monitorTask } from "./state.test-utils.ts";
 
 describe("idleCandidate", () => {
-  it("is a finished idle that may fire now when nothing is pending", () => {
+  it("is a finished idle when nothing is pending", () => {
     const candidate = idleCandidate("local", makeShell({ completedAtMs: 1000 }), 5000);
     assert.isNotNull(candidate);
-    assert.isFalse(candidate.event.pause);
-    assert.deepEqual(candidate.event.pendingTasks, []);
-    assert.equal(candidate.notBeforeMs, 5000);
+    assert.isFalse(candidate.pause);
+    assert.deepEqual(candidate.pendingTasks, []);
   });
 
-  it("is a pause carrying the tasks, firing like any idle, with its own id", () => {
+  it("is a pause carrying the tasks, with its own id", () => {
     const shell = makeShell({ completedAtMs: 1000, pendingBackgroundTasks: [monitorTask] });
     const candidate = idleCandidate("local", shell, 5000);
     assert.isNotNull(candidate);
-    assert.isTrue(candidate.event.pause);
-    assert.deepEqual(candidate.event.pendingTasks, ["monitor Watching CI"]);
-    assert.equal(candidate.notBeforeMs, 5000);
-    assert.include(candidate.event.summary, "background task still pending");
+    assert.isTrue(candidate.pause);
+    assert.deepEqual(candidate.pendingTasks, ["monitor Watching CI"]);
+    assert.include(candidate.summary, "background task still pending");
     const finished = idleCandidate("local", makeShell({ completedAtMs: 1000 }), 5000);
-    assert.equal(candidate.event.eventId, `${finished?.event.eventId}/pause`);
+    assert.equal(candidate.eventId, `${finished?.eventId}/pause`);
   });
 
   it("is null while a run is active", () => {
@@ -41,10 +40,14 @@ describe("idleCandidate", () => {
 });
 
 describe("threadStatus", () => {
-  it("counts pending background tasks as running until the cap passes", () => {
+  it("is paused while only background work is pending, which holds snoozes until the cap", () => {
     const shell = makeShell({ completedAtMs: 0, pendingBackgroundTasks: [monitorTask] });
-    assert.equal(threadStatus("local", shell, 1000).state, "running");
-    assert.equal(threadStatus("local", shell, backgroundTaskIdleCapMs + 1).state, "idle");
+    assert.equal(threadStatus("local", shell, 1000).state, "paused");
+    assert.equal(threadStatus("local", shell, snoozePauseCapMs + 1).state, "paused");
+    assert.isTrue(holdsSnooze(shell, 1000));
+    assert.isFalse(holdsSnooze(shell, snoozePauseCapMs + 1));
+    assert.isTrue(holdsSnooze(makeShell({ activityRunStatus: "running" }), snoozePauseCapMs + 1));
+    assert.isFalse(holdsSnooze(makeShell(), 1000));
   });
 
   it("reports failed, needs-input, and settled", () => {
