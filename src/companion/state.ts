@@ -14,9 +14,9 @@ import type {
 const queuedTurnStartGraceMs = 2 * 60_000;
 
 /**
- * A background task (Claude `Monitor`, a `run_in_background` command, a subagent) wakes the
- * thread later, so it holds idle. Past this age the task is reported as still pending instead,
- * since dev servers and PR watches can run for hours.
+ * A source with background tasks (Claude `Monitor`, a `run_in_background` command, a subagent)
+ * counts as running for this long after its run ended, e.g. for snoozes waiting on it; dev
+ * servers and PR watches can run for hours.
  */
 export const backgroundTaskIdleCapMs = 30 * 60_000;
 
@@ -298,10 +298,10 @@ export interface IdleCandidate {
 }
 
 /**
- * The idle event the shell would produce once it stays quiet, or null while it is busy. With
- * background tasks pending, idle waits until the cap passes after the run completed and is then
- * a pause, carrying the tasks. The id is the same either way, so a capped idle and a later real
- * one are delivered once.
+ * The idle event the shell would produce once it stays quiet, or null while a run is active. A
+ * run that ends with background tasks still pending is a pause, carrying the tasks; once they end
+ * without a new run, the same run gives a finished idle. The two have different ids, so a run can
+ * report both.
  */
 export function idleCandidate(
   environment: string,
@@ -316,23 +316,20 @@ export function idleCandidate(
   }
   const completedAt = iso(shell.latestRunCompletedAt) ?? DateTime.formatIso(shell.updatedAt);
   const pendingTasks = pendingTaskLabels(shell);
+  const pause = pendingTasks.length > 0;
   return {
     event: makeEvent(
       environment,
       shell,
       "idle",
-      `${shell.latestRunId}@${completedAt}`,
+      `${shell.latestRunId}@${completedAt}${pause ? "/pause" : ""}`,
       completedAt,
-      pendingTasks.length === 0
-        ? "run finished"
-        : `run ended; background task still pending: ${pendingTasks.join(", ")}`,
+      pause
+        ? `run ended; background task still pending: ${pendingTasks.join(", ")}`
+        : "run finished",
       pendingTasks,
     ),
-    notBeforeMs:
-      pendingTasks.length === 0
-        ? nowMs
-        : DateTime.toEpochMillis(shell.latestRunCompletedAt ?? shell.updatedAt) +
-          backgroundTaskIdleCapMs,
+    notBeforeMs: nowMs,
   };
 }
 

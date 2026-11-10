@@ -26,6 +26,7 @@ import {
   type ThreadStatus,
 } from "./schema.ts";
 import {
+  busyReasons,
   checksTransitions,
   deliveryPriority,
   pullRequestSummaries,
@@ -260,8 +261,16 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     return threadStatus(entry.environment, entry.shell, yield* Clock.currentTimeMillis);
   });
 
-  const isBusy = (ref: ThreadRef) =>
-    statusOf(ref).pipe(Effect.map((status) => status !== null && status.state === "running"));
+  /**
+   * Whether a subscriber is in a turn. Unlike a source's state, its own background work does not
+   * count: an orchestrator usually has delegates running between turns and must still be woken.
+   */
+  const inTurn = Effect.fn("CompanionHub.inTurn")(function* (ref: ThreadRef) {
+    const entry = (yield* Ref.get(threads)).get(refKey(ref));
+    return (
+      entry !== undefined && busyReasons(entry.shell, yield* Clock.currentTimeMillis).length > 0
+    );
+  });
 
   /** Fills in the source thread's last assistant message; the shell row carries no text. */
   const withLastMessage = Effect.fn("CompanionHub.withLastMessage")(function* (event: ThreadEvent) {
@@ -350,7 +359,7 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     // The companion holds the batch itself while the subscriber works, rather than piling one
     // T3 Code queued turn per event behind it: only urgent items steer into a running turn,
     // carrying everything else pending; the rest go out as one new turn once it ends.
-    const busy = yield* isBusy(subscriber);
+    const busy = yield* inTurn(subscriber);
     if (busy && first.priority !== "urgent") {
       return false;
     }
@@ -438,6 +447,13 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     yield* Effect.logInfo(
       `inbox ${row.id}: ${event.eventId} -> ${refKey(row.subscriber)} (${row.priority})`,
     );
+    if (event.kind === "idle" && !event.pause) {
+      yield* store.resolveEvent({
+        subscriber: subscription.subscriber,
+        eventId: `${event.eventId}/pause`,
+        disposition: "auto: superseded, the run's background work finished",
+      });
+    }
     yield* PubSub.publish(delivered, row);
     if (subscription.wake) {
       yield* scheduleWake(subscription.subscriber);
@@ -613,11 +629,11 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     shell: OrchestrationV2ThreadShell,
   ) {
     const ref = { environment, threadId: shell.id };
-    const wasBusy = yield* isBusy(ref);
+    const wasBusy = yield* inTurn(ref);
     yield* Ref.update(threads, (current) =>
       new Map(current).set(refKey(ref), { environment, shell }),
     );
-    const nowBusy = yield* isBusy(ref);
+    const nowBusy = yield* inTurn(ref);
     if (!wasBusy || nowBusy) {
       return;
     }

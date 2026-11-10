@@ -127,6 +127,12 @@ export class CompanionStore extends Context.Service<
     /** Open items from wake subscriptions that no digest has announced yet. */
     readonly pendingWakes: () => Effect.Effect<ReadonlyArray<InboxEvent>, CompanionStoreError>;
     readonly markWoken: (ids: ReadonlyArray<number>) => Effect.Effect<void, CompanionStoreError>;
+    /** Resolves the subscriber's open item for one event, if there is one. */
+    readonly resolveEvent: (input: {
+      readonly subscriber: ThreadRef;
+      readonly eventId: string;
+      readonly disposition: string;
+    }) => Effect.Effect<number, CompanionStoreError>;
     /** Rewrites an item's event, for a digest that refreshed it from the source's current state. */
     readonly updateEvent: (
       id: number,
@@ -530,6 +536,27 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
     Effect.mapError(storeError("markWoken")),
   );
 
+  const resolveEvent = Effect.fn("CompanionStore.resolveEvent")(
+    function* (input: {
+      readonly subscriber: ThreadRef;
+      readonly eventId: string;
+      readonly disposition: string;
+    }) {
+      const resolvedAt = yield* nowIso;
+      const rows = yield* sql`
+        UPDATE inbox SET resolved_at = ${resolvedAt}, disposition = ${input.disposition},
+          snoozed_until = NULL
+        WHERE subscriber_env = ${input.subscriber.environment}
+          AND subscriber_thread = ${input.subscriber.threadId}
+          AND event_id = ${input.eventId}
+          AND resolved_at IS NULL
+        RETURNING id
+      `;
+      return rows.length;
+    },
+    Effect.mapError(storeError("resolveEvent")),
+  );
+
   const updateEvent = Effect.fn("CompanionStore.updateEvent")(
     function* (id: number, event: ThreadEvent) {
       yield* sql`UPDATE inbox SET event = ${yield* encodeEvent(event)} WHERE id = ${id}`;
@@ -603,6 +630,7 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
     redeliver,
     pendingWakes,
     markWoken,
+    resolveEvent,
     updateEvent,
     hasDeliveredMessage,
     loadChecks,

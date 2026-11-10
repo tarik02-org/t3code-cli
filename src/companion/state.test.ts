@@ -23,14 +23,16 @@ describe("idleCandidate", () => {
     assert.equal(candidate.notBeforeMs, 5000);
   });
 
-  it("is a pause carrying the tasks, held until the cap passes", () => {
+  it("is a pause carrying the tasks, firing like any idle, with its own id", () => {
     const shell = makeShell({ completedAtMs: 1000, pendingBackgroundTasks: [monitorTask] });
     const candidate = idleCandidate("local", shell, 5000);
     assert.isNotNull(candidate);
     assert.isTrue(candidate.event.pause);
     assert.deepEqual(candidate.event.pendingTasks, ["monitor Watching CI"]);
-    assert.equal(candidate.notBeforeMs, 1000 + backgroundTaskIdleCapMs);
+    assert.equal(candidate.notBeforeMs, 5000);
     assert.include(candidate.event.summary, "background task still pending");
+    const finished = idleCandidate("local", makeShell({ completedAtMs: 1000 }), 5000);
+    assert.equal(candidate.event.eventId, `${finished?.event.eventId}/pause`);
   });
 
   it("is null while a run is active", () => {

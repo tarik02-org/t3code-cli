@@ -20,7 +20,7 @@ import { CompanionAgentSendError } from "./error.ts";
 import { CompanionHub, makeCompanionHub, wakeCoalesceWindow } from "./hub.ts";
 import type { CompanionEventKind, ThreadEvent } from "./schema.ts";
 import { idleCandidate, immediateEvents } from "./state.ts";
-import { makePullRequest, makeShell } from "./state.test-utils.ts";
+import { makePullRequest, makeShell, monitorTask } from "./state.test-utils.ts";
 import { CompanionStore, makeCompanionStore } from "./store.ts";
 
 const orchestrator = { environment: "local", threadId: "orchestrator" };
@@ -452,6 +452,68 @@ describe("CompanionHub", () => {
           assert.lengthOf(yield* Ref.get(fixture.sent), 1);
         }),
       "failing",
+    ),
+  );
+
+  it.effect("wakes a subscriber between turns even while its own delegates run", () =>
+    withHub((hub, fixture) =>
+      Effect.gen(function* () {
+        yield* subscribeTo(hub, "thread-a", {});
+        yield* hub.observe("local", busySubscriber);
+        yield* hub.publish(idleEvent(makeShell()));
+        yield* afterWindow;
+        assert.lengthOf(yield* Ref.get(fixture.sent), 0);
+
+        // The turn ends with a delegated subagent still running in the subscriber.
+        yield* hub.observe(
+          "local",
+          makeShell({
+            id: ThreadId.make("orchestrator"),
+            pendingBackgroundTasks: [{ kind: "subagent", taskId: "delegate-1" }],
+          }),
+        );
+        yield* afterWindow;
+        const sent = yield* Ref.get(fixture.sent);
+        assert.lengthOf(sent, 1);
+        assert.equal(sent[0]?.mode, "auto");
+      }),
+    ),
+  );
+
+  it.effect("delivers each run's pause at low priority, and its finished idle closes it", () =>
+    withHub((hub) =>
+      Effect.gen(function* () {
+        yield* subscribeTo(hub, "thread-a", {});
+        const waiting = makeShell({ pendingBackgroundTasks: [monitorTask] });
+        yield* hub.publish(idleEvent(waiting));
+        const second = makeShell({
+          latestRunId: RunId.make("run-2"),
+          pendingBackgroundTasks: [monitorTask],
+          completedAtMs: 2000,
+        });
+        yield* hub.publish(idleEvent(second));
+        const open = yield* hub.listInbox(openQuery);
+        assert.deepEqual(
+          open.map((row) => [row.event.pause, row.priority]),
+          [
+            [true, "low"],
+            [true, "low"],
+          ],
+        );
+
+        // Run 2's background work ends without a new run.
+        yield* hub.publish(
+          idleEvent(makeShell({ latestRunId: RunId.make("run-2"), completedAtMs: 2000 })),
+        );
+        const after = yield* hub.listInbox(openQuery);
+        assert.deepEqual(
+          after.map((row) => [row.event.runId, row.event.pause]),
+          [
+            ["run-1", true],
+            ["run-2", false],
+          ],
+        );
+      }),
     ),
   );
 
