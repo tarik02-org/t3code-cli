@@ -57,6 +57,11 @@ export const Subscription = Schema.Struct({
    * new thread in the project that it launched, with this subscription's events and settings.
    */
   follow: Schema.Boolean,
+  /**
+   * Whether the next event may wake the subscriber. A wake disarms the subscription; later events
+   * arrive passively until it is armed again. Failures and questions wake regardless.
+   */
+  armed: Schema.Boolean,
   /** Per-kind overrides of the default priority, keyed by event kind. */
   priorities: Schema.Record(Schema.String, DeliveryPriority),
   createdAt: Schema.String,
@@ -121,6 +126,8 @@ export const InboxEvent = Schema.Struct({
   subscriber: ThreadRef,
   event: ThreadEvent,
   priority: DeliveryPriority,
+  /** May start a digest; a passive item only rides along with one. */
+  wakes: Schema.Boolean,
   deliveredAt: Schema.String,
   /** While set, the item is hidden; it comes back once this passes and the source is idle. */
   snoozedUntil: Schema.NullOr(Schema.String),

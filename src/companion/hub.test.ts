@@ -517,6 +517,105 @@ describe("CompanionHub", () => {
     ),
   );
 
+  it.effect("wakes once per arm; later events wait passively for the next digest", () =>
+    withHub((hub, fixture) =>
+      Effect.gen(function* () {
+        const { subscription } = yield* subscribeTo(hub, "thread-a", {});
+        assert.isTrue(subscription.armed);
+        yield* hub.publish(idleEvent(makeShell()));
+        yield* afterWindow;
+        assert.lengthOf(yield* Ref.get(fixture.sent), 1);
+        const [listed] = yield* hub.listSubscriptions(orchestrator);
+        assert.isFalse(listed?.armed);
+
+        // Disarmed: the next run's idle lands in the inbox without a wake, even at turn end.
+        yield* hub.publish(idleEvent(makeShell({ latestRunId: RunId.make("run-2") })));
+        yield* hub.observe("local", busySubscriber);
+        yield* hub.observe("local", idleSubscriber);
+        yield* afterWindow;
+        assert.lengthOf(yield* Ref.get(fixture.sent), 1);
+        assert.lengthOf(yield* hub.listInbox(openQuery), 2);
+
+        // Another armed source's event carries the passive item along.
+        yield* subscribeTo(hub, "thread-b", {});
+        yield* hub.publish(
+          idleEvent(makeShell({ id: ThreadId.make("thread-b"), completedAtMs: 60_000 })),
+        );
+        yield* afterWindow;
+        const sent = yield* Ref.get(fixture.sent);
+        assert.lengthOf(sent, 2);
+        assert.include(sent[1]?.message ?? "", "thread-a");
+        assert.include(sent[1]?.message ?? "", "thread-b");
+      }),
+    ),
+  );
+
+  it.effect("re-arms by subscribing again or by id, without dropping or repeating items", () =>
+    withHub((hub, fixture) =>
+      Effect.gen(function* () {
+        const { subscription } = yield* subscribeTo(hub, "thread-a", {});
+        yield* hub.publish(idleEvent(makeShell()));
+        yield* afterWindow;
+        yield* hub.publish(idleEvent(makeShell({ latestRunId: RunId.make("run-2") })));
+        yield* afterWindow;
+        assert.lengthOf(yield* Ref.get(fixture.sent), 1);
+
+        const again = yield* subscribeTo(hub, "thread-a", {});
+        assert.equal(again.subscription.id, subscription.id);
+        assert.isTrue(again.subscription.armed);
+        assert.lengthOf(yield* hub.listSubscriptions(orchestrator), 1);
+        assert.lengthOf(yield* hub.listInbox(openQuery), 2);
+
+        yield* hub.publish(idleEvent(makeShell({ latestRunId: RunId.make("run-3") })));
+        yield* afterWindow;
+        const sent = yield* Ref.get(fixture.sent);
+        assert.lengthOf(sent, 2);
+        // The passive run-2 item rides along once; run-1 was already announced.
+        assert.deepEqual(digestIds(sent[1]).length, 2);
+
+        assert.equal(yield* hub.arm({ subscriber: orchestrator, ids: [subscription.id] }), 1);
+        const [listed] = yield* hub.listSubscriptions(orchestrator);
+        assert.isTrue(listed?.armed);
+      }),
+    ),
+  );
+
+  it.effect("always wakes for failures without spending the arm, never for environment drops", () =>
+    withHub((hub, fixture) =>
+      Effect.gen(function* () {
+        const { subscription } = yield* subscribeTo(hub, "thread-a", {});
+        yield* hub.publish({
+          eventId: "local/env-down/0",
+          kind: "env-down",
+          environment: "local",
+          threadId: null,
+          projectId: null,
+          title: "local",
+          occurredAt: "9999-01-01T00:00:00.000Z",
+          summary: "environment local unreachable",
+          pause: false,
+          pendingTasks: [],
+          lastMessage: null,
+          pullRequests: [],
+        });
+        yield* afterWindow;
+        assert.lengthOf(yield* Ref.get(fixture.sent), 0);
+
+        yield* hub.arm({ subscriber: orchestrator, ids: [subscription.id] });
+        const [failed] = immediateEvents(
+          "local",
+          makeShell({ status: "failed", latestRunId: RunId.make("run-2") }),
+        );
+        assert.isDefined(failed);
+        yield* hub.publish(failed);
+        yield* afterWindow;
+        assert.lengthOf(yield* Ref.get(fixture.sent), 1);
+        const [listed] = yield* hub.listSubscriptions(orchestrator);
+        assert.isTrue(listed?.armed);
+      }),
+    ),
+  );
+
   it.effect("brings a snoozed item back only once its source is idle", () =>
     withHub((hub) =>
       Effect.gen(function* () {

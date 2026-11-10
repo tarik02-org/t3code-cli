@@ -40,10 +40,10 @@ describe("CompanionStore", () => {
         follow: false,
       });
       assert.deepEqual(subscription.priorities, { idle: "low" });
-      const row = yield* store.deliver(subscription, event("e1"), "normal");
+      const row = yield* store.deliver(subscription, event("e1"), "normal", true);
       assert.isNotNull(row);
       assert.equal(row.event.lastMessage, "done");
-      assert.isNull(yield* store.deliver(subscription, event("e1"), "normal"));
+      assert.isNull(yield* store.deliver(subscription, event("e1"), "normal", true));
 
       const query = { subscriber, includeResolved: false, afterId: 0, limit: 10 };
       assert.lengthOf(yield* store.listInbox(query), 1);
@@ -69,7 +69,7 @@ describe("CompanionStore", () => {
         priorities: {},
         follow: false,
       });
-      const row = yield* store.deliver(subscription, event("e1"), "normal");
+      const row = yield* store.deliver(subscription, event("e1"), "normal", true);
       assert.isNotNull(row);
       yield* store.markWoken([row.id]);
       yield* store.snooze({ subscriber, ids: [row.id], until: "2026-01-01T00:10:00.000Z" });
@@ -130,6 +130,7 @@ describe("CompanionStore", () => {
       const [subscription] = yield* store.listSubscriptions(null);
       assert.deepEqual(subscription?.priorities, {});
       assert.isFalse(subscription?.follow);
+      assert.isTrue(subscription?.armed);
       assert.deepEqual(subscription?.events, ["idle", "failed", "pr-checks"]);
       yield* store.saveChecks("local", "thread-a", [
         { key: "acme/repo#9", head: "abc", state: "pending", cycle: "2026-01-01T00:00:00.000Z" },
@@ -152,6 +153,7 @@ describe("CompanionStore", () => {
         ],
       );
       assert.isFalse(rows[1]?.event.pause);
+      assert.isTrue(rows[1]?.wakes);
     }).pipe(memoryDatabase),
   );
 });
