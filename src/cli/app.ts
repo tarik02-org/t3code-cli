@@ -2,10 +2,11 @@ import { Command } from "effect/cli";
 
 import { createActionCommand } from "./action.ts";
 import { askCommand } from "./ask.ts";
-import { createCompanionCommand, inboxCommand, subscribeCommand } from "./companion.ts";
+import { createCompanionCommand } from "./companion.ts";
 import { createAuthCommand } from "./auth.ts";
 import { createEnvCommand } from "./env.ts";
 import { cliEnvironmentSetting } from "./env/flag.ts";
+import { inboxCommand, subscribeCommand } from "./inbox.ts";
 import { createTerminalCommandGroup } from "./terminal.ts";
 import { createModelCommand } from "./model.ts";
 import { createProjectCommand } from "./project.ts";
