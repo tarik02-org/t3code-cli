@@ -57,9 +57,10 @@ export function deliveryPriority(subscription: Subscription, event: ThreadEvent)
 }
 
 /**
- * Whether an item may start a digest. Failures and questions block work, so they always wake;
- * environment drops wake no one, since they concern every subscription there; anything else wakes
- * only an armed subscription.
+ * Whether an item may start a digest. Failures and questions block work, so they always wake.
+ * Environment drops wake no one, since they concern every subscription there, and neither does a
+ * pause: the thread is still waiting on its own work, and the wake belongs to the idle that
+ * follows. Anything else wakes only an armed subscription.
  */
 export const itemWakes = (
   subscription: Subscription,
@@ -67,7 +68,8 @@ export const itemWakes = (
   priority: DeliveryPriority,
 ) =>
   subscription.wake &&
-  (priority === "urgent" || (subscription.armed && !environmentEventKinds.includes(event.kind)));
+  (priority === "urgent" ||
+    (subscription.armed && !event.pause && !environmentEventKinds.includes(event.kind)));
 
 export interface Relevance {
   /** Some subscription wants this thread's events. */

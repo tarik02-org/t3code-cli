@@ -481,8 +481,8 @@ describe("CompanionHub", () => {
     ),
   );
 
-  it.effect("delivers each run's pause at low priority, and its finished idle closes it", () =>
-    withHub((hub) =>
+  it.effect("never wakes for a pause; the run's finished idle wakes and closes it", () =>
+    withHub((hub, fixture) =>
       Effect.gen(function* () {
         yield* subscribeTo(hub, "thread-a", {});
         const waiting = makeShell({ pendingBackgroundTasks: [monitorTask] });
@@ -501,11 +501,20 @@ describe("CompanionHub", () => {
             [true, "low"],
           ],
         );
+        // Neither pause wakes or spends the arm, even when the subscriber's turn ends.
+        yield* hub.ingest("local", busySubscriber);
+        yield* hub.ingest("local", idleSubscriber);
+        yield* afterWindow;
+        assert.lengthOf(yield* Ref.get(fixture.sent), 0);
+        const [subscription] = yield* hub.listSubscriptions({ subscriber: orchestrator });
+        assert.isTrue(subscription?.armed);
 
         // Run 2's background work ends without a new run.
         yield* hub.publish(
           idleEvent(makeShell({ latestRunId: RunId.make("run-2"), completedAtMs: 2000 })),
         );
+        yield* afterWindow;
+        assert.lengthOf(yield* Ref.get(fixture.sent), 1);
         const after = yield* hub.listInbox(openQuery);
         assert.deepEqual(
           after.map((row) => [row.event.runId, row.event.pause]),
