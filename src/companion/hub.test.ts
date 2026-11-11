@@ -337,6 +337,13 @@ describe("CompanionHub", () => {
           ],
         );
         assert.equal(all[1]?.event.pullRequests[0]?.checks, "pass");
+        // The dropped idle never woke anyone, so its subscription is armed again.
+        assert.deepEqual(
+          (yield* hub.listSubscriptions({ subscriber: orchestrator })).map(
+            (subscription) => subscription.armed,
+          ),
+          [true, false],
+        );
       }),
     ),
   );
@@ -547,6 +554,7 @@ describe("CompanionHub", () => {
         assert.lengthOf(yield* hub.listInbox(openQuery), 2);
 
         // Another armed source's event carries the passive item along.
+        yield* hub.ingest("local", makeShell({ latestRunId: RunId.make("run-2") }));
         yield* subscribeTo(hub, "thread-b", {});
         yield* hub.publish(
           idleEvent(makeShell({ id: ThreadId.make("thread-b"), completedAtMs: 60_000 })),
@@ -556,6 +564,17 @@ describe("CompanionHub", () => {
         assert.lengthOf(sent, 2);
         assert.include(sent[1]?.message ?? "", "thread-a");
         assert.include(sent[1]?.message ?? "", "thread-b");
+        // The digest says what it disarmed, what was disarmed before, and how to re-arm both.
+        const actions = (sent[1]?.message ?? "").split("Actions:")[1] ?? "";
+        assert.include(actions, "This wake disarmed 1 subscription");
+        assert.include(actions, '2 "thread-b" (local/thread-b)');
+        assert.include(actions, '1 "Thread A" (local/thread-a), 1 passive item waiting');
+        assert.include(
+          actions,
+          'arm {"callerThreadId":"orchestrator","callerEnvironment":"local","ids":[2,1]}',
+        );
+        assert.include(actions, "1 passive item:");
+        assert.include(actions, '] idle "Thread A": run finished');
       }),
     ),
   );

@@ -238,6 +238,12 @@ export function threadStatus(
   };
 }
 
+/** Whether a thread can still produce events worth a wake: neither settled nor archived. */
+export function isLive(shell: OrchestrationV2ThreadShell, nowMs: number): boolean {
+  const state = threadState(shell, nowMs);
+  return state !== "settled" && state !== "archived";
+}
+
 /** Whether a source keeps its snoozed items hidden: it works, or it paused only recently. */
 export function holdsSnooze(shell: OrchestrationV2ThreadShell, nowMs: number): boolean {
   const state = threadState(shell, nowMs);
@@ -320,6 +326,23 @@ export function immediateEvents(
   return events;
 }
 
+/** Whether a message closes by asking something: its last paragraph has a line ending in "?". */
+export const endsWithQuestion = (message: string) =>
+  (
+    message
+      .trim()
+      .split(/\n\s*\n/)
+      .at(-1) ?? ""
+  )
+    .split("\n")
+    .some((line) => /\?[\s"'”’)*_`]*$/.test(line));
+
+/** A finished run's summary; a subscriber skimming summaries must not miss a question. */
+export const finishedSummary = (lastMessage: string | null) =>
+  lastMessage !== null && endsWithQuestion(lastMessage)
+    ? "run finished; its last message ends with a question"
+    : "run finished";
+
 /**
  * The idle event the shell would produce once it stays quiet, or null while a run is active. A
  * run that ends with background tasks still pending is a pause, carrying the tasks; once they end
@@ -346,7 +369,9 @@ export function idleCandidate(
     "idle",
     `${shell.latestRunId}@${completedAt}${pause ? "/pause" : ""}`,
     completedAt,
-    pause ? `run ended; background task still pending: ${pendingTasks.join(", ")}` : "run finished",
+    pause
+      ? `run ended; background task still pending: ${pendingTasks.join(", ")}`
+      : finishedSummary(null),
     pendingTasks,
   );
 }

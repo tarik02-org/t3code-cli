@@ -6,11 +6,19 @@ import * as FiberMap from "effect/FiberMap";
 import * as Option from "effect/Option";
 
 import { CompanionEnvironments } from "./environments.ts";
-import { threadRefKey, type DeliveryPriority, type InboxEvent, type ThreadRef } from "./schema.ts";
-import { inTurn, pullRequestSummaries } from "./state.ts";
+import {
+  threadRefKey,
+  type DeliveryPriority,
+  type InboxEvent,
+  type PullRequestSummary,
+  type ThreadRef,
+} from "./schema.ts";
+import { inTurn, isLive, pullRequestSummaries } from "./state.ts";
 import { CompanionStore } from "./store.ts";
 
 export const wakeCoalesceWindow = Duration.seconds(5);
+/** The most passive items a digest lists one by one; the rest are counted. */
+const passiveListLimit = 20;
 
 const priorityRank: Record<DeliveryPriority, number> = { urgent: 0, normal: 1, low: 2 };
 
@@ -35,11 +43,79 @@ function formatDigestItem(row: InboxEvent): string {
   return lines.join("\n");
 }
 
-function formatDigest(rows: ReadonlyArray<InboxEvent>): string {
+interface DisarmedSubscription {
+  readonly id: number;
+  readonly label: string;
+  /** Open passive items this subscription has delivered. */
+  readonly waiting: number;
+}
+
+/** What the subscriber is left to do after a digest; a wake spends its subscription's arm. */
+interface DigestActions {
+  readonly subscriber: ThreadRef;
+  /** Subscriptions this digest's waking items disarmed. */
+  readonly spent: ReadonlyArray<DisarmedSubscription>;
+  /** Subscriptions disarmed earlier whose source can still produce events. */
+  readonly stillDisarmed: ReadonlyArray<DisarmedSubscription>;
+  /** One line per open passive item, oldest first. */
+  readonly passive: ReadonlyArray<string>;
+}
+
+const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+
+const pullRequestNote = (pr: PullRequestSummary) =>
+  pr.state === "open"
+    ? `PR #${pr.number} ${pr.draft ? "draft" : "ready"}, checks ${pr.checks ?? "unknown"}`
+    : `PR #${pr.number} ${pr.state}`;
+
+const subscriptionLine = (subscription: DisarmedSubscription) =>
+  `    ${subscription.id} ${subscription.label}${
+    subscription.waiting === 0 ? "" : `, ${count(subscription.waiting, "passive item")} waiting`
+  }`;
+
+function formatActions(actions: DigestActions): Array<string> {
+  const lines = [
+    "Actions:",
+    "- Close what you have handled with inbox_resolve, or inbox_snooze it until the source is idle again. Full messages are in inbox_list.",
+  ];
+  if (actions.spent.length > 0) {
+    lines.push(
+      `- This wake disarmed ${count(actions.spent.length, "subscription")}; later events from there will not wake you:`,
+      ...actions.spent.map(subscriptionLine),
+    );
+  }
+  if (actions.stillDisarmed.length > 0) {
+    lines.push(
+      `- Disarmed earlier and still disarmed, though the source is active: ${count(actions.stillDisarmed.length, "subscription")}:`,
+      ...actions.stillDisarmed.map(subscriptionLine),
+    );
+  }
+  const ids = [...actions.spent, ...actions.stillDisarmed].map((subscription) => subscription.id);
+  lines.push(
+    ids.length === 0
+      ? "- No subscription with an active source is disarmed."
+      : `- Re-arm the ones you still want wakes from: arm ${JSON.stringify({
+          callerThreadId: actions.subscriber.threadId,
+          callerEnvironment: actions.subscriber.environment,
+          ids,
+        })}`,
+  );
+  if (actions.passive.length > 0) {
+    const hidden = actions.passive.length - passiveListLimit;
+    lines.push(
+      `- Open in your inbox without having woken you: ${count(actions.passive.length, "passive item")}:`,
+      ...actions.passive.slice(0, passiveListLimit),
+      ...(hidden > 0 ? [`    and ${hidden} more in inbox_list`] : []),
+    );
+  }
+  return lines;
+}
+
+function formatDigest(rows: ReadonlyArray<InboxEvent>, actions: DigestActions): string {
   return [
-    `t3 companion: ${rows.length} subscribed thread event${rows.length === 1 ? "" : "s"}.`,
+    `t3 companion: ${count(rows.length, "subscribed thread event")}.`,
     ...rows.map(formatDigestItem),
-    "Full messages are in inbox_list. Close items with inbox_resolve, or inbox_snooze them until the source is idle again.",
+    ...formatActions(actions),
   ].join("\n");
 }
 
@@ -96,6 +172,10 @@ export const makeDigests = Effect.fn("makeCompanionDigests")(function* (
           ids: [row.id],
           disposition: "auto: superseded, the source started a new run",
         });
+        // The wake this item spent its subscription's arm on never happens, so the arm goes back.
+        if (!row.passive && row.priority !== "urgent" && row.redelivered === 0) {
+          yield* store.setArmed({ ids: [row.subscriptionId], armed: true });
+        }
         continue;
       }
       const now = pullRequestSummaries(latest);
@@ -117,6 +197,65 @@ export const makeDigests = Effect.fn("makeCompanionDigests")(function* (
     return kept;
   });
 
+  const actionsFor = Effect.fn("CompanionDigests.actionsFor")(function* (
+    subscriber: ThreadRef,
+    pending: ReadonlyArray<InboxEvent>,
+  ) {
+    const nowMs = yield* Clock.currentTimeMillis;
+    const passive = yield* store.openPassive(subscriber);
+    const spentIds = new Set(
+      pending
+        .filter((row) => !row.passive && row.priority !== "urgent" && row.redelivered === 0)
+        .map((row) => row.subscriptionId),
+    );
+    const spent: Array<DisarmedSubscription> = [];
+    const stillDisarmed: Array<DisarmedSubscription> = [];
+    for (const subscription of yield* store.subscriptions) {
+      if (
+        threadRefKey(subscription.subscriber) !== threadRefKey(subscriber) ||
+        !subscription.wake ||
+        subscription.armed ||
+        subscription.follow
+      ) {
+        continue;
+      }
+      const { environment, threadId, projectId } = subscription.source;
+      const shell = threadId === null ? undefined : yield* latestShell({ environment, threadId });
+      const entry = {
+        id: subscription.id,
+        label:
+          threadId === null
+            ? `project ${projectId} (${environment})`
+            : `"${shell?.title ?? threadId}" (${environment}/${threadId})`,
+        waiting: passive.filter((row) => row.subscriptionId === subscription.id).length,
+      };
+      if (spentIds.has(subscription.id)) {
+        spent.push(entry);
+      } else if (threadId === null || (shell !== undefined && isLive(shell, nowMs))) {
+        stillDisarmed.push(entry);
+      }
+    }
+    const passiveLines: Array<string> = [];
+    for (const { id, event } of passive) {
+      const shell =
+        event.threadId === null
+          ? undefined
+          : yield* latestShell({ environment: event.environment, threadId: event.threadId });
+      // A PR moves on after the item was written; say where it stands now.
+      const pullRequests =
+        shell === undefined || event.kind === "pr-checks"
+          ? event.pullRequests
+          : pullRequestSummaries(shell);
+      passiveLines.push(
+        [
+          `    [${id}] ${event.kind}${event.pause ? " (pause)" : ""} "${event.title}": ${event.summary}`,
+          ...pullRequests.map(pullRequestNote),
+        ].join("; "),
+      );
+    }
+    return { subscriber, spent, stillDisarmed, passive: passiveLines } satisfies DigestActions;
+  });
+
   const send = Effect.fn("CompanionDigests.send")(function* (subscriber: ThreadRef) {
     const pending = (yield* freshen(yield* store.pendingDigest(subscriber))).toSorted((a, b) =>
       a.priority === b.priority ? a.id - b.id : priorityRank[a.priority] - priorityRank[b.priority],
@@ -134,7 +273,7 @@ export const makeDigests = Effect.fn("makeCompanionDigests")(function* (
       return false;
     }
     const environment = yield* environments.resolve(subscriber.environment);
-    const message = formatDigest(pending);
+    const message = formatDigest(pending, yield* actionsFor(subscriber, pending));
     const mode = first.priority === "urgent" ? "steer" : "auto";
     // Through T3 Code's MCP the digest shows as from an agent; a websocket send shows as the user's.
     const asAgent = yield* Option.match(environment.agentSender, {

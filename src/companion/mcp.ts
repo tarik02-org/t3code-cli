@@ -37,7 +37,7 @@ const Events = Schema.optional(Schema.Array(CompanionEventKind)).annotate({
 
 const Wake = Schema.optional(Schema.Boolean).annotate({
   description:
-    "Let events wake your thread with a digest message. Each subscription wakes you once, then disarms until you arm it (or subscribe to the same source again); later events still reach your inbox and ride along in other digests. Failures, questions and approvals always wake. A pause (an idle whose thread still waits on its own background work) never wakes and does not disarm. Events always go to the inbox.",
+    "Let events wake your thread with a digest message. Each subscription wakes you once, then disarms until you arm it (or subscribe to the same source again); later events still reach your inbox and ride along in other digests. Every digest ends with an Actions block: the subscriptions it disarmed, others still disarmed, the arm call for them, and the passive items still open. Failures, questions and approvals always wake. A pause (an idle whose thread still waits on its own background work) never wakes and does not disarm. Events always go to the inbox.",
 });
 
 const Priorities = Schema.optional(Schema.Record(Schema.String, DeliveryPriority)).annotate({

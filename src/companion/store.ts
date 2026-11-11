@@ -148,6 +148,10 @@ export class CompanionStore extends Context.Service<
     readonly pendingDigest: (
       subscriber: ThreadRef,
     ) => Effect.Effect<ReadonlyArray<InboxEvent>, CompanionStoreError>;
+    /** A subscriber's open items from wake subscriptions that never started a digest. */
+    readonly openPassive: (
+      subscriber: ThreadRef,
+    ) => Effect.Effect<ReadonlyArray<InboxEvent>, CompanionStoreError>;
     /** Subscribers holding an unannounced item that may start a digest. */
     readonly subscribersToWake: () => Effect.Effect<ReadonlyArray<ThreadRef>, CompanionStoreError>;
     readonly markWoken: (ids: ReadonlyArray<number>) => Effect.Effect<void, CompanionStoreError>;
@@ -565,6 +569,19 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
     Effect.mapError(storeError("pendingDigest")),
   );
 
+  const openPassive = Effect.fn("CompanionStore.openPassive")(
+    function* (subscriber: ThreadRef) {
+      const rows = yield* sql`
+        SELECT * FROM inbox
+        WHERE ${ofSubscriber(subscriber)} AND wake = 1 AND passive = 1
+          AND resolved_at IS NULL AND snoozed_until IS NULL
+        ORDER BY id
+      `;
+      return (yield* decodeInboxRows(rows)).map(toInboxEvent);
+    },
+    Effect.mapError(storeError("openPassive")),
+  );
+
   const subscribersToWake = Effect.fn("CompanionStore.subscribersToWake")(
     function* () {
       return yield* sql<ThreadRef>`
@@ -658,6 +675,7 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
     dueSnoozes,
     redeliver,
     pendingDigest,
+    openPassive,
     subscribersToWake,
     markWoken,
     updateEvent,
