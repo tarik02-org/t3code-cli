@@ -1,5 +1,6 @@
 import "vite-plus/test/config";
 
+import * as DateTime from "effect/DateTime";
 import { assert, describe, it } from "@effect/vitest";
 import { fromPartial } from "@total-typescript/shoehorn";
 
@@ -8,12 +9,15 @@ import type { Subscription, ThreadEvent } from "./schema.ts";
 import {
   holdsSnooze,
   idleCandidate,
+  immediateEvents,
   pullRequestSummaries,
   readyToMark,
   snoozePauseCapMs,
   threadStatus,
 } from "./state.ts";
 import { makePullRequest, makeShell, monitorTask } from "./state.test-utils.ts";
+
+const now = DateTime.makeUnsafe(0);
 
 describe("idleCandidate", () => {
   it("is a finished idle when nothing is pending", () => {
@@ -50,12 +54,20 @@ describe("threadStatus", () => {
     assert.isFalse(holdsSnooze(makeShell(), 1000));
   });
 
-  it("reports failed, needs-input, and settled", () => {
+  it("reports failed, needs-input, needs-approval, and settled", () => {
     assert.equal(threadStatus("local", makeShell({ status: "failed" }), 0).state, "failed");
     const asking = makeShell({
       pendingRuntimeRequest: fromPartial({ id: "req-1", kind: "user_input" }),
     });
     assert.equal(threadStatus("local", asking, 0).state, "needs-input");
+    const approving = makeShell({
+      pendingRuntimeRequest: fromPartial({ id: "req-2", kind: "command", createdAt: now }),
+    });
+    assert.equal(threadStatus("local", approving, 0).state, "needs-approval");
+    assert.deepEqual(
+      immediateEvents("local", approving).map((event) => [event.kind, event.requestId]),
+      [["needs-approval", "req-2"]],
+    );
     const settled = makeShell({ settledOverride: "settled" });
     assert.equal(threadStatus("local", settled, 0).state, "settled");
   });

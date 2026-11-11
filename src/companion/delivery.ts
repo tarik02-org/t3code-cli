@@ -38,6 +38,7 @@ export const subscriptionTakes = (subscription: Subscription, event: ThreadEvent
 const defaultPriorities: Record<CompanionEventKind, DeliveryPriority> = {
   failed: "urgent",
   "needs-input": "urgent",
+  "needs-approval": "urgent",
   idle: "normal",
   "pr-checks": "normal",
   "env-down": "normal",

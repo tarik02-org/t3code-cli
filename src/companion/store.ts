@@ -66,7 +66,7 @@ const encodePriorities = Schema.encodeEffect(Schema.fromJsonString(Priorities));
 const encodeEvent = Schema.encodeEffect(Schema.fromJsonString(ThreadEvent));
 
 /** Inbox schema version, kept in `PRAGMA user_version`. */
-const schemaVersion = 5;
+const schemaVersion = 6;
 /** The oldest inbox this build upgrades; earlier layouts were never released. */
 const oldestUpgradableVersion = 4;
 
@@ -300,6 +300,16 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
           yield* sql`ALTER TABLE inbox ADD COLUMN passive INTEGER NOT NULL DEFAULT 0`;
           yield* sql`UPDATE inbox SET passive = 1 - wakes`;
           yield* sql`ALTER TABLE inbox DROP COLUMN wakes`;
+        }
+        if (version !== null && version < 6) {
+          // Version 6 split approvals out of needs-input; subscriptions that took them keep them.
+          yield* sql`
+            UPDATE subscriptions SET events = json_insert(events, '$[#]', 'needs-approval')
+            WHERE EXISTS (SELECT 1 FROM json_each(subscriptions.events) WHERE value = 'needs-input')
+              AND NOT EXISTS (
+                SELECT 1 FROM json_each(subscriptions.events) WHERE value = 'needs-approval'
+              )
+          `;
         }
         yield* sql`PRAGMA user_version = ${sql.literal(String(schemaVersion))}`;
       }),

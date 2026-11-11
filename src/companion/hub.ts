@@ -50,6 +50,8 @@ export const maxWaitSeconds = 600;
 export const snoozeCheckInterval = Duration.seconds(15);
 /** The longest last message an event carries; digests include it whole. */
 export const lastMessageLength = 10_000;
+/** The most of a command or tool call an approval's summary quotes, on one line. */
+export const approvalPromptLength = 500;
 
 type RequestError = CompanionInvalidRequestError | CompanionStoreError;
 
@@ -130,29 +132,51 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
       ),
     );
 
-  /** Fills in the source thread's last assistant message; the shell row carries no text. */
-  const withLastMessage = Effect.fn("CompanionHub.withLastMessage")(function* (event: ThreadEvent) {
-    if (event.threadId === null || !["idle", "failed", "settled"].includes(event.kind)) {
+  /**
+   * Fills in what the shell row carries no text for: the source thread's last assistant message,
+   * or the command or tool call an approval is for.
+   */
+  const withDetails = Effect.fn("CompanionHub.withDetails")(function* (event: ThreadEvent) {
+    const approval = event.kind === "needs-approval";
+    if (
+      event.threadId === null ||
+      !(approval || ["idle", "failed", "settled"].includes(event.kind))
+    ) {
       return event;
     }
     const threadId = event.threadId;
-    const lastMessage = yield* environments.resolve(event.environment).pipe(
+    const items = yield* environments.resolve(event.environment).pipe(
       Effect.flatMap((environment) => environment.orchestration.getThreadBoundedSnapshot(threadId)),
-      Effect.map((snapshot) => {
-        const message = snapshot.projection.turnItems.findLast(
-          (item) => item.type === "assistant_message",
-        );
-        return message !== undefined && "text" in message
-          ? message.text.slice(0, lastMessageLength)
-          : null;
-      }),
+      Effect.map((snapshot) => snapshot.projection.turnItems),
       Effect.catchCause((cause) =>
-        Effect.logWarning(`could not read the last message of ${event.eventId}`, cause).pipe(
+        Effect.logWarning(`could not read the thread behind ${event.eventId}`, cause).pipe(
           Effect.as(null),
         ),
       ),
     );
-    return { ...event, lastMessage };
+    if (items === null) {
+      return event;
+    }
+    if (approval) {
+      const asked = items.find(
+        (item) => item.type === "approval_request" && item.requestId === event.requestId,
+      );
+      const prompt = asked?.type === "approval_request" ? asked.prompt : undefined;
+      return prompt === undefined
+        ? event
+        : {
+            ...event,
+            summary: `waiting for approval: ${prompt.replace(/\s+/g, " ").trim().slice(0, approvalPromptLength)}`,
+          };
+    }
+    const message = items.findLast((item) => item.type === "assistant_message");
+    return {
+      ...event,
+      lastMessage:
+        message !== undefined && "text" in message
+          ? message.text.slice(0, lastMessageLength)
+          : null,
+    };
   });
 
   const deliverTo = Effect.fn("CompanionHub.deliverTo")(function* (
@@ -224,7 +248,7 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     if (targets.length === 0) {
       return;
     }
-    const enriched = yield* withLastMessage(event);
+    const enriched = yield* withDetails(event);
     for (const subscription of targets) {
       yield* deliverTo(subscription, enriched);
     }
@@ -333,7 +357,7 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     const nowMs = yield* Clock.currentTimeMillis;
     for (const event of currentEvents(sourceEnvironment.name, shell.value, nowMs)) {
       if (subscriptionTakes(subscription, event)) {
-        yield* deliverTo(subscription, yield* withLastMessage(event));
+        yield* deliverTo(subscription, yield* withDetails(event));
       }
     }
     return {

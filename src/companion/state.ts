@@ -191,12 +191,21 @@ export function checksTransitions(
 export const readyToMark = (pullRequests: ReadonlyArray<PullRequestSummary>) =>
   pullRequests.filter((pr) => pr.state === "open" && pr.draft && pr.checks === "pass");
 
+type PendingRequest = NonNullable<OrchestrationV2ThreadShell["pendingRuntimeRequest"]>;
+
+/**
+ * Whether a pending request asks to approve a command or tool, rather than asking the user a
+ * question or to sign in again. T3 Code's own waiting-for-approval state splits them the same way.
+ */
+const isApproval = (request: PendingRequest) =>
+  request.kind !== "user_input" && request.kind !== "auth_refresh";
+
 function threadState(shell: OrchestrationV2ThreadShell, nowMs: number): ThreadStatus["state"] {
   if (shell.archivedAt !== null || shell.deletedAt !== null) {
     return "archived";
   }
   if (shell.pendingRuntimeRequest !== null) {
-    return "needs-input";
+    return isApproval(shell.pendingRuntimeRequest) ? "needs-approval" : "needs-input";
   }
   if (shell.status === "failed") {
     return "failed";
@@ -288,16 +297,21 @@ export function immediateEvents(
   }
   const request = shell.pendingRuntimeRequest;
   if (request !== null) {
-    events.push(
-      makeEvent(
+    const approval = isApproval(request);
+    events.push({
+      ...makeEvent(
         environment,
         shell,
-        "needs-input",
+        approval ? "needs-approval" : "needs-input",
         request.id,
         DateTime.formatIso(request.createdAt),
-        `waiting for a ${request.kind} response`,
+        // The hub replaces an approval's summary with what it is for, once it has read that.
+        approval
+          ? `waiting for approval of a ${request.kind} request`
+          : `waiting for a ${request.kind} response`,
       ),
-    );
+      requestId: request.id,
+    });
   }
   const settledAt = iso(shell.settledAt);
   if (shell.settledOverride === "settled" && settledAt !== null) {

@@ -56,7 +56,8 @@ export const makeDigests = Effect.fn("makeCompanionDigests")(function* (
 
   /**
    * Re-checks each item against its source's latest shell row: an idle or settled the source
-   * moved past (a newer run) is resolved as superseded, and PR states are brought up to date.
+   * moved past (a newer run) is resolved as superseded, so is a question or approval once the
+   * source waits on nothing, and PR states are brought up to date.
    */
   const freshen = Effect.fn("CompanionDigests.freshen")(function* (
     rows: ReadonlyArray<InboxEvent>,
@@ -70,6 +71,18 @@ export const makeDigests = Effect.fn("makeCompanionDigests")(function* (
           : yield* latestShell({ environment: event.environment, threadId: event.threadId });
       if (latest === undefined) {
         kept.push(row);
+        continue;
+      }
+      // The row shows only one pending request, so only "none pending" proves this one closed.
+      if (
+        (event.kind === "needs-input" || event.kind === "needs-approval") &&
+        latest.pendingRuntimeRequest === null
+      ) {
+        yield* store.resolve({
+          subscriber: row.subscriber,
+          ids: [row.id],
+          disposition: "auto: superseded, the request was answered",
+        });
         continue;
       }
       const runId = event.runId ?? null;

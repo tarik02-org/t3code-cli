@@ -95,7 +95,7 @@ describe("CompanionStore", () => {
     }).pipe(memoryDatabase),
   );
 
-  it.effect("upgrades a version 4 inbox, turning wakes into passive", () =>
+  it.effect("upgrades a version 4 inbox: wakes become passive, approvals keep arriving", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`
@@ -120,7 +120,7 @@ describe("CompanionStore", () => {
       `;
       yield* sql`
         INSERT INTO subscriptions VALUES
-          (1, 'local', 'orchestrator', 'local', 'thread-a', NULL, '["idle"]', 1, '{}', 0, 0,
+          (1, 'local', 'orchestrator', 'local', 'thread-a', NULL, '["idle","needs-input"]', 1, '{}', 0, 0,
            '2026-01-01T00:00:00.000Z')
       `;
       const stored = JSON.stringify(event("e"));
@@ -139,6 +139,7 @@ describe("CompanionStore", () => {
       const store = yield* makeCompanionStore();
       const [subscription] = yield* store.subscriptions;
       assert.isFalse(subscription?.armed);
+      assert.deepEqual(subscription?.events, ["idle", "needs-input", "needs-approval"]);
       const rows = yield* store.pendingDigest(subscriber);
       assert.deepEqual(
         rows.map((row) => [row.id, row.passive]),

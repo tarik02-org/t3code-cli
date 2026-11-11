@@ -32,17 +32,17 @@ const Caller = {
 
 const Events = Schema.optional(Schema.Array(CompanionEventKind)).annotate({
   description:
-    "Events to deliver: idle, failed, needs-input, settled, pr-checks (env-down and env-up always come). Defaults to all.",
+    "Events to deliver: idle, failed, needs-input (a question for the user), needs-approval (a command or tool call waiting to be approved), settled, pr-checks (env-down and env-up always come). Defaults to all; list them to take, say, questions without approvals.",
 });
 
 const Wake = Schema.optional(Schema.Boolean).annotate({
   description:
-    "Let events wake your thread with a digest message. Each subscription wakes you once, then disarms until you arm it (or subscribe to the same source again); later events still reach your inbox and ride along in other digests. Failures and questions always wake. A pause (an idle whose thread still waits on its own background work) never wakes and does not disarm. Events always go to the inbox.",
+    "Let events wake your thread with a digest message. Each subscription wakes you once, then disarms until you arm it (or subscribe to the same source again); later events still reach your inbox and ride along in other digests. Failures, questions and approvals always wake. A pause (an idle whose thread still waits on its own background work) never wakes and does not disarm. Events always go to the inbox.",
 });
 
 const Priorities = Schema.optional(Schema.Record(Schema.String, DeliveryPriority)).annotate({
   description:
-    'Per-kind digest priority overrides, e.g. {"idle": "low"}. urgent steers into your running turn at once, carrying everything else pending; normal and low wait until your turn ends and arrive together as one new turn. Defaults: failed and needs-input urgent; idle and env-down normal; settled, env-up, pauses and snoozed items low.',
+    'Per-kind digest priority overrides, e.g. {"idle": "low"}. urgent steers into your running turn at once, carrying everything else pending; normal and low wait until your turn ends and arrive together as one new turn. Defaults: failed, needs-input and needs-approval urgent; idle and env-down normal; settled, env-up, pauses and snoozed items low.',
 });
 
 const Ids = Schema.Array(Schema.Int);
@@ -71,7 +71,7 @@ const SubscribeTool = Tool.make("subscribe", {
 
 const ArmTool = Tool.make("arm", {
   description:
-    "Arm your subscriptions by id so the next event from each wakes you once. A wake disarms a subscription; until you arm it again (or subscribe to the same source again), its events reach your inbox and your digests without waking you. Failures and questions always wake.",
+    "Arm your subscriptions by id so the next event from each wakes you once. A wake disarms a subscription; until you arm it again (or subscribe to the same source again), its events reach your inbox and your digests without waking you. Failures, questions and approvals always wake.",
   parameters: Schema.Struct({ ...Caller, ids: Ids }),
   success: Schema.Struct({ armed: Schema.Int }),
   failure: CompanionToolError,
@@ -363,7 +363,7 @@ export const CompanionMcpLive = (version: string) =>
     name: "t3-companion",
     version,
     instructions:
-      "Subscribe to other T3 Code threads and get their idle/failed/needs-input/settled events in an inbox instead of polling. Identify yourself with callerThreadId (your T3CODE_THREAD_ID). Items stay open until inbox_resolve; inbox_snooze hides one until its source is idle again. An idle with pause=true means the thread only waits on its own background work; it never wakes you, and the idle that follows does.",
+      "Subscribe to other T3 Code threads and get their idle/failed/needs-input/needs-approval/settled events in an inbox instead of polling. Identify yourself with callerThreadId (your T3CODE_THREAD_ID). Items stay open until inbox_resolve; inbox_snooze hides one until its source is idle again. needs-approval is a command or tool call waiting to be approved, and its summary says which; needs-input is a question for the user. An idle with pause=true means the thread only waits on its own background work; it never wakes you, and the idle that follows does.",
     path: companionMcpPath,
     protocols: [McpProtocol.v2025_06_18, McpProtocol.v2026_07_28],
     allowSessionTermination: true,

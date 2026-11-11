@@ -4,6 +4,7 @@ export const CompanionEventKind = Schema.Literals([
   "idle",
   "failed",
   "needs-input",
+  "needs-approval",
   "settled",
   "pr-checks",
   "env-down",
@@ -90,6 +91,7 @@ export const ThreadStatus = Schema.Struct({
     "idle",
     "failed",
     "needs-input",
+    "needs-approval",
     "settled",
     "archived",
   ]),
@@ -117,6 +119,8 @@ export const ThreadEvent = Schema.Struct({
   summary: Schema.String,
   /** The source's latest run when the event was taken; a newer run makes idle and settled stale. */
   runId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  /** The pending request behind a needs-input or needs-approval event. */
+  requestId: Schema.optionalKey(Schema.String),
   /** An idle whose run ended while background tasks were still pending: a pause, not done. */
   pause: Schema.Boolean,
   pendingTasks: Schema.Array(Schema.String),
