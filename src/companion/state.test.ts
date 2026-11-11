@@ -38,6 +38,20 @@ describe("idleCandidate", () => {
     assert.equal(candidate.eventId, `${finished?.eventId}/pause`);
   });
 
+  it("is a finished idle when only a PR watch is pending", () => {
+    const watch = {
+      kind: "monitor" as const,
+      taskId: "pull-request-watch:github.com/acme/repo#9",
+      description: "Watching pull request #9",
+    };
+    const shell = makeShell({ completedAtMs: 1000, pendingBackgroundTasks: [watch] });
+    const candidate = idleCandidate("local", shell, 5000);
+    assert.isFalse(candidate?.pause);
+    assert.deepEqual(candidate?.pendingTasks, ["monitor Watching pull request #9"]);
+    assert.include(candidate?.summary ?? "", "only a PR watch is still pending");
+    assert.equal(threadStatus("local", shell, 5000).state, "idle");
+  });
+
   it("is null while a run is active", () => {
     assert.isNull(idleCandidate("local", makeShell({ activityRunStatus: "running" }), 0));
   });

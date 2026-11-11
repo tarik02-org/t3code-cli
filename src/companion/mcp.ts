@@ -37,12 +37,12 @@ const Events = Schema.optional(Schema.Array(CompanionEventKind)).annotate({
 
 const Wake = Schema.optional(Schema.Boolean).annotate({
   description:
-    "Let events wake your thread with a digest message. Each subscription wakes you once, then disarms until you arm it (or subscribe to the same source again); later events still reach your inbox and ride along in other digests. Every digest ends with an Actions block: the subscriptions it disarmed, others still disarmed, the arm call for them, and the passive items still open. Failures, questions and approvals always wake. A pause (an idle whose thread still waits on its own background work) never wakes and does not disarm. Events always go to the inbox.",
+    "Let events wake your thread with a digest message. Each subscription wakes you once, then disarms until you arm it (or subscribe to the same source again); later events still reach your inbox and ride along in other digests. Every digest ends with an Actions block: the subscriptions it disarmed, others still disarmed, the arm call for them, and the passive items still open. Failures, questions and approvals always wake. A pause (an idle whose thread still waits on its own background work) wakes only when its last message asks a question or names a pull request; otherwise it stays passive and does not disarm. Events always go to the inbox.",
 });
 
 const Priorities = Schema.optional(Schema.Record(Schema.String, DeliveryPriority)).annotate({
   description:
-    'Per-kind digest priority overrides, e.g. {"idle": "low"}. urgent steers into your running turn at once, carrying everything else pending; normal and low wait until your turn ends and arrive together as one new turn. Defaults: failed, needs-input and needs-approval urgent; idle and env-down normal; settled, env-up, pauses and snoozed items low.',
+    'Per-kind digest priority overrides, e.g. {"idle": "low"}. urgent steers into your running turn at once, carrying everything else pending; normal and low wait until your turn ends and arrive together as one new turn. Defaults: failed, needs-input and needs-approval urgent; idle and env-down normal; settled, env-up, plain pauses and snoozed items low.',
 });
 
 const Ids = Schema.Array(Schema.Int);
@@ -363,7 +363,7 @@ export const CompanionMcpLive = (version: string) =>
     name: "t3-companion",
     version,
     instructions:
-      "Subscribe to other T3 Code threads and get their idle/failed/needs-input/needs-approval/settled events in an inbox instead of polling. Identify yourself with callerThreadId (your T3CODE_THREAD_ID). Items stay open until inbox_resolve; inbox_snooze hides one until its source is idle again. needs-approval is a command or tool call waiting to be approved, and its summary says which; needs-input is a question for the user. An idle with pause=true means the thread only waits on its own background work; it never wakes you, and the idle that follows does.",
+      "Subscribe to other T3 Code threads and get their idle/failed/needs-input/needs-approval/settled events in an inbox instead of polling. Identify yourself with callerThreadId (your T3CODE_THREAD_ID). Items stay open until inbox_resolve; inbox_snooze hides one until its source is idle again. needs-approval is a command or tool call waiting to be approved, and its summary says which; needs-input is a question for the user. An idle with pause=true means the thread still waits on its own background work (a PR watch alone is not a pause). It wakes you only when its last message asks a question or names a pull request; otherwise the idle that follows does.",
     path: companionMcpPath,
     protocols: [McpProtocol.v2025_06_18, McpProtocol.v2026_07_28],
     allowSessionTermination: true,

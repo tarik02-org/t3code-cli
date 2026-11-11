@@ -36,12 +36,12 @@ import {
 import {
   checksTransitions,
   currentEvents,
-  finishedSummary,
   holdsSnooze,
   idleCandidate,
   immediateEvents,
   inTurn,
   readyToMark,
+  reportNotes,
   threadStatus,
 } from "./state.ts";
 import { CompanionStore } from "./store.ts";
@@ -172,11 +172,13 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     }
     const message = items.findLast((item) => item.type === "assistant_message");
     const text = message !== undefined && "text" in message ? message.text : null;
+    // Judged on the whole message: a long one is cut before its closing question.
+    const notes = event.kind === "idle" ? reportNotes(text) : [];
     return {
       ...event,
       lastMessage: text === null ? null : text.slice(0, lastMessageLength),
-      // Judged on the whole message: a long one is cut before its closing question.
-      summary: event.kind === "idle" && !event.pause ? finishedSummary(text) : event.summary,
+      summary: [event.summary, ...notes].join("; "),
+      ...(event.pause && notes.length > 0 ? { notable: true } : {}),
     };
   });
 

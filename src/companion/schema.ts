@@ -121,8 +121,13 @@ export const ThreadEvent = Schema.Struct({
   runId: Schema.optionalKey(Schema.NullOr(Schema.String)),
   /** The pending request behind a needs-input or needs-approval event. */
   requestId: Schema.optionalKey(Schema.String),
-  /** An idle whose run ended while background tasks were still pending: a pause, not done. */
+  /**
+   * An idle whose run ended while the thread's own background work was still pending: a pause,
+   * not done. A PR watch alone does not make one.
+   */
   pause: Schema.Boolean,
+  /** A pause whose last message asks a question or names a pull request; it wakes like an idle. */
+  notable: Schema.optionalKey(Schema.Boolean),
   pendingTasks: Schema.Array(Schema.String),
   /** The source thread's last assistant message, truncated. */
   lastMessage: Schema.NullOr(Schema.String),

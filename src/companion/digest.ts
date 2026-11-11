@@ -19,6 +19,8 @@ import { CompanionStore } from "./store.ts";
 export const wakeCoalesceWindow = Duration.seconds(5);
 /** The most passive items a digest lists one by one; the rest are counted. */
 const passiveListLimit = 20;
+/** How much of its last message's first line a passive item's line quotes. */
+const passiveOpeningLength = 120;
 
 const priorityRank: Record<DeliveryPriority, number> = { urgent: 0, normal: 1, low: 2 };
 
@@ -246,11 +248,12 @@ export const makeDigests = Effect.fn("makeCompanionDigests")(function* (
         shell === undefined || event.kind === "pr-checks"
           ? event.pullRequests
           : pullRequestSummaries(shell);
+      const opening = event.lastMessage?.trim().split("\n")[0]?.slice(0, passiveOpeningLength);
       passiveLines.push(
         [
           `    [${id}] ${event.kind}${event.pause ? " (pause)" : ""} "${event.title}": ${event.summary}`,
           ...pullRequests.map(pullRequestNote),
-        ].join("; "),
+        ].join("; ") + (opening === undefined || opening === "" ? "" : ` | ${opening}`),
       );
     }
     return { subscriber, spent, stillDisarmed, passive: passiveLines } satisfies DigestActions;

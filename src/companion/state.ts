@@ -81,12 +81,22 @@ export function busyReasons(shell: OrchestrationV2ThreadShell, nowMs: number): A
 export const inTurn = (shell: OrchestrationV2ThreadShell, nowMs: number) =>
   busyReasons(shell, nowMs).length > 0;
 
-const taskLabel = (
-  task: NonNullable<OrchestrationV2ThreadShell["pendingBackgroundTasks"]>[number],
-) => `${task.kind} ${task.description ?? task.taskId}`;
+type PendingTask = NonNullable<OrchestrationV2ThreadShell["pendingBackgroundTasks"]>[number];
+
+const taskLabel = (task: PendingTask) => `${task.kind} ${task.description ?? task.taskId}`;
 
 export const pendingTaskLabels = (shell: OrchestrationV2ThreadShell): Array<string> =>
   (shell.pendingBackgroundTasks ?? []).map(taskLabel);
+
+/**
+ * The thread's own pending background work: what makes an ended run a pause. T3 Code also lists
+ * each PR watch as a pending task, but that waits on reviewers and CI, not on the thread, so a
+ * run that ends with only watches pending has finished.
+ */
+export const ownTaskLabels = (shell: OrchestrationV2ThreadShell): Array<string> =>
+  (shell.pendingBackgroundTasks ?? [])
+    .filter((task) => !task.taskId.startsWith("pull-request-watch:"))
+    .map(taskLabel);
 
 const checksRollup = { passing: "pass", pending: "pending", failing: "fail" } as const;
 
@@ -213,7 +223,7 @@ function threadState(shell: OrchestrationV2ThreadShell, nowMs: number): ThreadSt
   if (busyReasons(shell, nowMs).length > 0) {
     return "running";
   }
-  if ((shell.pendingBackgroundTasks ?? []).length > 0) {
+  if (ownTaskLabels(shell).length > 0) {
     return "paused";
   }
   return shell.settledOverride === "settled" ? "settled" : "idle";
@@ -262,6 +272,7 @@ const makeEvent = (
   occurredAt: string,
   summary: string,
   pendingTasks: ReadonlyArray<string> = [],
+  pause = false,
 ): ThreadEvent => ({
   eventId: `${environment}/${shell.id}/${kind}/${key}`,
   kind,
@@ -272,7 +283,7 @@ const makeEvent = (
   occurredAt,
   summary,
   runId: shell.latestRunId,
-  pause: pendingTasks.length > 0,
+  pause,
   pendingTasks,
   // Shell rows carry no message text; the hub reads it when the event is delivered.
   lastMessage: null,
@@ -337,17 +348,25 @@ export const endsWithQuestion = (message: string) =>
     .split("\n")
     .some((line) => /\?[\s"'”’)*_`]*$/.test(line));
 
-/** A finished run's summary; a subscriber skimming summaries must not miss a question. */
-export const finishedSummary = (lastMessage: string | null) =>
-  lastMessage !== null && endsWithQuestion(lastMessage)
-    ? "run finished; its last message ends with a question"
-    : "run finished";
+const namesPullRequest = (message: string) => /\/pull\/\d+|(?<![\w&/])#\d+\b/.test(message);
+
+/**
+ * What a run's last message holds that a subscriber acts on, as notes for the event's summary.
+ * A pause with any of them is a report, not just a wait.
+ */
+export const reportNotes = (message: string | null): Array<string> =>
+  message === null
+    ? []
+    : [
+        ...(endsWithQuestion(message) ? ["its last message ends with a question"] : []),
+        ...(namesPullRequest(message) ? ["its last message names a pull request"] : []),
+      ];
 
 /**
  * The idle event the shell would produce once it stays quiet, or null while a run is active. A
- * run that ends with background tasks still pending is a pause, carrying the tasks; once they end
- * without a new run, the same run gives a finished idle. The two have different ids, so a run can
- * report both.
+ * run that ends with its own background work still pending is a pause, carrying the tasks; once
+ * they end without a new run, the same run gives a finished idle. The two have different ids, so
+ * a run can report both.
  */
 export function idleCandidate(
   environment: string,
@@ -362,7 +381,8 @@ export function idleCandidate(
   }
   const completedAt = iso(shell.latestRunCompletedAt) ?? DateTime.formatIso(shell.updatedAt);
   const pendingTasks = pendingTaskLabels(shell);
-  const pause = pendingTasks.length > 0;
+  const ownTasks = ownTaskLabels(shell);
+  const pause = ownTasks.length > 0;
   return makeEvent(
     environment,
     shell,
@@ -370,9 +390,12 @@ export function idleCandidate(
     `${shell.latestRunId}@${completedAt}${pause ? "/pause" : ""}`,
     completedAt,
     pause
-      ? `run ended; background task still pending: ${pendingTasks.join(", ")}`
-      : finishedSummary(null),
+      ? `run ended; background task still pending: ${ownTasks.join(", ")}`
+      : pendingTasks.length > 0
+        ? "run finished; only a PR watch is still pending"
+        : "run finished",
     pendingTasks,
+    pause,
   );
 }
 

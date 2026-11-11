@@ -522,6 +522,36 @@ describe("CompanionHub", () => {
         );
         yield* afterWindow;
         assert.lengthOf(yield* Ref.get(fixture.sent), 1);
+
+        // A pause that reports something wakes like a finished idle, and spends the arm.
+        yield* hub.arm({ subscriber: orchestrator, ids: [subscription?.id ?? 0] });
+        yield* Ref.set(fixture.turnItems, {
+          "thread-a": [
+            { type: "assistant_message", text: "Draft PR is up: #12. Tests still run." },
+          ],
+        });
+        yield* hub.publish(
+          idleEvent(
+            makeShell({
+              latestRunId: RunId.make("run-3"),
+              pendingBackgroundTasks: [monitorTask],
+              completedAtMs: 3000,
+            }),
+          ),
+        );
+        yield* afterWindow;
+        const reported = yield* Ref.get(fixture.sent);
+        assert.lengthOf(reported, 2);
+        assert.include(reported[1]?.message ?? "", "its last message names a pull request");
+        const [spent] = yield* hub.listSubscriptions({ subscriber: orchestrator });
+        assert.isFalse(spent?.armed);
+        yield* hub.resolve({
+          subscriber: orchestrator,
+          ids: (yield* hub.listInbox(openQuery))
+            .filter((row) => row.event.runId === "run-3")
+            .map((row) => row.id),
+          disposition: null,
+        });
         const after = yield* hub.listInbox(openQuery);
         assert.deepEqual(
           after.map((row) => [row.event.runId, row.event.pause]),
