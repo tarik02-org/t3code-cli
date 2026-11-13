@@ -139,7 +139,7 @@ describe("CompanionStore", () => {
       const store = yield* makeCompanionStore();
       const [subscription] = yield* store.subscriptions;
       assert.isFalse(subscription?.armed);
-      assert.deepEqual(subscription?.events, ["idle", "needs-input", "needs-approval"]);
+      assert.deepEqual(subscription?.events, ["idle", "needs-input", "needs-approval", "stalled"]);
       const rows = yield* store.pendingDigest(subscriber);
       assert.deepEqual(
         rows.map((row) => [row.id, row.passive]),

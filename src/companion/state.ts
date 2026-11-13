@@ -93,9 +93,18 @@ export const pendingTaskLabels = (shell: OrchestrationV2ThreadShell): Array<stri
  * each PR watch as a pending task, but that waits on reviewers and CI, not on the thread, so a
  * run that ends with only watches pending has finished.
  */
+const ownWork = (shell: OrchestrationV2ThreadShell) =>
+  (shell.pendingBackgroundTasks ?? []).filter(
+    (task) => !task.taskId.startsWith("pull-request-watch:"),
+  );
+
 export const ownTaskLabels = (shell: OrchestrationV2ThreadShell): Array<string> =>
-  (shell.pendingBackgroundTasks ?? [])
-    .filter((task) => !task.taskId.startsWith("pull-request-watch:"))
+  ownWork(shell).map(taskLabel);
+
+/** Own work the agent declared it resumes after; T3 Code starts the next run when it ends. */
+export const awaitedTaskLabels = (shell: OrchestrationV2ThreadShell): Array<string> =>
+  ownWork(shell)
+    .filter((task) => task.awaited === true)
     .map(taskLabel);
 
 const checksRollup = { passing: "pass", pending: "pending", failing: "fail" } as const;
@@ -397,6 +406,88 @@ export function idleCandidate(
     pendingTasks,
     pause,
   );
+}
+
+/** How long T3 Code gets to start the next run once a thread's awaited work has ended. */
+export const resumeGraceMs = 30_000;
+/** How long a thread may wait on its awaited work before the wait is reported as overdue. */
+export const overdueWaitMs = 30 * 60_000;
+
+/** A thread's wait on its own awaited work after a run, followed across shell rows. */
+export interface Wait {
+  readonly runId: string;
+  readonly tasks: ReadonlyArray<string>;
+  /** When the awaited work was first seen gone with no new run; null while it is pending. */
+  readonly endedAtMs: number | null;
+}
+
+/** The thread's wait after this row: none once it runs again, fails, or leaves the lists. */
+export function trackWait(
+  previous: Wait | undefined,
+  shell: OrchestrationV2ThreadShell,
+  nowMs: number,
+): Wait | undefined {
+  if (
+    shell.latestRunId === null ||
+    shell.status === "failed" ||
+    shell.archivedAt !== null ||
+    shell.deletedAt !== null ||
+    busyReasons(shell, nowMs).length > 0
+  ) {
+    return undefined;
+  }
+  const tasks = awaitedTaskLabels(shell);
+  if (tasks.length > 0) {
+    return { runId: shell.latestRunId, tasks, endedAtMs: null };
+  }
+  return previous?.runId === shell.latestRunId
+    ? { ...previous, endedAtMs: previous.endedAtMs ?? nowMs }
+    : undefined;
+}
+
+/**
+ * What has gone wrong with a wait by now. T3 Code resumes a thread when its awaited work ends;
+ * when it does not, or the work never ends, the thread stays silent and nothing else tells a
+ * subscriber. Ids derive from the run, so each is reported once.
+ */
+export function stalledEvents(
+  environment: string,
+  shell: OrchestrationV2ThreadShell,
+  wait: Wait,
+  nowMs: number,
+): Array<ThreadEvent> {
+  const completedMs = DateTime.toEpochMillis(shell.latestRunCompletedAt ?? shell.updatedAt);
+  const key = `${wait.runId}@${DateTime.formatIso(DateTime.makeUnsafe(completedMs))}`;
+  const tasks = wait.tasks.join(", ");
+  if (wait.endedAtMs !== null) {
+    return nowMs < wait.endedAtMs + resumeGraceMs
+      ? []
+      : [
+          makeEvent(
+            environment,
+            shell,
+            "stalled",
+            `${key}/resume`,
+            DateTime.formatIso(DateTime.makeUnsafe(wait.endedAtMs)),
+            `its awaited background work ended (${tasks}), but T3 Code started no new run; the thread may be working unrecorded or waiting for a message`,
+          ),
+        ];
+  }
+  const dueMs = completedMs + overdueWaitMs;
+  return nowMs < dueMs
+    ? []
+    : [
+        makeEvent(
+          environment,
+          shell,
+          "stalled",
+          `${key}/overdue`,
+          DateTime.formatIso(DateTime.makeUnsafe(dueMs)),
+          `still waiting on its awaited background work ${overdueWaitMs / 60_000} minutes after its run ended: ${tasks}`,
+          wait.tasks,
+          true,
+        ),
+      ];
 }
 
 /** The events a thread's current state already implies, for a subscription made just now. */

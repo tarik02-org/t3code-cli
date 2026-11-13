@@ -564,6 +564,42 @@ describe("CompanionHub", () => {
     ),
   );
 
+  it.effect("reports a wait that is overdue, and one that ends without a new run", () =>
+    withHub((hub, fixture) =>
+      Effect.gen(function* () {
+        yield* Effect.forkChild(hub.runChecks);
+        yield* subscribeTo(hub, "thread-a", {}, ["idle", "stalled"]);
+        const awaited = { kind: "command" as const, taskId: "task-9", awaited: true as const };
+        yield* hub.ingest("local", makeShell({ pendingBackgroundTasks: [awaited] }));
+        yield* TestClock.adjust("29 minutes");
+        assert.lengthOf(yield* hub.listInbox(openQuery), 0);
+
+        // Nothing came from the thread for half an hour: the wait is overdue.
+        yield* TestClock.adjust("2 minutes");
+        const [overdue] = yield* hub.listInbox(openQuery);
+        assert.deepEqual(
+          [overdue?.event.kind, overdue?.priority, overdue?.event.pause],
+          ["stalled", "normal", true],
+        );
+        assert.include(overdue?.event.summary ?? "", "still waiting");
+
+        // The work ends and T3 Code starts no run: after the grace this is urgent.
+        yield* hub.ingest("local", makeShell());
+        yield* TestClock.adjust("20 seconds");
+        assert.lengthOf(yield* hub.listInbox(openQuery), 1);
+        yield* TestClock.adjust("30 seconds");
+        const stalled = (yield* hub.listInbox(openQuery))[1];
+        assert.deepEqual([stalled?.event.kind, stalled?.priority], ["stalled", "urgent"]);
+        assert.include(stalled?.event.summary ?? "", "started no new run");
+        const sent = yield* Ref.get(fixture.sent);
+        assert.equal(sent.at(-1)?.mode, "steer");
+        // Neither spent the arm.
+        const [subscription] = yield* hub.listSubscriptions({ subscriber: orchestrator });
+        assert.isTrue(subscription?.armed);
+      }),
+    ),
+  );
+
   it.effect("wakes once per arm; later events wait passively for the next digest", () =>
     withHub((hub, fixture) =>
       Effect.gen(function* () {

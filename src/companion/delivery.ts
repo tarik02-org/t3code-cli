@@ -43,6 +43,7 @@ const defaultPriorities: Record<CompanionEventKind, DeliveryPriority> = {
   "pr-checks": "normal",
   "env-down": "normal",
   settled: "low",
+  stalled: "urgent",
   "env-up": "low",
 };
 
@@ -52,6 +53,10 @@ const defaultPriorities: Record<CompanionEventKind, DeliveryPriority> = {
  * goes out like the idle it would otherwise be.
  */
 export function deliveryPriority(subscription: Subscription, event: ThreadEvent): DeliveryPriority {
+  if (event.kind === "stalled") {
+    // A missed resume needs someone now; an overdue wait may still end by itself.
+    return subscription.priorities.stalled ?? (event.pause ? "normal" : "urgent");
+  }
   if (event.pause && event.notable !== true) {
     return "low";
   }
@@ -59,7 +64,8 @@ export function deliveryPriority(subscription: Subscription, event: ThreadEvent)
 }
 
 /**
- * Whether an item may start a digest. Failures and questions block work, so they always wake.
+ * Whether an item may start a digest. Failures and questions block work, so they always wake,
+ * and so does a stalled thread at any priority: its silence is the problem.
  * Environment drops wake no one, since they concern every subscription there, and neither does a
  * plain pause: the thread is still waiting on its own work, and the wake belongs to the idle that
  * follows. Anything else, a notable pause included, wakes only an armed subscription.
@@ -71,6 +77,7 @@ export const itemWakes = (
 ) =>
   subscription.wake &&
   (priority === "urgent" ||
+    event.kind === "stalled" ||
     (subscription.armed &&
       (!event.pause || event.notable === true) &&
       !environmentEventKinds.includes(event.kind)));

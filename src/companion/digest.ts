@@ -165,7 +165,7 @@ export const makeDigests = Effect.fn("makeCompanionDigests")(function* (
       }
       const runId = event.runId ?? null;
       if (
-        (event.kind === "idle" || event.kind === "settled") &&
+        (event.kind === "idle" || event.kind === "settled" || event.kind === "stalled") &&
         runId !== null &&
         latest.latestRunId !== runId
       ) {
@@ -175,7 +175,12 @@ export const makeDigests = Effect.fn("makeCompanionDigests")(function* (
           disposition: "auto: superseded, the source started a new run",
         });
         // The wake this item spent its subscription's arm on never happens, so the arm goes back.
-        if (!row.passive && row.priority !== "urgent" && row.redelivered === 0) {
+        if (
+          event.kind !== "stalled" &&
+          !row.passive &&
+          row.priority !== "urgent" &&
+          row.redelivered === 0
+        ) {
           yield* store.setArmed({ ids: [row.subscriptionId], armed: true });
         }
         continue;

@@ -115,7 +115,7 @@ export const runCompanionDaemon = Effect.fn("runCompanionDaemon")(function* <E, 
 
   yield* hub.flushPendingWakes;
   yield* Effect.forkScoped(runCompanionWatcher().pipe(Effect.provide(services)));
-  yield* Effect.forkScoped(hub.runSnoozes);
+  yield* Effect.forkScoped(hub.runChecks);
 
   // `t3cli env` and `auth` rewrite the config file; pick up added and removed environments.
   const path = yield* Path.Path;

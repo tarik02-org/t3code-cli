@@ -6,6 +6,7 @@ export const CompanionEventKind = Schema.Literals([
   "needs-input",
   "needs-approval",
   "settled",
+  "stalled",
   "pr-checks",
   "env-down",
   "env-up",

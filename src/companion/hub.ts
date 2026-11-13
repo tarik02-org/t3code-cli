@@ -42,13 +42,16 @@ import {
   inTurn,
   readyToMark,
   reportNotes,
+  stalledEvents,
   threadStatus,
+  trackWait,
+  type Wait,
 } from "./state.ts";
 import { CompanionStore } from "./store.ts";
 
 export const maxWaitSeconds = 600;
-/** How often snoozed items are checked for their time having passed. */
-export const snoozeCheckInterval = Duration.seconds(15);
+/** How often snoozed items and waits are checked for their time having passed. */
+export const checkInterval = Duration.seconds(15);
 /** The longest last message an event carries; digests include it whole. */
 export const lastMessageLength = 10_000;
 /** The most of a command or tool call an approval's summary quotes, on one line. */
@@ -91,8 +94,11 @@ export class CompanionHub extends Context.Service<
     readonly publish: (event: ThreadEvent) => Effect.Effect<void, CompanionStoreError>;
     /** Sends digests that a previous run recorded but never announced. */
     readonly flushPendingWakes: Effect.Effect<void, CompanionStoreError>;
-    /** Brings back snoozed items whose time passed while their source is idle; runs forever. */
-    readonly runSnoozes: Effect.Effect<never>;
+    /**
+     * Brings back snoozed items whose time passed while their source is idle, and reports waits
+     * on background work that went wrong; runs forever.
+     */
+    readonly runChecks: Effect.Effect<never>;
   }
 >()("t3cli/companion/CompanionHub") {}
 
@@ -141,7 +147,7 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     const approval = event.kind === "needs-approval";
     if (
       event.threadId === null ||
-      !(approval || ["idle", "failed", "settled"].includes(event.kind))
+      !(approval || ["idle", "failed", "settled", "stalled"].includes(event.kind))
     ) {
       return event;
     }
@@ -227,8 +233,8 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     if (!waking) {
       return;
     }
-    // One wake per arm; failures and questions wake without spending it.
-    if (priority !== "urgent") {
+    // One wake per arm; failures, questions and stalled threads wake without spending it.
+    if (priority !== "urgent" && event.kind !== "stalled") {
       yield* store.setArmed({ ids: [subscription.id], armed: false });
     }
     yield* digests.schedule(subscription.subscriber);
@@ -282,6 +288,44 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
       );
       if (subscription?.wake === true) {
         yield* digests.schedule(back.subscriber);
+      }
+    }
+  });
+
+  // Sources waiting on their own awaited work, with the stalled events already published.
+  const waits = new Map<
+    string,
+    { readonly ref: ThreadRef; readonly wait: Wait; readonly sent: Set<string> }
+  >();
+
+  const noteWait = (environment: string, shell: OrchestrationV2ThreadShell, nowMs: number) => {
+    const ref = { environment, threadId: shell.id };
+    const known = waits.get(threadRefKey(ref));
+    const wait = trackWait(known?.wait, shell, nowMs);
+    if (wait === undefined) {
+      waits.delete(threadRefKey(ref));
+      return;
+    }
+    waits.set(threadRefKey(ref), {
+      ref,
+      wait,
+      sent: known?.wait.runId === wait.runId ? known.sent : new Set(),
+    });
+  };
+
+  /** Publishes the waits that have gone wrong by now; a quiet thread sends no row to react to. */
+  const checkWaits = Effect.fn("CompanionHub.checkWaits")(function* () {
+    const nowMs = yield* Clock.currentTimeMillis;
+    for (const { ref, wait, sent } of waits.values()) {
+      const shell = yield* latestShell(ref);
+      if (shell === undefined) {
+        continue;
+      }
+      for (const event of stalledEvents(ref.environment, shell, wait, nowMs)) {
+        if (!sent.has(event.eventId)) {
+          yield* publish(event);
+          sent.add(event.eventId);
+        }
       }
     }
   });
@@ -358,6 +402,7 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     }
     yield* observe(sourceEnvironment.name, shell.value);
     const nowMs = yield* Clock.currentTimeMillis;
+    noteWait(sourceEnvironment.name, shell.value, nowMs);
     for (const event of currentEvents(sourceEnvironment.name, shell.value, nowMs)) {
       if (subscriptionTakes(subscription, event)) {
         yield* deliverTo(subscription, yield* withDetails(event));
@@ -571,14 +616,17 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     if (source || subscriber) {
       yield* observe(environment, shell);
     }
+    const nowMs = yield* Clock.currentTimeMillis;
     if (!source || shell.deletedAt !== null || shell.archivedAt !== null) {
+      waits.delete(threadRefKey({ environment, threadId: shell.id }));
       return null;
     }
+    noteWait(environment, shell, nowMs);
     for (const event of immediateEvents(environment, shell)) {
       yield* publish(event);
     }
     yield* trackChecks(environment, shell);
-    return idleCandidate(environment, shell, yield* Clock.currentTimeMillis);
+    return idleCandidate(environment, shell, nowMs);
   });
 
   const forget = Effect.fn("CompanionHub.forget")(function* (
@@ -587,6 +635,7 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
   ) {
     const key = threadRefKey({ environment, threadId });
     followChecked.delete(key);
+    waits.delete(key);
     yield* Ref.update(threads, (current) => {
       const next = new Map(current);
       next.delete(key);
@@ -598,9 +647,10 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     .subscribersToWake()
     .pipe(Effect.flatMap(Effect.forEach(digests.schedule, { discard: true })));
 
-  const runSnoozes = redeliverDue().pipe(
-    Effect.catchCause((cause) => Effect.logWarning("snooze check failed", cause)),
-    Effect.repeat(Schedule.spaced(snoozeCheckInterval)),
+  const runChecks = redeliverDue().pipe(
+    Effect.andThen(checkWaits()),
+    Effect.catchCause((cause) => Effect.logWarning("snooze and wait check failed", cause)),
+    Effect.repeat(Schedule.spaced(checkInterval)),
     Effect.andThen(Effect.never),
   );
 
@@ -618,7 +668,7 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     forget,
     publish,
     flushPendingWakes,
-    runSnoozes,
+    runChecks,
   });
 });
 
