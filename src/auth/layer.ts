@@ -76,20 +76,15 @@ export const makeT3Auth = Effect.fn("makeT3Auth")(function* () {
   const resolveUnpairTarget = Effect.fn("T3AuthLive.resolveUnpairTarget")(function* (input: {
     readonly name?: string;
   }) {
+    // Removal never falls back to the default environment: a forgotten flag must not delete it.
     if (input.name !== undefined && input.name.length > 0) {
       return input.name;
     }
-    const defaultName = yield* config
-      .getDefaultEnvironmentName()
-      .pipe(Effect.mapError(mapConfigError));
-    if (defaultName === undefined) {
-      return yield* Effect.fail(
-        new AuthConfigError({
-          message: "no environment selected: pass --name or run: t3cli env use <name>",
-        }),
-      );
-    }
-    return defaultName;
+    return yield* Effect.fail(
+      new AuthConfigError({
+        message: "no environment named: pass --name <environment> (or --environment <environment>)",
+      }),
+    );
   });
 
   return T3Auth.of({
