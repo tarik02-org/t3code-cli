@@ -34,8 +34,10 @@ import {
   type WaitRequest,
 } from "./schema.ts";
 import {
+  answersOnlyAWatch,
   checksTransitions,
   currentEvents,
+  endsWithQuestion,
   holdsSnooze,
   idleCandidate,
   immediateEvents,
@@ -46,6 +48,7 @@ import {
   threadStatus,
   trackWait,
   type Wait,
+  watchesPullRequest,
 } from "./state.ts";
 import { CompanionStore } from "./store.ts";
 
@@ -180,11 +183,23 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     const text = message !== undefined && "text" in message ? message.text : null;
     // Judged on the whole message: a long one is cut before its closing question.
     const notes = event.kind === "idle" ? reportNotes(text) : [];
+    // Waving off a bot's PR comment is no news, unless the run ends asking something.
+    const noop =
+      event.kind === "idle" &&
+      answersOnlyAWatch(
+        items.filter((item) => item.runId === event.runId),
+        text,
+      ) &&
+      !endsWithQuestion(text ?? "");
     return {
       ...event,
       lastMessage: text === null ? null : text.slice(0, lastMessageLength),
-      summary: [event.summary, ...notes].join("; "),
-      ...(event.pause && notes.length > 0 ? { notable: true } : {}),
+      summary: [
+        event.summary,
+        ...(noop ? ["it only answered a watch update and changed nothing"] : notes),
+      ].join("; "),
+      ...(event.pause && notes.length > 0 && !noop ? { notable: true } : {}),
+      ...(noop ? { noop: true } : {}),
     };
   });
 
@@ -192,6 +207,17 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
     subscription: Subscription,
     event: ThreadEvent,
   ) {
+    const checked = event.kind === "pr-checks" ? event.pullRequests[0] : undefined;
+    if (checked !== undefined) {
+      // T3 Code already wakes a thread about a pull request it watches itself.
+      const own = yield* latestShell(subscription.subscriber);
+      if (own !== undefined && watchesPullRequest(own, checked)) {
+        yield* Effect.logInfo(
+          `skipped ${event.eventId} for ${threadRefKey(subscription.subscriber)}: it watches that pull request itself`,
+        );
+        return;
+      }
+    }
     const priority = deliveryPriority(subscription, event);
     const waking = itemWakes(subscription, event, priority);
     const row = yield* store.deliver(subscription, event, priority, !waking);
@@ -227,6 +253,13 @@ export const makeCompanionHub = Effect.fn("makeCompanionHub")(function* () {
         subscriber: subscription.subscriber,
         eventId: `${event.eventId}/pause`,
         disposition: "auto: superseded, the run's background work finished",
+      });
+    }
+    if (event.kind === "env-up") {
+      yield* store.resolve({
+        subscriber: subscription.subscriber,
+        eventId: event.eventId.replace("/env-up/", "/env-down/"),
+        disposition: "auto: superseded, the environment came back",
       });
     }
     yield* PubSub.publish(delivered, row);

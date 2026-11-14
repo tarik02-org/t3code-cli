@@ -6,7 +6,12 @@ import { Command, Flag } from "effect/cli";
 
 import { loadT3CliEnv } from "../config/env/env.ts";
 import { withRunningCompanion } from "../companion/client.ts";
-import { DeliveryPriority, type InboxEvent, allCompanionEventKinds } from "../companion/schema.ts";
+import {
+  DeliveryPriority,
+  type InboxEvent,
+  allCompanionEventKinds,
+  defaultCompanionEventKinds,
+} from "../companion/schema.ts";
 import { MissingThreadError } from "./error.ts";
 import { extraArgsConfig } from "./extra-args.ts";
 import { formatFlag, threadFlag } from "./flags.ts";
@@ -23,7 +28,9 @@ const callerEnvFlag = Flag.String("caller-env").pipe(
 );
 
 const eventsFlag = Flag.Literals("event", allCompanionEventKinds).pipe(
-  Flag.withDescription("Event kind to deliver; repeat for several (default: all)"),
+  Flag.withDescription(
+    "Event kind to deliver; repeat for several (default: idle, failed, needs-input, needs-approval, stalled)",
+  ),
   Flag.atLeast(0),
 );
 
@@ -216,7 +223,7 @@ export const subscribeCommand = Command.make(
             threadId: Option.getOrUndefined(input.to),
             projectId: Option.getOrUndefined(input.project),
           },
-          events: input.event.length === 0 ? allCompanionEventKinds : input.event,
+          events: input.event.length === 0 ? defaultCompanionEventKinds : input.event,
           wake: input.wake,
           priorities,
           follow: input.follow,

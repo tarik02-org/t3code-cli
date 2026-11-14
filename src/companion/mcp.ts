@@ -17,7 +17,7 @@ import {
   SubscribeResult,
   Subscription,
   type ThreadRefInput,
-  allCompanionEventKinds,
+  defaultCompanionEventKinds,
 } from "./schema.ts";
 
 const Caller = {
@@ -32,7 +32,7 @@ const Caller = {
 
 const Events = Schema.optional(Schema.Array(CompanionEventKind)).annotate({
   description:
-    "Events to deliver: idle, failed, needs-input (a question for the user), needs-approval (a command or tool call waiting to be approved), settled, stalled (the thread's awaited background work ended without a new run, or is still pending 30 minutes after its run), pr-checks (env-down and env-up always come). Defaults to all; list them to take, say, questions without approvals.",
+    "Events to deliver: idle, failed, needs-input (a question for the user), needs-approval (a command or tool call waiting to be approved), settled, stalled (the thread's awaited background work ended without a new run, or is still pending 30 minutes after its run), pr-checks (a linked PR's checks finished; skipped for a PR your own thread watches with watch_pull_request). env-down and env-up always come. Defaults to idle, failed, needs-input, needs-approval and stalled; name settled or pr-checks to take them too.",
 });
 
 const Wake = Schema.optional(Schema.Boolean).annotate({
@@ -238,7 +238,7 @@ const CompanionToolkitHandlers = CompanionToolkit.toLayer(
       hub.subscribe({
         subscriber: callerRef(input),
         source,
-        events: input.events ?? allCompanionEventKinds,
+        events: input.events ?? defaultCompanionEventKinds,
         wake: input.wake ?? false,
         priorities: input.priorities ?? {},
       });
@@ -253,7 +253,7 @@ const CompanionToolkitHandlers = CompanionToolkit.toLayer(
               threadId: input.threadId,
               projectId: input.projectId,
             },
-            events: input.events ?? allCompanionEventKinds,
+            events: input.events ?? defaultCompanionEventKinds,
             wake: input.wake ?? false,
             priorities: input.priorities ?? {},
             follow: input.follow ?? false,
@@ -363,7 +363,7 @@ export const CompanionMcpLive = (version: string) =>
     name: "t3-companion",
     version,
     instructions:
-      "Subscribe to other T3 Code threads and get their idle/failed/needs-input/needs-approval/settled/stalled events in an inbox instead of polling. Identify yourself with callerThreadId (your T3CODE_THREAD_ID). Items stay open until inbox_resolve; inbox_snooze hides one until its source is idle again. needs-approval is a command or tool call waiting to be approved, and its summary says which; needs-input is a question for the user. stalled means T3 Code did not resume a thread after the background work it waited on, or that work is overdue: check the thread and send it a message. An idle with pause=true means the thread still waits on its own background work (a PR watch alone is not a pause). It wakes you only when its last message asks a question or names a pull request; otherwise the idle that follows does.",
+      "Subscribe to other T3 Code threads and get their idle/failed/needs-input/needs-approval/settled/stalled events in an inbox instead of polling. Identify yourself with callerThreadId (your T3CODE_THREAD_ID). Items stay open until inbox_resolve; inbox_snooze hides one until its source is idle again. needs-approval is a command or tool call waiting to be approved, and its summary says which; needs-input is a question for the user. stalled means T3 Code did not resume a thread after the background work it waited on, or that work is overdue: check the thread and send it a message. An idle with pause=true means the thread still waits on its own background work (a PR watch alone is not a pause). It wakes you only when its last message asks a question or names a pull request; otherwise the idle that follows does. An idle whose run only waved off a watch update (a bot's PR comment, say) and changed nothing does not wake you either.",
     path: companionMcpPath,
     protocols: [McpProtocol.v2025_06_18, McpProtocol.v2026_07_28],
     allowSessionTermination: true,

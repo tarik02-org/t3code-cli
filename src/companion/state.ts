@@ -1,4 +1,4 @@
-import type { OrchestrationV2ThreadShell } from "@t3tools/contracts";
+import type { OrchestrationV2ThreadShell, OrchestrationV2TurnItem } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 
 import type {
@@ -201,9 +201,78 @@ export function checksTransitions(
           `PR #${link.number} checks finished on ${headLabel}: ${outcome}`,
         ),
         pullRequests: [summary],
+        head,
       },
     };
   });
+}
+
+/**
+ * Whether a pr-checks event no longer describes its pull request: the checks have a different
+ * result by now, or T3 Code watches a newer head.
+ */
+export function checksMovedOn(shell: OrchestrationV2ThreadShell, event: ThreadEvent): boolean {
+  const reported = event.pullRequests[0];
+  const link = linkedPullRequests(shell).find(
+    (candidate) =>
+      candidate.number === reported?.number && candidate.repository === reported.repository,
+  );
+  if (reported === undefined || link === undefined) {
+    return false;
+  }
+  const watched = link.watch?.headSha ?? null;
+  const head = event.head ?? null;
+  return (
+    summarizePullRequest(link).checks !== reported.checks ||
+    (watched !== null && head !== null && watched !== head)
+  );
+}
+
+/** Whether a thread has its own T3 Code watch on a pull request, which reports its checks. */
+export const watchesPullRequest = (
+  shell: OrchestrationV2ThreadShell,
+  pr: Pick<PullRequestSummary, "number" | "repository">,
+) =>
+  linkedPullRequests(shell).some(
+    (link) =>
+      link.watch !== undefined && link.number === pr.number && link.repository === pr.repository,
+  );
+
+const lookItemTypes: ReadonlySet<string> = new Set([
+  "command_execution",
+  "dynamic_tool",
+  "file_search",
+  "web_search",
+]);
+
+const saysNothingToDo = (message: string) =>
+  /\bnothing (new|to act on|to do|to fix|needs (doing|action)|requires action)\b|\bnothing\b.{0,24}\bneeds? (action|doing)\b|\bneeds? (nothing|no action)\b|\bno action (is )?(needed|required)\b/i.test(
+    message,
+  );
+
+/**
+ * Whether a run only acknowledged a watch update, changing nothing a subscriber could act on. A
+ * monitor notice with nothing finished or failed must have started it (a new PR comment, say),
+ * and it may not have edited files or used a subagent. It either called no tools at all, or
+ * looked something up and then said itself that nothing needs doing: most such notices are a
+ * bot's PR summary, which T3 Code does not tell apart from a person's comment.
+ */
+export function answersOnlyAWatch(
+  items: ReadonlyArray<OrchestrationV2TurnItem>,
+  lastMessage: string | null,
+): boolean {
+  const notices = items.flatMap((item) => (item.type === "notification" ? [item] : []));
+  if (
+    notices.length === 0 ||
+    !notices.every((notice) => notice.source.kind === "monitor" && notice.outcome === "updated") ||
+    items.some((item) => ["user_message", "file_change", "subagent"].includes(item.type))
+  ) {
+    return false;
+  }
+  return (
+    !items.some((item) => lookItemTypes.has(item.type)) ||
+    (lastMessage !== null && saysNothingToDo(lastMessage))
+  );
 }
 
 /** Draft pull requests whose checks pass: the ones waiting to be marked ready. */

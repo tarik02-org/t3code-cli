@@ -22,8 +22,11 @@ import type { ThreadEvent } from "./schema.ts";
 
 /** How long a thread must stay idle before the idle event fires. */
 export const idleDebounce = Duration.seconds(3);
-/** How long an environment may stay unreachable before subscribers hear about it. */
-export const environmentDownGrace = Duration.minutes(1);
+/**
+ * How long an environment may stay unreachable before subscribers hear about it. Connections drop
+ * for a minute or two several times a day, and nobody can act on that.
+ */
+export const environmentDownGrace = Duration.minutes(5);
 const reconnectDelay = Duration.seconds(5);
 
 const environmentEvent = (

@@ -172,6 +172,15 @@ const launched = (fixture: Fixture, threadId: string, sender: string) =>
     [threadId]: [{ type: "user_message", senderThreadId: sender }],
   }));
 
+/** Thread A's turn items for a run that a monitor notice started and that called no tools. */
+const noticeRun = (runId: string, outcome: string, text: string, looked = false) => ({
+  "thread-a": [
+    { type: "notification", runId, source: { kind: "monitor" }, outcome },
+    ...(looked ? [{ type: "command_execution", runId }] : []),
+    { type: "assistant_message", runId, text },
+  ],
+});
+
 describe("CompanionHub", () => {
   it.effect("reports a source that failed before the subscription, and steers it in", () =>
     withHub((hub, fixture) =>
@@ -349,7 +358,7 @@ describe("CompanionHub", () => {
   );
 
   it.effect("reports a linked PR's checks finishing on its head, once per head", () =>
-    withHub((hub) =>
+    withHub((hub, fixture) =>
       Effect.gen(function* () {
         yield* subscribeTo(hub, "thread-a", {}, ["pr-checks"]);
         yield* hub.ingest("local", withChecks("pending", "aaaaaaaaaaaa"));
@@ -364,6 +373,26 @@ describe("CompanionHub", () => {
             "PR #9 checks finished on bbbbbbbbbb: fail (failed jobs: lint)",
           ],
         );
+
+        // The pass is stale by the time its digest goes out; the newer head's result takes its wake.
+        yield* afterWindow;
+        const sent = yield* Ref.get(fixture.sent);
+        assert.lengthOf(sent, 1);
+        assert.deepEqual(digestIds(sent[0]), [rows[1]?.id]);
+        const [stale] = yield* hub.listInbox({ ...openQuery, includeResolved: true });
+        assert.include(stale?.disposition ?? "", "checks moved on");
+
+        // A subscriber that watches the PR itself hears about its checks from T3 Code.
+        yield* hub.ingest(
+          "local",
+          makeShell({
+            id: ThreadId.make("orchestrator"),
+            pullRequests: withChecks("failing", "bbbbbbbbbbbb").pullRequests,
+          }),
+        );
+        yield* hub.ingest("local", withChecks("pending", "cccccccccccc"));
+        yield* hub.ingest("local", withChecks("passing", "cccccccccccc"));
+        assert.lengthOf(yield* hub.listInbox(openQuery), 1);
       }),
     ),
   );
@@ -600,6 +629,51 @@ describe("CompanionHub", () => {
     ),
   );
 
+  it.effect("keeps an idle passive when its run only answered a watch update", () =>
+    withHub((hub, fixture) =>
+      Effect.gen(function* () {
+        yield* subscribeTo(hub, "thread-a", {});
+        yield* Ref.set(
+          fixture.turnItems,
+          noticeRun("run-1", "updated", "Only the bot's PR summary."),
+        );
+        yield* hub.publish(idleEvent(makeShell()));
+        yield* afterWindow;
+        assert.lengthOf(yield* Ref.get(fixture.sent), 0);
+        const [item] = yield* hub.listInbox(openQuery);
+        assert.deepEqual([item?.passive, item?.priority, item?.event.noop], [true, "low", true]);
+        const [subscription] = yield* hub.listSubscriptions({ subscriber: orchestrator });
+        assert.isTrue(subscription?.armed);
+
+        // Looking the comment up first changes nothing, as long as the run says so itself.
+        yield* Ref.set(
+          fixture.turnItems,
+          noticeRun("run-2", "updated", "That is the bot summary; nothing to act on.", true),
+        );
+        yield* hub.publish(idleEvent(makeShell({ latestRunId: RunId.make("run-2") })));
+        yield* afterWindow;
+        assert.lengthOf(yield* Ref.get(fixture.sent), 0);
+
+        // A run that looked and reports something, or a notice that something finished, is news.
+        yield* Ref.set(
+          fixture.turnItems,
+          noticeRun("run-3", "updated", "The Windows player is built and ready to test.", true),
+        );
+        yield* hub.publish(idleEvent(makeShell({ latestRunId: RunId.make("run-3") })));
+        yield* afterWindow;
+        assert.lengthOf(yield* Ref.get(fixture.sent), 1);
+        yield* hub.arm({ subscriber: orchestrator, ids: [subscription?.id ?? 0] });
+        yield* Ref.set(
+          fixture.turnItems,
+          noticeRun("run-4", "completed", "Checks pass on the new head; nothing to act on."),
+        );
+        yield* hub.publish(idleEvent(makeShell({ latestRunId: RunId.make("run-4") })));
+        yield* afterWindow;
+        assert.lengthOf(yield* Ref.get(fixture.sent), 2);
+      }),
+    ),
+  );
+
   it.effect("wakes once per arm; later events wait passively for the next digest", () =>
     withHub((hub, fixture) =>
       Effect.gen(function* () {
@@ -679,7 +753,7 @@ describe("CompanionHub", () => {
     withHub((hub, fixture) =>
       Effect.gen(function* () {
         const { subscription } = yield* subscribeTo(hub, "thread-a", {});
-        yield* hub.publish({
+        const outage: ThreadEvent = {
           eventId: "local/env-down/0",
           kind: "env-down",
           environment: "local",
@@ -692,9 +766,17 @@ describe("CompanionHub", () => {
           pendingTasks: [],
           lastMessage: null,
           pullRequests: [],
-        });
+        };
+        yield* hub.publish(outage);
         yield* afterWindow;
         assert.lengthOf(yield* Ref.get(fixture.sent), 0);
+
+        // The environment coming back closes the outage's item.
+        yield* hub.publish({ ...outage, eventId: "local/env-up/0", kind: "env-up" });
+        assert.deepEqual(
+          (yield* hub.listInbox(openQuery)).map((row) => row.event.kind),
+          ["env-up"],
+        );
 
         yield* hub.arm({ subscriber: orchestrator, ids: [subscription.id] });
         const [failed] = immediateEvents(

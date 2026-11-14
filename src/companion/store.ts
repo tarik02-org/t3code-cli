@@ -160,6 +160,8 @@ export class CompanionStore extends Context.Service<
       id: number,
       event: ThreadEvent,
     ) => Effect.Effect<void, CompanionStoreError>;
+    /** Lets an item that arrived passive start a digest after all. */
+    readonly makeWaking: (id: number) => Effect.Effect<void, CompanionStoreError>;
     /** True when another item already brought this subscriber this exact message from the thread. */
     readonly hasDeliveredMessage: (input: {
       readonly subscriber: ThreadRef;
@@ -618,6 +620,13 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
     Effect.mapError(storeError("updateEvent")),
   );
 
+  const makeWaking = Effect.fn("CompanionStore.makeWaking")(
+    function* (id: number) {
+      yield* sql`UPDATE inbox SET passive = 0 WHERE id = ${id}`;
+    },
+    Effect.mapError(storeError("makeWaking")),
+  );
+
   const hasDeliveredMessage = Effect.fn("CompanionStore.hasDeliveredMessage")(
     function* (input: {
       readonly subscriber: ThreadRef;
@@ -687,6 +696,7 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
     subscribersToWake,
     markWoken,
     updateEvent,
+    makeWaking,
     hasDeliveredMessage,
     loadChecks,
     saveChecks,

@@ -57,7 +57,7 @@ export function deliveryPriority(subscription: Subscription, event: ThreadEvent)
     // A missed resume needs someone now; an overdue wait may still end by itself.
     return subscription.priorities.stalled ?? (event.pause ? "normal" : "urgent");
   }
-  if (event.pause && event.notable !== true) {
+  if ((event.pause && event.notable !== true) || event.noop === true) {
     return "low";
   }
   return subscription.priorities[event.kind] ?? defaultPriorities[event.kind];
@@ -68,7 +68,8 @@ export function deliveryPriority(subscription: Subscription, event: ThreadEvent)
  * and so does a stalled thread at any priority: its silence is the problem.
  * Environment drops wake no one, since they concern every subscription there, and neither does a
  * plain pause: the thread is still waiting on its own work, and the wake belongs to the idle that
- * follows. Anything else, a notable pause included, wakes only an armed subscription.
+ * follows. A run that only waved off a watch update changed nothing, so it wakes no one either.
+ * Anything else, a notable pause included, wakes only an armed subscription.
  */
 export const itemWakes = (
   subscription: Subscription,
@@ -79,6 +80,7 @@ export const itemWakes = (
   (priority === "urgent" ||
     event.kind === "stalled" ||
     (subscription.armed &&
+      event.noop !== true &&
       (!event.pause || event.notable === true) &&
       !environmentEventKinds.includes(event.kind)));
 

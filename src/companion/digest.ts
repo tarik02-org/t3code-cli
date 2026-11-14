@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as FiberMap from "effect/FiberMap";
 import * as Option from "effect/Option";
 
+import { itemWakes } from "./delivery.ts";
 import { CompanionEnvironments } from "./environments.ts";
 import {
   threadRefKey,
@@ -13,7 +14,7 @@ import {
   type PullRequestSummary,
   type ThreadRef,
 } from "./schema.ts";
-import { inTurn, isLive, pullRequestSummaries } from "./state.ts";
+import { checksMovedOn, inTurn, isLive, pullRequestSummaries } from "./state.ts";
 import { CompanionStore } from "./store.ts";
 
 export const wakeCoalesceWindow = Duration.seconds(5);
@@ -135,12 +136,30 @@ export const makeDigests = Effect.fn("makeCompanionDigests")(function* (
   /**
    * Re-checks each item against its source's latest shell row: an idle or settled the source
    * moved past (a newer run) is resolved as superseded, so is a question or approval once the
-   * source waits on nothing, and PR states are brought up to date.
+   * source waits on nothing and a pr-checks whose checks moved on, and PR states are brought up
+   * to date.
    */
   const freshen = Effect.fn("CompanionDigests.freshen")(function* (
     rows: ReadonlyArray<InboxEvent>,
   ) {
     const kept: Array<InboxEvent> = [];
+    // Subscriptions whose waking item was dropped: its wake never happens.
+    const freed = new Set<number>();
+    const supersede = Effect.fnUntraced(function* (row: InboxEvent, reason: string) {
+      yield* store.resolve({
+        subscriber: row.subscriber,
+        ids: [row.id],
+        disposition: `auto: superseded, ${reason}`,
+      });
+      if (
+        row.event.kind !== "stalled" &&
+        !row.passive &&
+        row.priority !== "urgent" &&
+        row.redelivered === 0
+      ) {
+        freed.add(row.subscriptionId);
+      }
+    });
     for (const row of rows) {
       const event = row.event;
       const latest =
@@ -156,11 +175,7 @@ export const makeDigests = Effect.fn("makeCompanionDigests")(function* (
         (event.kind === "needs-input" || event.kind === "needs-approval") &&
         latest.pendingRuntimeRequest === null
       ) {
-        yield* store.resolve({
-          subscriber: row.subscriber,
-          ids: [row.id],
-          disposition: "auto: superseded, the request was answered",
-        });
+        yield* supersede(row, "the request was answered");
         continue;
       }
       const runId = event.runId ?? null;
@@ -169,20 +184,11 @@ export const makeDigests = Effect.fn("makeCompanionDigests")(function* (
         runId !== null &&
         latest.latestRunId !== runId
       ) {
-        yield* store.resolve({
-          subscriber: row.subscriber,
-          ids: [row.id],
-          disposition: "auto: superseded, the source started a new run",
-        });
-        // The wake this item spent its subscription's arm on never happens, so the arm goes back.
-        if (
-          event.kind !== "stalled" &&
-          !row.passive &&
-          row.priority !== "urgent" &&
-          row.redelivered === 0
-        ) {
-          yield* store.setArmed({ ids: [row.subscriptionId], armed: true });
-        }
+        yield* supersede(row, "the source started a new run");
+        continue;
+      }
+      if (event.kind === "pr-checks" && checksMovedOn(latest, event)) {
+        yield* supersede(row, "the pull request's checks moved on");
         continue;
       }
       const now = pullRequestSummaries(latest);
@@ -200,6 +206,28 @@ export const makeDigests = Effect.fn("makeCompanionDigests")(function* (
       const updated = { ...event, pullRequests: refreshed };
       yield* store.updateEvent(row.id, updated);
       kept.push({ ...row, event: updated });
+    }
+    // A freed wake goes to the newest item that arrived passive only because the arm was spent;
+    // with no such item the subscription is armed again.
+    const subscriptions = freed.size === 0 ? [] : yield* store.subscriptions;
+    for (const id of freed) {
+      const subscription = subscriptions.find((candidate) => candidate.id === id);
+      if (subscription === undefined) {
+        continue;
+      }
+      const heir = kept.findLastIndex(
+        (row) =>
+          row.subscriptionId === id &&
+          row.passive &&
+          itemWakes({ ...subscription, armed: true }, row.event, row.priority),
+      );
+      const inherited = kept[heir];
+      if (inherited === undefined) {
+        yield* store.setArmed({ ids: [id], armed: true });
+        continue;
+      }
+      yield* store.makeWaking(inherited.id);
+      kept[heir] = { ...inherited, passive: false };
     }
     return kept;
   });

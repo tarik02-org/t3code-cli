@@ -15,6 +15,15 @@ export type CompanionEventKind = typeof CompanionEventKind.Type;
 
 export const allCompanionEventKinds = CompanionEventKind.literals;
 
+/** What a subscription takes when it names no events: the ones that call for the subscriber. */
+export const defaultCompanionEventKinds: ReadonlyArray<CompanionEventKind> = [
+  "idle",
+  "failed",
+  "needs-input",
+  "needs-approval",
+  "stalled",
+];
+
 /** Environment events reach every subscription on that environment, whatever it asked for. */
 export const environmentEventKinds: ReadonlyArray<CompanionEventKind> = ["env-down", "env-up"];
 
@@ -129,6 +138,10 @@ export const ThreadEvent = Schema.Struct({
   pause: Schema.Boolean,
   /** A pause whose last message asks a question or names a pull request; it wakes like an idle. */
   notable: Schema.optionalKey(Schema.Boolean),
+  /** An idle whose run only answered a watch update and called no tools; it never wakes. */
+  noop: Schema.optionalKey(Schema.Boolean),
+  /** The head a pr-checks event is about, when T3 Code watches the pull request. */
+  head: Schema.optionalKey(Schema.NullOr(Schema.String)),
   pendingTasks: Schema.Array(Schema.String),
   /** The source thread's last assistant message, truncated. */
   lastMessage: Schema.NullOr(Schema.String),
