@@ -24,12 +24,17 @@ export interface ThreadView {
   readonly shell: OrchestrationV2ThreadShell;
   readonly state: ThreadState;
   readonly sinceMs: number;
+  /**
+   * The thread's last assistant message, read from the thread itself: T3 Code keeps message
+   * text out of shell rows. Null when it has none, undefined until it has been read.
+   */
+  readonly message: { readonly id: string; readonly text: string } | null | undefined;
 }
 
 /** What "new" is measured against: the state when the wait was made, or last fired. */
 export interface Baselines {
   readonly sinceMs: number;
-  /** The latest visible message of each thread, by thread key. */
+  /** The last assistant message of each thread, by thread key. */
   readonly messages: Readonly<Record<string, string | null>>;
   /** The head of each pull request. */
   readonly heads: Readonly<Record<string, string>>;
@@ -47,7 +52,7 @@ export interface Evaluation {
   readonly leaves: ReadonlyArray<LeafTruth>;
 }
 
-const threadRefOf = (leaf: ThreadLeaf): ThreadRef => ({
+export const threadRefOf = (leaf: ThreadLeaf): ThreadRef => ({
   environment: leaf.environment ?? "",
   threadId: leaf.thread,
 });
@@ -71,15 +76,16 @@ function evaluateThread(leaf: ThreadLeaf, world: World, baselines: Baselines): L
     return { leaf: name, state: "unknown", detail: `thread ${threadRefKey(ref)} is not known` };
   }
   const who = `thread "${view.shell.title}" (${threadRefKey(ref)})`;
-  const latest = view.shell.latestVisibleMessage;
-  const said = latest !== null && latest.role === "assistant" ? `: ${firstLine(latest.text)}` : "";
+  const message = view.message;
+  const said = message === null || message === undefined ? "" : `: ${firstLine(message.text)}`;
   const pending = ownTaskLabels(view.shell);
   const standing = `${who} is ${view.state}${pending.length === 0 ? "" : `, waiting on ${pending.join(", ")}`}`;
   if (leaf.is === "message") {
+    if (message === undefined) {
+      return { leaf: name, state: "unknown", detail: `${who} has not had its messages read` };
+    }
     const fresh =
-      latest !== null &&
-      latest.role === "assistant" &&
-      latest.id !== (baselines.messages[threadRefKey(ref)] ?? null);
+      message !== null && message.id !== (baselines.messages[threadRefKey(ref)] ?? null);
     return {
       leaf: name,
       state: fresh ? "true" : "false",
@@ -289,10 +295,7 @@ export function baselinesFor(condition: Condition, world: World): Baselines {
   return {
     sinceMs: world.nowMs,
     messages: Object.fromEntries(
-      threads.map((ref) => [
-        threadRefKey(ref),
-        world.thread(ref)?.shell.latestVisibleMessage?.id ?? null,
-      ]),
+      threads.map((ref) => [threadRefKey(ref), world.thread(ref)?.message?.id ?? null]),
     ),
     heads: Object.fromEntries(
       pullRequests.flatMap((pr) => {

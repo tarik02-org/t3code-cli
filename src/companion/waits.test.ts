@@ -2,6 +2,7 @@ import "vite-plus/test/config";
 
 import { RunId, ThreadId, type OrchestrationV2ThreadShell } from "@t3tools/contracts";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -48,6 +49,8 @@ const withCompanion = <A, E>(
     /** What the environment's shell snapshot returns: the state the stream may not have sent. */
     readonly shells: Ref.Ref<ReadonlyArray<OrchestrationV2ThreadShell>>;
     readonly pullRequests: Ref.Ref<ReadonlyArray<PullRequestView>>;
+    /** Every thread's last assistant message, which only the thread itself carries. */
+    readonly message: Ref.Ref<{ readonly id: string; readonly text: string }>;
     /** Starts a daemon's waits over the same store; calling it again is a restart. */
     readonly start: () => Effect.Effect<
       CompanionWaits["Service"],
@@ -60,6 +63,7 @@ const withCompanion = <A, E>(
     const sent = yield* Ref.make<ReadonlyArray<SendThreadInput>>([]);
     const shells = yield* Ref.make<ReadonlyArray<OrchestrationV2ThreadShell>>([]);
     const pullRequests = yield* Ref.make<ReadonlyArray<PullRequestView>>([]);
+    const message = yield* Ref.make({ id: "message-1", text: "final report\nand its details" });
     const environment = fromPartial<CompanionEnvironment>({
       name: "local",
       aliases: [],
@@ -69,10 +73,12 @@ const withCompanion = <A, E>(
         getShellSnapshot: () =>
           Ref.get(shells).pipe(Effect.map((threads) => fromPartial({ threads }))),
         getThreadBoundedSnapshot: () =>
-          Effect.succeed(
-            fromPartial({
-              projection: { turnItems: [{ type: "assistant_message", text: "final report" }] },
-            }),
+          Ref.get(message).pipe(
+            Effect.map((last) =>
+              fromPartial({
+                projection: { turnItems: [{ type: "assistant_message", ...last }] },
+              }),
+            ),
           ),
       }),
       application: fromPartial<T3Application["Service"]>({
@@ -113,7 +119,7 @@ const withCompanion = <A, E>(
           }),
         ),
       );
-    return yield* body({ sent, shells, pullRequests, start });
+    return yield* body({ sent, shells, pullRequests, message, start });
   }).pipe(
     Effect.scoped,
     Effect.provide(Layer.fresh(NodeSqliteClient.layer({ filename: ":memory:" }))),
@@ -139,8 +145,11 @@ describe("CompanionWaits", () => {
           label: "report",
         });
         assert.equal(made.fired?.result.outcome, "matched");
-        assert.equal(made.fired?.result.threads[0]?.lastMessage, "final report");
-        assert.include(made.fired?.summary ?? "", 'thread "thread-a" (local/thread-a) is idle');
+        assert.equal(made.fired?.result.threads[0]?.lastMessage, "final report\nand its details");
+        assert.equal(
+          made.fired?.summary,
+          'thread "thread-a" (local/thread-a) is idle: final report',
+        );
 
         // The call handed it over, so no wake follows and nothing stays pending.
         yield* advance("10 seconds");
@@ -189,6 +198,37 @@ describe("CompanionWaits", () => {
         assert.include(sent[0]?.message ?? "", `- [${made.id}] matched:`);
         assert.include(sent[0]?.message ?? "", "is idle");
         assert.include(sent[0]?.message ?? "", "PR acme/repo#9 all 3 checks pass on aaaaaaa");
+      }),
+    ),
+  );
+
+  it.effect("fires on a new assistant message, which no shell row carries", () =>
+    withCompanion((fixture) =>
+      Effect.gen(function* () {
+        const waits = yield* fixture.start();
+        yield* Effect.forkChild(waits.run);
+        yield* waits.ingest("local", working("thread-a"));
+        const made = yield* waits.create({
+          owner,
+          condition: { thread: "thread-a", is: "message" },
+        });
+        assert.deepEqual(
+          made.leaves.map((leaf) => leaf.state),
+          ["false"],
+        );
+        yield* advance("40 seconds");
+        assert.lengthOf(yield* Ref.get(fixture.sent), 0);
+
+        // The thread keeps running and says something; its row changes, its message is re-read.
+        yield* Ref.set(fixture.message, { id: "message-2", text: "Halfway: the build passes." });
+        yield* waits.ingest(
+          "local",
+          thread("thread-a", { activityRunStatus: "running", updatedAt: DateTime.makeUnsafe(1) }),
+        );
+        yield* advance("40 seconds");
+        const sent = yield* Ref.get(fixture.sent);
+        assert.lengthOf(sent, 1);
+        assert.include(sent[0]?.message ?? "", "wrote: Halfway: the build passes.");
       }),
     ),
   );

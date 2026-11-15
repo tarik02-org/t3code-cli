@@ -17,6 +17,7 @@ import {
   parsePullRequest,
   referencesOf,
   summarize,
+  threadRefOf,
   type ThreadView,
   type World,
 } from "./condition.ts";
@@ -46,7 +47,10 @@ import { makeWaker } from "./wake.ts";
 
 /** How often every pending wait is evaluated against the clock. */
 export const tickInterval = Duration.seconds(2);
-/** Pull requests named by a pending wait are read from GitHub every this many ticks. */
+/**
+ * Pull requests named by a pending wait are read from GitHub every this many ticks, and so is the
+ * last message of a thread that a wait for a new message names, when its row changed.
+ */
 export const pullRequestTicks = 15;
 /**
  * Environments with a pending thread wait have their whole snapshot re-read every this many
@@ -104,7 +108,8 @@ export const makeCompanionWaits = Effect.fn("makeCompanionWaits")(function* () {
   const github = yield* CompanionPullRequests;
 
   // The latest state of everything a wait can name. Only read and written between yields.
-  const threads = new Map<string, ThreadView>();
+  // `stale` marks a thread whose row changed since its last message was read.
+  const threads = new Map<string, ThreadView & { readonly stale: boolean }>();
   const pullRequests = new Map<string, PullRequestView>();
   const pending = new Map<number, StoredWait>();
   // Owners with a firing their wake message has not carried yet.
@@ -151,8 +156,49 @@ export const makeCompanionWaits = Effect.fn("makeCompanionWaits")(function* () {
       shell,
       state,
       sinceMs: known !== undefined && known.state === state ? known.sinceMs : nowMs,
+      message: known?.message,
+      stale:
+        known === undefined ||
+        known.stale ||
+        DateTime.toEpochMillis(known.shell.updatedAt) !== DateTime.toEpochMillis(shell.updatedAt),
     });
   };
+
+  /** Reads a thread's last assistant message, which its shell row does not carry. */
+  const readMessage = Effect.fn("CompanionWaits.readMessage")(function* (ref: ThreadRef) {
+    const message = yield* environments.resolve(ref.environment).pipe(
+      Effect.flatMap((environment) =>
+        environment.orchestration.getThreadBoundedSnapshot(ref.threadId),
+      ),
+      Effect.map((snapshot) => {
+        const item = snapshot.projection.turnItems.findLast(
+          (candidate) => candidate.type === "assistant_message",
+        );
+        return item !== undefined && "text" in item
+          ? { id: String(item.id), text: item.text }
+          : null;
+      }),
+      Effect.catchCause((cause) =>
+        Effect.logWarning(`could not read the last message of ${threadRefKey(ref)}`, cause).pipe(
+          Effect.as(undefined),
+        ),
+      ),
+    );
+    const view = threads.get(threadRefKey(ref));
+    if (view !== undefined && message !== undefined) {
+      threads.set(threadRefKey(ref), { ...view, message, stale: false });
+    }
+  });
+
+  const readStaleMessages = Effect.fn("CompanionWaits.readStaleMessages")(function* (
+    refs: Iterable<ThreadRef>,
+  ) {
+    for (const ref of refs) {
+      if (threads.get(threadRefKey(ref))?.stale === true) {
+        yield* readMessage(ref);
+      }
+    }
+  });
 
   const named = () => {
     const threadRefs = new Map<string, ThreadRef>();
@@ -169,60 +215,38 @@ export const makeCompanionWaits = Effect.fn("makeCompanionWaits")(function* () {
     return { threads: threadRefs, pullRequests: prs };
   };
 
-  const lastMessageOf = Effect.fn("CompanionWaits.lastMessageOf")(function* (ref: ThreadRef) {
-    const visible = threads.get(threadRefKey(ref))?.shell.latestVisibleMessage ?? null;
-    const fallback = visible !== null && visible.role === "assistant" ? visible.text : null;
-    return yield* environments.resolve(ref.environment).pipe(
-      Effect.flatMap((environment) =>
-        environment.orchestration.getThreadBoundedSnapshot(ref.threadId),
-      ),
-      Effect.map((snapshot) => {
-        const message = snapshot.projection.turnItems.findLast(
-          (item) => item.type === "assistant_message",
-        );
-        return message !== undefined && "text" in message ? message.text : fallback;
-      }),
-      Effect.catchCause((cause) =>
-        Effect.logWarning(`could not read the last message of ${threadRefKey(ref)}`, cause).pipe(
-          Effect.as(fallback),
-        ),
-      ),
-      Effect.map((text) => (text === null ? null : text.slice(0, lastMessageLength))),
-    );
-  });
-
-  const payloadOf = Effect.fn("CompanionWaits.payloadOf")(function* (
+  const payloadOf = (
     wait: StoredWait,
     outcome: WaitResult["outcome"],
     evaluation: Evaluation,
     nowMs: number,
-  ) {
+  ): WaitResult => {
     const references = referencesOf(wait.condition);
-    const threadPayloads: Array<ThreadPayload> = [];
-    for (const ref of references.threads) {
-      const view = threads.get(threadRefKey(ref));
-      if (view !== undefined) {
-        threadPayloads.push({
-          environment: ref.environment,
-          threadId: ref.threadId,
-          title: view.shell.title,
-          state: view.state,
-          pendingTasks: ownTaskLabels(view.shell),
-          lastMessage: yield* lastMessageOf(ref),
-        });
-      }
-    }
     return {
       outcome,
       at: iso(nowMs),
       leaves: evaluation.leaves,
-      threads: threadPayloads,
+      threads: references.threads.flatMap((ref) => {
+        const view = threads.get(threadRefKey(ref));
+        return view === undefined
+          ? []
+          : [
+              {
+                environment: ref.environment,
+                threadId: ref.threadId,
+                title: view.shell.title,
+                state: view.state,
+                pendingTasks: ownTaskLabels(view.shell),
+                lastMessage: view.message?.text.slice(0, lastMessageLength) ?? null,
+              } satisfies ThreadPayload,
+            ];
+      }),
       pullRequests: references.pullRequests.flatMap((pr) => {
         const view = pullRequests.get(pr);
         return view === undefined ? [] : [view];
       }),
-    } satisfies WaitResult;
-  });
+    };
+  };
 
   /**
    * Fires a wait. The wait leaves `pending`, or is disarmed, before the first yield, so a second
@@ -236,22 +260,32 @@ export const makeCompanionWaits = Effect.fn("makeCompanionWaits")(function* () {
     nowMs: number,
     inline: boolean,
   ) {
-    const again =
-      wait.repeat && outcome === "matched"
-        ? { ...wait, armed: false, baselines: baselinesFor(wait.condition, world(nowMs)) }
-        : null;
-    if (again === null) {
-      pending.delete(wait.id);
+    const repeats = wait.repeat && outcome === "matched";
+    if (repeats) {
+      pending.set(wait.id, { ...wait, armed: false });
     } else {
-      pending.set(wait.id, again);
+      pending.delete(wait.id);
     }
-    const result = yield* payloadOf(wait, outcome, evaluation, nowMs);
-    const summary = summarize(outcome, evaluation.leaves);
+    // The message that goes out is the one the thread has now, not the one last read.
+    yield* readStaleMessages(referencesOf(wait.condition).threads);
+    const said = evaluate(wait.condition, world(nowMs), wait.baselines);
+    const result = payloadOf(
+      wait,
+      outcome,
+      { truth: evaluation.truth, leaves: said.leaves },
+      nowMs,
+    );
+    const summary = summarize(outcome, result.leaves);
+    // A repeating wait measures "new" from this firing on.
+    const baselines = baselinesFor(wait.condition, world(nowMs));
+    if (repeats && pending.has(wait.id)) {
+      pending.set(wait.id, { ...wait, armed: false, baselines });
+    }
     yield* store.updateWait(
       wait.id,
-      again === null
-        ? { status: outcome === "matched" ? "fired" : "timeout" }
-        : { armed: false, baselines: again.baselines },
+      repeats
+        ? { armed: false, baselines }
+        : { status: outcome === "matched" ? "fired" : "timeout" },
     );
     const fireId = yield* store.recordFire({ waitId: wait.id, at: result.at, summary, result });
     const stored: StoredFire = { fireId, wait, summary, result };
@@ -295,7 +329,7 @@ export const makeCompanionWaits = Effect.fn("makeCompanionWaits")(function* () {
       const view = threads.get(key);
       const state = view === undefined ? undefined : threadState(view.shell, nowMs);
       if (view !== undefined && state !== undefined && state !== view.state) {
-        threads.set(key, { shell: view.shell, state, sinceMs: nowMs });
+        threads.set(key, { ...view, state, sinceMs: nowMs });
       }
     }
     for (const wait of pending.values()) {
@@ -396,6 +430,8 @@ export const makeCompanionWaits = Effect.fn("makeCompanionWaits")(function* () {
           message: `thread ${ref.threadId} is not known on ${ref.environment}`,
         });
       }
+      // What counts as a new message is measured from the one the thread has now.
+      yield* readMessage(ref);
     }
     for (const pr of references.pullRequests) {
       const view = yield* github
@@ -595,6 +631,14 @@ export const makeCompanionWaits = Effect.fn("makeCompanionWaits")(function* () {
       yield* Effect.gen(function* () {
         if (current % pullRequestTicks === 0) {
           yield* readPullRequests();
+          // Only a wait for a new message needs one before it fires; the rest read it when they do.
+          yield* readStaleMessages(
+            [...pending.values()].flatMap((wait) =>
+              leavesOf(wait.condition).flatMap((leaf) =>
+                "thread" in leaf && leaf.is === "message" ? [threadRefOf(leaf)] : [],
+              ),
+            ),
+          );
         }
         if (current > 0 && current % snapshotTicks === 0) {
           yield* rereadSnapshots();

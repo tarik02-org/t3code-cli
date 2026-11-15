@@ -39,13 +39,19 @@ const worldOf = (
   nowMs: number,
   shells: ReadonlyArray<OrchestrationV2ThreadShell>,
   prs: ReadonlyArray<PullRequestView> = [],
+  lastMessageId = "message-1",
 ): World => ({
   nowMs,
   thread: (ref) => {
     const shell = shells.find((candidate) => candidate.id === ref.threadId);
     return shell === undefined || ref.environment !== "local"
       ? undefined
-      : { shell, state: threadState(shell, nowMs), sinceMs: 0 };
+      : {
+          shell,
+          state: threadState(shell, nowMs),
+          sinceMs: 0,
+          message: { id: lastMessageId, text: "Done.\nDetails follow." },
+        };
   },
   pullRequest: (key) => prs.find((candidate) => candidate.pr === key),
 });
@@ -62,8 +68,6 @@ const truthOf = (condition: Condition, world: World, baselines = none) =>
 
 const asking = (kind: "user_input" | "command") =>
   makeShell({ pendingRuntimeRequest: fromPartial({ id: "request-1", kind }) });
-const said = (id: string, role: "assistant" | "user" = "assistant") =>
-  makeShell({ latestVisibleMessage: fromPartial({ id, role, text: "Done.\nDetails follow." }) });
 const remark = (author: string, bot: boolean, ms: number) => ({
   author,
   bot,
@@ -154,18 +158,13 @@ describe("evaluate", () => {
 
   it("sees a message, a comment and a head only when they are new", () => {
     const condition: Condition = { any: [thread("message"), pull("comment"), pull("new-head")] };
-    const before = worldOf(1_000, [said("message-1")], [pr()]);
+    const before = worldOf(1_000, [idle], [pr()]);
     const baselines = baselinesFor(condition, before);
     assert.equal(truthOf(condition, before, baselines), "false");
 
-    assert.equal(
-      truthOf(thread("message"), worldOf(2_000, [said("message-2")]), baselines),
-      "true",
-    );
-    assert.equal(
-      truthOf(thread("message"), worldOf(2_000, [said("message-2", "user")]), baselines),
-      "false",
-    );
+    const wrote = evaluate(thread("message"), worldOf(2_000, [idle], [], "message-2"), baselines);
+    assert.equal(wrote.truth, "true");
+    assert.include(wrote.leaves[0]?.detail ?? "", "wrote: Done.");
     assert.equal(
       truthOf(pull("comment"), commented([remark("alice", false, 500)]), baselines),
       "false",
@@ -236,7 +235,7 @@ describe("conditions", () => {
   it("are summarized by what matched, or by everything when they timed out", () => {
     const world = worldOf(10_000, [idle], [pr({ pending: ["build"] })]);
     const { leaves } = evaluate({ any: [thread("idle"), pull("green")] }, world, none);
-    assert.equal(summarize("matched", leaves), 'thread "Thread A" (local/thread-a) is idle');
+    assert.equal(summarize("matched", leaves), 'thread "Thread A" (local/thread-a) is idle: Done.');
     assert.include(summarize("timeout", leaves), "1 of 3 checks pending on aaaaaaa");
   });
 });
