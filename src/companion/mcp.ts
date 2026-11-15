@@ -6,23 +6,20 @@ import * as McpServer from "effect/ai/McpServer";
 import * as Tool from "effect/ai/Tool";
 import * as Toolkit from "effect/ai/Toolkit";
 
-import { CompanionEnvironments } from "./environments.ts";
 import { CompanionToolError } from "./error.ts";
-import { CompanionHub, maxWaitSeconds } from "./hub.ts";
 import {
-  CompanionEventKind,
-  DeliveryPriority,
-  InboxEvent,
-  OpenWorkItem,
-  SubscribeResult,
-  Subscription,
+  FiredWait,
+  LeafTruth,
+  PendingWait,
   type ThreadRefInput,
-  defaultCompanionEventKinds,
+  WaitResult,
+  WakePolicy,
 } from "./schema.ts";
+import { CompanionWaits, maxWaitNowSeconds } from "./waits.ts";
 
 const Caller = {
   callerThreadId: Schema.String.annotate({
-    description: "Your own T3 Code thread id (T3CODE_THREAD_ID). Inbox rows are keyed on it.",
+    description: "Your own T3 Code thread id (T3CODE_THREAD_ID). Waits belong to it.",
   }),
   callerEnvironment: Schema.optional(Schema.String).annotate({
     description:
@@ -30,180 +27,93 @@ const Caller = {
   }),
 };
 
-const Events = Schema.optional(Schema.Array(CompanionEventKind)).annotate({
-  description:
-    "Events to deliver: idle, failed, needs-input (a question for the user), needs-approval (a command or tool call waiting to be approved), settled, stalled (the thread's awaited background work ended without a new run, or is still pending 30 minutes after its run), pr-checks (a linked PR's checks finished; skipped for a PR your own thread watches with watch_pull_request). env-down and env-up always come. Defaults to idle, failed, needs-input, needs-approval and stalled; name settled or pr-checks to take them too.",
+// Decoded by the daemon rather than declared here: the grammar is recursive, and a bad
+// condition then comes back with the reason it was refused.
+const ConditionParameter = Schema.Record(Schema.String, Schema.Unknown).annotate({
+  description: [
+    "What to wait for, as JSON. A leaf, or leaves combined:",
+    '{"any": [condition, …]}, {"all": [condition, …]}, {"not": condition}.',
+    'Thread leaf: {"thread": "<thread id>", "environment": "<env, optional>", "is": "idle" | "finished" | "needs-input" | "needs-approval" | "failed" | "stalled" | "message"}.',
+    'idle: its run ended (its own background work may still be pending). finished: idle with none pending; a PR watch alone does not count. needs-input: a question for the user. needs-approval: a command or tool call awaits approval. stalled: work it awaits is still pending 30 minutes after its run (set "minutes" to change that). message: a new assistant message.',
+    'Pull request leaf: {"pr": "owner/repo#123", "is": "checks-done" | "green" | "red" | "mergeable" | "conflicting" | "draft" | "ready" | "merged" | "closed" | "comment" | "new-head"}, on the PR\'s current head. comment: a new comment or review from a person, not a bot.',
+    'Time leaf: {"after": <seconds>}.',
+    "message, comment and new-head mean new since the wait was made (or last fired). Everything else is judged against the current state, so a wait on something that already holds fires at once.",
+    'Example: {"any": [{"thread": "T", "is": "needs-input"}, {"all": [{"thread": "T", "is": "idle"}, {"pr": "o/r#12", "is": "green"}]}]}.',
+  ].join(" "),
 });
 
-const Wake = Schema.optional(Schema.Boolean).annotate({
+const WaitTool = Tool.make("wait", {
   description:
-    "Let events wake your thread with a digest message. Each subscription wakes you once, then disarms until you arm it (or subscribe to the same source again); later events still reach your inbox and ride along in other digests. Every digest ends with an Actions block: the subscriptions it disarmed, others still disarmed, the arm call for them, and the passive items still open. Failures, questions, approvals and stalled threads always wake. A pause (an idle whose thread still waits on its own background work) wakes only when its last message asks a question or names a pull request; otherwise it stays passive and does not disarm. Events always go to the inbox.",
-});
-
-const Priorities = Schema.optional(Schema.Record(Schema.String, DeliveryPriority)).annotate({
-  description:
-    'Per-kind digest priority overrides, e.g. {"idle": "low"}. urgent steers into your running turn at once, carrying everything else pending; normal and low wait until your turn ends and arrive together as one new turn. Defaults: failed, needs-input, needs-approval and stalled urgent (a stalled wait that is only overdue is normal); idle and env-down normal; settled, env-up, plain pauses and snoozed items low.',
-});
-
-const Ids = Schema.Array(Schema.Int);
-
-const SubscribeTool = Tool.make("subscribe", {
-  description:
-    "Subscribe your thread to another thread (or every thread of a project) so its events land in your inbox instead of polling it. Subscribing again to the same source updates and re-arms that subscription. Returns the source's current state (paused: its run ended and only its own background work is pending); if it already failed, needs input, or finished, that item is in your inbox right away.",
+    "Wait until a condition holds, without blocking your turn. Returns the wait's id; if the condition already holds, the result comes back in this call instead. Otherwise you are woken with one line per fired wait when it holds, or when its deadline passes. A fired wait is done: nothing to resolve or re-arm.",
   parameters: Schema.Struct({
     ...Caller,
-    environment: Schema.optional(Schema.String).annotate({
-      description: "Environment of the source thread or project. Defaults to the default one.",
+    condition: ConditionParameter,
+    deadline: Schema.optional(Schema.Number).annotate({
+      description: "Seconds from now after which the wait fires with outcome timeout.",
     }),
-    threadId: Schema.optional(Schema.String),
-    projectId: Schema.optional(Schema.String),
-    follow: Schema.optional(Schema.Boolean).annotate({
+    wake: Schema.optional(WakePolicy).annotate({
       description:
-        "With projectId: instead of every thread's events, subscribe you to each new thread you launch in that project, with these events and settings.",
+        "How a fired wait reaches you. turn-end (default): after your current turn ends, together with whatever else fired, as one message. steer: at once, into your running turn. none: no message; waits hands the result over.",
     }),
-    events: Events,
-    wake: Wake,
-    priorities: Priorities,
-  }),
-  success: SubscribeResult,
-  failure: CompanionToolError,
-});
-
-const ArmTool = Tool.make("arm", {
-  description:
-    "Arm your subscriptions by id so the next event from each wakes you once. A wake disarms a subscription; until you arm it again (or subscribe to the same source again), its events reach your inbox and your digests without waking you. Failures, questions, approvals and stalled threads always wake.",
-  parameters: Schema.Struct({ ...Caller, ids: Ids }),
-  success: Schema.Struct({ armed: Schema.Int }),
-  failure: CompanionToolError,
-});
-
-const UnsubscribeTool = Tool.make("unsubscribe", {
-  description: "Remove your subscriptions by id.",
-  parameters: Schema.Struct({ ...Caller, ids: Ids }),
-  success: Schema.Struct({ removed: Schema.Int }),
-  failure: CompanionToolError,
-});
-
-const SubscriptionsListTool = Tool.make("subscriptions_list", {
-  description: "List your subscriptions.",
-  parameters: Schema.Struct(Caller),
-  success: Schema.Struct({ subscriptions: Schema.Array(Subscription) }),
-  failure: CompanionToolError,
-});
-
-const InboxListTool = Tool.make("inbox_list", {
-  description:
-    "List your open inbox items, oldest first. Each carries the source's last message and its PR states. Items stay open until you resolve them; snoozed ones are hidden until they come back.",
-  parameters: Schema.Struct({
-    ...Caller,
-    includeResolved: Schema.optional(Schema.Boolean).annotate({
-      description: "Also list resolved and snoozed items.",
+    label: Schema.optional(Schema.String).annotate({
+      description: "A few words that will tell you what this wait was for when it fires.",
     }),
-    afterId: Schema.optional(Schema.Int),
-    limit: Schema.optional(Schema.Int),
-  }),
-  success: Schema.Struct({ events: Schema.Array(InboxEvent) }),
-  failure: CompanionToolError,
-});
-
-const InboxResolveTool = Tool.make("inbox_resolve", {
-  description: "Close inbox items for good, optionally noting what you did with them.",
-  parameters: Schema.Struct({
-    ...Caller,
-    ids: Ids,
-    disposition: Schema.optional(Schema.String).annotate({
-      description: 'Free text, e.g. "marked ready" or "sent back".',
+    repeat: Schema.optional(Schema.Boolean).annotate({
+      description:
+        "Fire again every time the condition becomes true after having been false, until cancelled.",
     }),
-  }),
-  success: Schema.Struct({ resolved: Schema.Int }),
-  failure: CompanionToolError,
-});
-
-const InboxSnoozeTool = Tool.make("inbox_snooze", {
-  description:
-    "Hide inbox items until at least minSeconds pass and their source thread is idle; then they come back at low priority. Use it for results you can only act on later, such as a thread waiting on CI.",
-  parameters: Schema.Struct({ ...Caller, ids: Ids, minSeconds: Schema.Int }),
-  success: Schema.Struct({ snoozed: Schema.Int }),
-  failure: CompanionToolError,
-});
-
-const InboxWaitTool = Tool.make("inbox_wait", {
-  description:
-    "Block until an open inbox item arrives (or one is already there), or until the timeout passes.",
-  parameters: Schema.Struct({
-    ...Caller,
-    afterId: Schema.optional(Schema.Int).annotate({
-      description: "Only return items with a larger id.",
-    }),
-    events: Schema.optional(Schema.Array(CompanionEventKind)),
-    timeoutSeconds: Schema.optional(Schema.Int).annotate({
-      description: `Defaults to 60, at most ${maxWaitSeconds}.`,
-    }),
-  }),
-  success: Schema.Struct({ events: Schema.Array(InboxEvent), timedOut: Schema.Boolean }),
-  failure: CompanionToolError,
-});
-
-const OpenWorkTool = Tool.make("open_work", {
-  description:
-    "List your subscribed threads that have draft pull requests whose checks pass: the ones waiting to be marked ready.",
-  parameters: Schema.Struct(Caller),
-  success: Schema.Struct({ threads: Schema.Array(OpenWorkItem) }),
-  failure: CompanionToolError,
-});
-
-const ThreadSendTool = Tool.make("thread_send", {
-  description:
-    "Send a message to another thread and subscribe your thread to it, so its result arrives in your inbox.",
-  parameters: Schema.Struct({
-    ...Caller,
-    environment: Schema.optional(Schema.String),
-    threadId: Schema.String,
-    message: Schema.String,
-    events: Events,
-    wake: Wake,
-    priorities: Priorities,
-  }),
-  success: Schema.Struct({ threadId: Schema.String, ...SubscribeResult.fields }),
-  failure: CompanionToolError,
-});
-
-const ThreadStartTool = Tool.make("thread_start", {
-  description:
-    "Start a new thread in a project and, unless subscribe is false, subscribe your thread to it in the same call, so even a failure at launch reaches your inbox.",
-  parameters: Schema.Struct({
-    ...Caller,
-    environment: Schema.optional(Schema.String),
-    project: Schema.optional(Schema.String).annotate({
-      description: "Project id, title, or path. Defaults to the server's default project.",
-    }),
-    message: Schema.String,
-    title: Schema.optional(Schema.String),
-    subscribe: Schema.optional(Schema.Boolean).annotate({ description: "Defaults to true." }),
-    events: Events,
-    wake: Wake,
-    priorities: Priorities,
   }),
   success: Schema.Struct({
-    threadId: Schema.String,
-    subscription: Schema.NullOr(Subscription),
-    source: SubscribeResult.fields.source,
+    id: Schema.Int,
+    fired: Schema.NullOr(FiredWait),
+    leaves: Schema.Array(LeafTruth),
   }),
+  failure: CompanionToolError,
+});
+
+const WaitNowTool = Tool.make("wait_now", {
+  description: `Block inside your turn until a condition holds or the timeout passes (at most ${maxWaitNowSeconds} seconds). Use it for short waits; for anything longer use wait and end your turn.`,
+  parameters: Schema.Struct({
+    ...Caller,
+    condition: ConditionParameter,
+    timeout: Schema.Number.annotate({ description: "Seconds to block for." }),
+  }),
+  success: WaitResult,
+  failure: CompanionToolError,
+});
+
+const WaitsTool = Tool.make("waits", {
+  description:
+    "List your pending waits, each with where every part of its condition stands now, and hand over the waits that fired with wake none (each is handed over once).",
+  parameters: Schema.Struct(Caller),
+  success: Schema.Struct({
+    pending: Schema.Array(PendingWait),
+    fired: Schema.Array(FiredWait),
+  }),
+  failure: CompanionToolError,
+});
+
+const WaitCancelTool = Tool.make("wait_cancel", {
+  description: "Cancel pending waits of yours by id.",
+  parameters: Schema.Struct({ ...Caller, ids: Schema.Array(Schema.Int) }),
+  success: Schema.Struct({ cancelled: Schema.Int }),
+  failure: CompanionToolError,
+});
+
+const WaitResultTool = Tool.make("wait_result", {
+  description:
+    "The whole payload of a wait that fired: every part of its condition, each thread's last message (up to 10,000 characters) and each pull request's state. Kept for 24 hours.",
+  parameters: Schema.Struct({ ...Caller, id: Schema.Int }),
+  success: FiredWait,
   failure: CompanionToolError,
 });
 
 export const CompanionToolkit = Toolkit.make(
-  SubscribeTool,
-  ArmTool,
-  UnsubscribeTool,
-  SubscriptionsListTool,
-  InboxListTool,
-  InboxResolveTool,
-  InboxSnoozeTool,
-  InboxWaitTool,
-  OpenWorkTool,
-  ThreadSendTool,
-  ThreadStartTool,
+  WaitTool,
+  WaitNowTool,
+  WaitsTool,
+  WaitCancelTool,
+  WaitResultTool,
 );
 
 /** Keeps the full cause in the daemon log and hands callers a stable message. */
@@ -222,136 +132,38 @@ const callerRef = (input: {
 
 const CompanionToolkitHandlers = CompanionToolkit.toLayer(
   Effect.gen(function* () {
-    const hub = yield* CompanionHub;
-    const environments = yield* CompanionEnvironments;
-
-    const subscribeTo = (
-      input: {
-        readonly callerThreadId: string;
-        readonly callerEnvironment?: string | undefined;
-        readonly events?: ReadonlyArray<CompanionEventKind> | undefined;
-        readonly wake?: boolean | undefined;
-        readonly priorities?: Readonly<Record<string, DeliveryPriority>> | undefined;
-      },
-      source: { readonly environment: string; readonly threadId: string },
-    ) =>
-      hub.subscribe({
-        subscriber: callerRef(input),
-        source,
-        events: input.events ?? defaultCompanionEventKinds,
-        wake: input.wake ?? false,
-        priorities: input.priorities ?? {},
-      });
-
+    const waits = yield* CompanionWaits;
     return CompanionToolkit.of({
-      subscribe: (input) =>
-        hub
-          .subscribe({
-            subscriber: callerRef(input),
-            source: {
-              environment: input.environment,
-              threadId: input.threadId,
-              projectId: input.projectId,
-            },
-            events: input.events ?? defaultCompanionEventKinds,
-            wake: input.wake ?? false,
-            priorities: input.priorities ?? {},
-            follow: input.follow ?? false,
+      wait: (input) =>
+        waits
+          .create({
+            owner: callerRef(input),
+            condition: input.condition,
+            deadline: input.deadline,
+            wake: input.wake,
+            label: input.label,
+            repeat: input.repeat,
           })
-          .pipe(asToolError("subscribe")),
-      arm: (input) =>
-        hub.arm({ subscriber: callerRef(input), ids: input.ids }).pipe(
-          Effect.map((armed) => ({ armed })),
-          asToolError("arm"),
+          .pipe(asToolError("wait")),
+      wait_now: (input) =>
+        waits
+          .now({ owner: callerRef(input), condition: input.condition, timeout: input.timeout })
+          .pipe(asToolError("wait_now")),
+      waits: (input) =>
+        waits.list({ owner: callerRef(input), collect: true }).pipe(
+          Effect.map((listing) => ({
+            pending: listing.pending.map(({ owner: _owner, ...wait }) => wait),
+            fired: listing.fired,
+          })),
+          asToolError("waits"),
         ),
-      unsubscribe: (input) =>
-        hub.unsubscribe({ subscriber: callerRef(input), ids: input.ids }).pipe(
-          Effect.map((removed) => ({ removed })),
-          asToolError("unsubscribe"),
+      wait_cancel: (input) =>
+        waits.cancel({ owner: callerRef(input), ids: input.ids }).pipe(
+          Effect.map((cancelled) => ({ cancelled })),
+          asToolError("wait_cancel"),
         ),
-      subscriptions_list: (input) =>
-        hub.listSubscriptions({ subscriber: callerRef(input) }).pipe(
-          Effect.map((subscriptions) => ({ subscriptions })),
-          asToolError("subscriptions_list"),
-        ),
-      inbox_list: (input) =>
-        hub
-          .listInbox({
-            subscriber: callerRef(input),
-            includeResolved: input.includeResolved ?? false,
-            afterId: input.afterId ?? 0,
-            limit: input.limit ?? 50,
-          })
-          .pipe(
-            Effect.map((events) => ({ events })),
-            asToolError("inbox_list"),
-          ),
-      inbox_resolve: (input) =>
-        hub
-          .resolve({
-            subscriber: callerRef(input),
-            ids: input.ids,
-            disposition: input.disposition ?? null,
-          })
-          .pipe(
-            Effect.map((resolved) => ({ resolved })),
-            asToolError("inbox_resolve"),
-          ),
-      inbox_snooze: (input) =>
-        hub
-          .snooze({ subscriber: callerRef(input), ids: input.ids, minSeconds: input.minSeconds })
-          .pipe(
-            Effect.map((snoozed) => ({ snoozed })),
-            asToolError("inbox_snooze"),
-          ),
-      inbox_wait: (input) =>
-        hub
-          .wait({
-            subscriber: callerRef(input),
-            afterId: input.afterId ?? 0,
-            events: input.events ?? [],
-            timeoutSeconds: input.timeoutSeconds ?? 60,
-          })
-          .pipe(
-            Effect.map((events) => ({ events, timedOut: events.length === 0 })),
-            asToolError("inbox_wait"),
-          ),
-      open_work: (input) =>
-        hub.openWork({ subscriber: callerRef(input) }).pipe(
-          Effect.map((threads) => ({ threads })),
-          asToolError("open_work"),
-        ),
-      thread_send: Effect.fn("CompanionMcp.threadSend")(function* (input) {
-        const environment = yield* environments.resolve(input.environment);
-        // Subscribe first so the run this message starts cannot finish unobserved.
-        const subscribed = yield* subscribeTo(input, {
-          environment: environment.name,
-          threadId: input.threadId,
-        });
-        yield* environment.application.sendThread({
-          threadId: input.threadId,
-          message: input.message,
-          author: { kind: "agent", senderThreadId: input.callerThreadId },
-        });
-        return { threadId: input.threadId, ...subscribed };
-      }, asToolError("thread_send")),
-      thread_start: Effect.fn("CompanionMcp.threadStart")(function* (input) {
-        const environment = yield* environments.resolve(input.environment);
-        const started = yield* environment.application.startThread({
-          message: input.message,
-          ...(input.project === undefined ? {} : { projectRef: input.project }),
-          ...(input.title === undefined ? {} : { title: input.title }),
-        });
-        if (input.subscribe === false) {
-          return { threadId: started.threadId, subscription: null, source: null };
-        }
-        // The subscription reads the thread's state, so a run that already failed is reported.
-        const subscribed = yield* subscribeTo(input, {
-          environment: environment.name,
-          threadId: started.threadId,
-        });
-        return { threadId: started.threadId, ...subscribed };
-      }, asToolError("thread_start")),
+      wait_result: (input) =>
+        waits.result({ owner: callerRef(input), id: input.id }).pipe(asToolError("wait_result")),
     });
   }),
 );
@@ -363,7 +175,7 @@ export const CompanionMcpLive = (version: string) =>
     name: "t3-companion",
     version,
     instructions:
-      "Subscribe to other T3 Code threads and get their idle/failed/needs-input/needs-approval/settled/stalled events in an inbox instead of polling. Identify yourself with callerThreadId (your T3CODE_THREAD_ID). Items stay open until inbox_resolve; inbox_snooze hides one until its source is idle again. needs-approval is a command or tool call waiting to be approved, and its summary says which; needs-input is a question for the user. stalled means T3 Code did not resume a thread after the background work it waited on, or that work is overdue: check the thread and send it a message. An idle with pause=true means the thread still waits on its own background work (a PR watch alone is not a pause). It wakes you only when its last message asks a question or names a pull request; otherwise the idle that follows does. An idle whose run only waved off a watch update (a bot's PR comment, say) and changed nothing does not wake you either.",
+      "Wait for T3 Code threads and pull requests instead of polling them. One tool does it: wait, with a condition (a thread's state, a pull request's state, a time, combined with any/all/not), an optional deadline, and how it should wake you. Identify yourself with callerThreadId (your T3CODE_THREAD_ID). A wait is judged against the current state, so nothing is lost if an update is missed, and a fired wait is done: there is nothing to resolve, arm or snooze. wait_now blocks inside your turn for short waits; waits lists what is pending; wait_result gives a fired wait's whole payload.",
     path: companionMcpPath,
     protocols: [McpProtocol.v2025_06_18, McpProtocol.v2026_07_28],
     allowSessionTermination: true,

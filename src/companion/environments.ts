@@ -1,4 +1,3 @@
-import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -26,7 +25,7 @@ export interface CompanionEnvironment {
   readonly url: string;
   readonly orchestration: T3Orchestration["Service"];
   readonly application: T3Application["Service"];
-  /** Written only by the watcher, through `stepConnection`. */
+  /** Written only by the watcher. */
   readonly connection: Ref.Ref<Connection>;
   /** Owns the environment's connection; closed when the environment leaves the config. */
   readonly scope: Scope.Closeable;
@@ -115,7 +114,7 @@ export const makeCompanionEnvironments = Effect.fn("makeCompanionEnvironments")(
       url,
       orchestration: Context.get(built.value, T3Orchestration),
       application: Context.get(built.value, T3Application),
-      connection: yield* Ref.make(initialConnection(yield* Clock.currentTimeMillis)),
+      connection: yield* Ref.make(initialConnection),
       scope,
       agentSender: yield* makeAgentSender({ name, url, local }).pipe(Effect.provide(context)),
     });

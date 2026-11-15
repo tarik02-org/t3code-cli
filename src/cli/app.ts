@@ -6,7 +6,6 @@ import { createCompanionCommand } from "./companion.ts";
 import { createAuthCommand } from "./auth.ts";
 import { createEnvCommand } from "./env.ts";
 import { cliEnvironmentSetting } from "./env/flag.ts";
-import { inboxCommand, subscribeCommand } from "./inbox.ts";
 import { createTerminalCommandGroup } from "./terminal.ts";
 import { createModelCommand } from "./model.ts";
 import { createProjectCommand } from "./project.ts";
@@ -18,6 +17,7 @@ import { showThreadCommand } from "./threads/show.ts";
 import { startThreadCommand } from "./threads/start.ts";
 import { getThreadTranscriptCommand } from "./threads/messages.ts";
 import { waitForThreadCommand } from "./threads/wait.ts";
+import { waitsCommand } from "./waits.ts";
 
 export function createCliCommand() {
   return Command.make("t3cli").pipe(
@@ -29,18 +29,17 @@ export function createCliCommand() {
       createAuthCommand(),
       createCompanionCommand(),
       createEnvCommand(),
-      inboxCommand,
       listThreadsCommand,
       createModelCommand(),
       createProjectCommand(),
       searchThreadsCommand,
-      subscribeCommand,
       createTerminalCommandGroup(),
       startThreadCommand,
       sendThreadCommand,
       showThreadCommand,
       getThreadTranscriptCommand,
       waitForThreadCommand,
+      waitsCommand,
       createThreadCommand(),
     ]),
   );

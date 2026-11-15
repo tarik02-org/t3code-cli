@@ -22,12 +22,13 @@ import {
   type MakeAgentSender,
 } from "./environments.ts";
 import { CompanionStoreError } from "./error.ts";
-import { CompanionHub, CompanionHubLive } from "./hub.ts";
+import { GitHubPullRequestsLive } from "./github.ts";
 import { CompanionMcpLive, companionMcpPath } from "./mcp.ts";
 import { resolveCompanionPaths } from "./paths.ts";
 import { CompanionRpcs, companionRpcPath } from "./rpc.ts";
 import { CompanionRuntimeFile } from "./schema.ts";
 import { CompanionStoreLive } from "./store.ts";
+import { CompanionWaits, CompanionWaitsLive } from "./waits.ts";
 import { runCompanionWatcher } from "./watcher.ts";
 
 const encodeRuntimeFile = Schema.encodeEffect(Schema.fromJsonString(CompanionRuntimeFile));
@@ -65,10 +66,11 @@ export const runCompanionDaemon = Effect.fn("runCompanionDaemon")(function* <E, 
   const url = `http://127.0.0.1:${options.port}`;
   const shutdown = yield* Deferred.make<void>();
 
-  const core = CompanionHubLive.pipe(
+  const core = CompanionWaitsLive.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
         CompanionStoreLive,
+        GitHubPullRequestsLive,
         CompanionEnvironmentsLive(connect, makeAgentSender, options.environments),
       ),
     ),
@@ -78,7 +80,7 @@ export const runCompanionDaemon = Effect.fn("runCompanionDaemon")(function* <E, 
   const rpcHandlers = CompanionRpcs.toLayer(
     Effect.gen(function* () {
       const environments = yield* CompanionEnvironments;
-      const hub = yield* CompanionHub;
+      const waits = yield* CompanionWaits;
       return CompanionRpcs.of({
         health: () =>
           environments.statuses.pipe(
@@ -91,11 +93,8 @@ export const runCompanionDaemon = Effect.fn("runCompanionDaemon")(function* <E, 
             })),
           ),
         shutdown: () => Deferred.succeed(shutdown, undefined).pipe(Effect.asVoid),
-        subscribe: (input) => hub.subscribe(input),
-        inbox: (input) => hub.listInbox(input),
-        resolve: (input) => hub.resolve(input),
-        snooze: (input) => hub.snooze(input),
-        wait: (input) => hub.wait(input),
+        waits: (input) => waits.list(input),
+        cancel: (input) => waits.cancel(input),
       });
     }),
   );
@@ -111,11 +110,8 @@ export const runCompanionDaemon = Effect.fn("runCompanionDaemon")(function* <E, 
       disableLogger: true,
     }).pipe(Layer.provideMerge(core)),
   );
-  const hub = Context.get(services, CompanionHub);
-
-  yield* hub.flushPendingWakes;
   yield* Effect.forkScoped(runCompanionWatcher().pipe(Effect.provide(services)));
-  yield* Effect.forkScoped(hub.runChecks);
+  yield* Effect.forkScoped(Context.get(services, CompanionWaits).run);
 
   // `t3cli env` and `auth` rewrite the config file; pick up added and removed environments.
   const path = yield* Path.Path;

@@ -1,214 +1,145 @@
 import * as Context from "effect/Context";
-import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
-import * as Semaphore from "effect/Semaphore";
 import * as SqlClient from "effect/sql/SqlClient";
 
+import type { Baselines } from "./condition.ts";
 import { CompanionStoreError } from "./error.ts";
-import type { ChecksRecord } from "./state.ts";
-import {
-  CompanionEventKind,
-  DeliveryPriority,
-  type InboxEvent,
-  type Subscription,
-  type SubscriptionSource,
-  ThreadEvent,
-  type ThreadRef,
-} from "./schema.ts";
+import { Condition, type ThreadRef, type Wait, WaitResult, WakePolicy } from "./schema.ts";
 
-const Priorities = Schema.Record(Schema.String, DeliveryPriority);
+const BaselinesJson = Schema.fromJsonString(
+  Schema.Struct({
+    sinceMs: Schema.Number,
+    messages: Schema.Record(Schema.String, Schema.NullOr(Schema.String)),
+    heads: Schema.Record(Schema.String, Schema.String),
+  }),
+);
 
-const SubscriptionRow = Schema.Struct({
+const WaitRow = Schema.Struct({
   id: Schema.Number,
-  subscriber_env: Schema.String,
-  subscriber_thread: Schema.String,
-  source_env: Schema.String,
-  source_thread: Schema.NullOr(Schema.String),
-  source_project: Schema.NullOr(Schema.String),
-  events: Schema.fromJsonString(Schema.Array(CompanionEventKind)),
-  wake: Schema.Number,
-  priorities: Schema.fromJsonString(Priorities),
-  follow: Schema.Number,
-  armed: Schema.Number,
+  owner_env: Schema.String,
+  owner_thread: Schema.String,
+  label: Schema.NullOr(Schema.String),
+  condition: Schema.fromJsonString(Condition),
+  wake: WakePolicy,
+  repeat: Schema.Number,
+  ephemeral: Schema.Number,
+  deadline_at: Schema.NullOr(Schema.String),
   created_at: Schema.String,
+  baselines: BaselinesJson,
+  status: Schema.Literals(["pending", "fired", "timeout", "cancelled"]),
+  armed: Schema.Number,
 });
-const decodeSubscriptionRows = Schema.decodeUnknownEffect(Schema.Array(SubscriptionRow));
+const decodeWaitRows = Schema.decodeUnknownEffect(Schema.Array(WaitRow));
 
-const InboxRow = Schema.Struct({
-  id: Schema.Number,
-  subscription_id: Schema.Number,
-  subscriber_env: Schema.String,
-  subscriber_thread: Schema.String,
-  event: Schema.fromJsonString(ThreadEvent),
-  priority: DeliveryPriority,
-  passive: Schema.Number,
-  delivered_at: Schema.String,
-  snoozed_until: Schema.NullOr(Schema.String),
-  redelivered: Schema.Number,
-  resolved_at: Schema.NullOr(Schema.String),
-  disposition: Schema.NullOr(Schema.String),
+const FireRow = Schema.Struct({
+  ...WaitRow.fields,
+  fire_id: Schema.Number,
+  summary: Schema.String,
+  result: Schema.fromJsonString(WaitResult),
 });
-const decodeInboxRows = Schema.decodeUnknownEffect(Schema.Array(InboxRow));
+const decodeFireRows = Schema.decodeUnknownEffect(Schema.Array(FireRow));
 
-const ChecksRow = Schema.Struct({
-  pr_key: Schema.String,
-  head: Schema.NullOr(Schema.String),
-  state: Schema.NullOr(Schema.Literals(["pass", "pending", "fail"])),
-  cycle: Schema.String,
-});
-const decodeChecksRows = Schema.decodeUnknownEffect(Schema.Array(ChecksRow));
+const encodeCondition = Schema.encodeEffect(Schema.fromJsonString(Condition));
+const encodeBaselines = Schema.encodeEffect(BaselinesJson);
+const encodeResult = Schema.encodeEffect(Schema.fromJsonString(WaitResult));
 
-const encodeEvents = Schema.encodeEffect(Schema.fromJsonString(Schema.Array(CompanionEventKind)));
-const encodePriorities = Schema.encodeEffect(Schema.fromJsonString(Priorities));
-const encodeEvent = Schema.encodeEffect(Schema.fromJsonString(ThreadEvent));
+/** Schema version, kept in `PRAGMA user_version`. Earlier versions held subscriptions and an inbox. */
+const schemaVersion = 8;
 
-/** Inbox schema version, kept in `PRAGMA user_version`. */
-const schemaVersion = 7;
-/** The oldest inbox this build upgrades; earlier layouts were never released. */
-const oldestUpgradableVersion = 4;
-
-export interface SubscriptionInput {
-  readonly subscriber: ThreadRef;
-  readonly source: SubscriptionSource;
-  readonly events: ReadonlyArray<CompanionEventKind>;
-  readonly wake: boolean;
-  readonly priorities: Readonly<Record<string, DeliveryPriority>>;
-  readonly follow: boolean;
+/** A wait with what only the daemon needs to follow it. */
+export interface StoredWait extends Wait {
+  readonly baselines: Baselines;
+  /** A repeating wait that fired is disarmed until its condition has been false again. */
+  readonly armed: boolean;
+  /** Belongs to one blocking call and is removed with it. */
+  readonly ephemeral: boolean;
 }
 
-export interface InboxQuery {
-  readonly subscriber: ThreadRef;
-  /** Also lists resolved and snoozed items. */
-  readonly includeResolved: boolean;
-  readonly afterId: number;
-  readonly limit: number;
+/** One firing of a wait, with the wait it belongs to. */
+export interface StoredFire {
+  readonly fireId: number;
+  readonly wait: StoredWait;
+  readonly summary: string;
+  readonly result: WaitResult;
 }
 
-export interface InboxSelection {
-  readonly subscriber: ThreadRef;
-  readonly ids: ReadonlyArray<number>;
+export interface NewWait {
+  readonly owner: ThreadRef;
+  readonly label: string | null;
+  readonly condition: Condition;
+  readonly wake: WakePolicy;
+  readonly repeat: boolean;
+  readonly ephemeral: boolean;
+  readonly deadlineAt: string | null;
+  readonly createdAt: string;
+  readonly baselines: Baselines;
 }
-
-/** Items to resolve: some by id, or the subscriber's open item for one event. */
-export type ResolveInput = {
-  readonly subscriber: ThreadRef;
-  readonly disposition: string | null;
-} & ({ readonly ids: ReadonlyArray<number> } | { readonly eventId: string });
 
 export class CompanionStore extends Context.Service<
   CompanionStore,
   {
-    /** Every subscription, oldest first, from memory; the writes below keep it current. */
-    readonly subscriptions: Effect.Effect<ReadonlyArray<Subscription>>;
-    /**
-     * Adds a subscription. When the subscriber already has one on the same source with the same
-     * `follow`, that one gets the new settings and is armed instead, keeping its id and inbox.
-     */
-    readonly upsertSubscription: (
-      input: SubscriptionInput,
-    ) => Effect.Effect<Subscription, CompanionStoreError>;
-    readonly removeSubscriptions: (
-      input: InboxSelection,
-    ) => Effect.Effect<number, CompanionStoreError>;
-    /** Arms or disarms subscriptions; with a subscriber, only that subscriber's. */
-    readonly setArmed: (input: {
-      readonly ids: ReadonlyArray<number>;
-      readonly armed: boolean;
-      readonly subscriber?: ThreadRef | undefined;
-    }) => Effect.Effect<number, CompanionStoreError>;
-    /** Inserts the subscription's inbox row; an event already in that inbox is skipped. */
-    readonly deliver: (
-      subscription: Subscription,
-      event: ThreadEvent,
-      priority: DeliveryPriority,
-      passive: boolean,
-    ) => Effect.Effect<InboxEvent | null, CompanionStoreError>;
-    /** Subscribers whose inbox already holds this event. */
-    readonly deliveredTo: (
-      eventId: string,
-    ) => Effect.Effect<ReadonlyArray<ThreadRef>, CompanionStoreError>;
-    /** Open items: not resolved and not snoozed, unless `includeResolved`. */
-    readonly listInbox: (
-      query: InboxQuery,
-    ) => Effect.Effect<ReadonlyArray<InboxEvent>, CompanionStoreError>;
-    readonly resolve: (input: ResolveInput) => Effect.Effect<number, CompanionStoreError>;
-    readonly snooze: (
-      input: InboxSelection & { readonly until: string },
-    ) => Effect.Effect<number, CompanionStoreError>;
-    /** Snoozed, unresolved items whose snooze time has passed. */
-    readonly dueSnoozes: (
-      now: string,
-    ) => Effect.Effect<ReadonlyArray<InboxEvent>, CompanionStoreError>;
-    /** Brings a snoozed item back as a low-priority, unannounced item that may start a digest. */
-    readonly redeliver: (id: number) => Effect.Effect<InboxEvent | null, CompanionStoreError>;
-    /** What a subscriber's next digest carries: its open, unannounced items from wake subscriptions. */
-    readonly pendingDigest: (
-      subscriber: ThreadRef,
-    ) => Effect.Effect<ReadonlyArray<InboxEvent>, CompanionStoreError>;
-    /** A subscriber's open items from wake subscriptions that never started a digest. */
-    readonly openPassive: (
-      subscriber: ThreadRef,
-    ) => Effect.Effect<ReadonlyArray<InboxEvent>, CompanionStoreError>;
-    /** Subscribers holding an unannounced item that may start a digest. */
-    readonly subscribersToWake: () => Effect.Effect<ReadonlyArray<ThreadRef>, CompanionStoreError>;
-    readonly markWoken: (ids: ReadonlyArray<number>) => Effect.Effect<void, CompanionStoreError>;
-    /** Rewrites an item's event, for a digest that refreshed it from the source's current state. */
-    readonly updateEvent: (
+    readonly createWait: (input: NewWait) => Effect.Effect<StoredWait, CompanionStoreError>;
+    readonly pendingWaits: () => Effect.Effect<ReadonlyArray<StoredWait>, CompanionStoreError>;
+    readonly updateWait: (
       id: number,
-      event: ThreadEvent,
+      patch: {
+        readonly status?: Wait["status"];
+        readonly armed?: boolean;
+        readonly baselines?: Baselines;
+      },
     ) => Effect.Effect<void, CompanionStoreError>;
-    /** Lets an item that arrived passive start a digest after all. */
-    readonly makeWaking: (id: number) => Effect.Effect<void, CompanionStoreError>;
-    /** True when another item already brought this subscriber this exact message from the thread. */
-    readonly hasDeliveredMessage: (input: {
-      readonly subscriber: ThreadRef;
-      readonly threadId: string;
-      readonly message: string;
-      readonly exceptEventId: string;
-    }) => Effect.Effect<boolean, CompanionStoreError>;
-    readonly loadChecks: (
-      environment: string,
-      threadId: string,
-    ) => Effect.Effect<ReadonlyMap<string, ChecksRecord>, CompanionStoreError>;
-    readonly saveChecks: (
-      environment: string,
-      threadId: string,
-      records: ReadonlyArray<ChecksRecord>,
+    readonly recordFire: (input: {
+      readonly waitId: number;
+      readonly at: string;
+      readonly summary: string;
+      readonly result: WaitResult;
+    }) => Effect.Effect<number, CompanionStoreError>;
+    /**
+     * Firings not handed to their owner yet: the ones a wake message carries (`woken`), or the
+     * ones of waits that wake nobody (`silent`). Every owner's when `owner` is null.
+     */
+    readonly undelivered: (
+      owner: ThreadRef | null,
+      kind: "woken" | "silent",
+    ) => Effect.Effect<ReadonlyArray<StoredFire>, CompanionStoreError>;
+    readonly markDelivered: (
+      fireIds: ReadonlyArray<number>,
+      at: string,
     ) => Effect.Effect<void, CompanionStoreError>;
+    /** The owner's wait's last firing, if it fired. */
+    readonly latestFire: (
+      owner: ThreadRef,
+      waitId: number,
+    ) => Effect.Effect<StoredFire | null, CompanionStoreError>;
+    /** Removes a wait and its firings. */
+    readonly removeWait: (id: number) => Effect.Effect<void, CompanionStoreError>;
+    /** Removes finished waits that were made, and last fired, before `before`. */
+    readonly prune: (before: string) => Effect.Effect<void, CompanionStoreError>;
   }
 >()("t3cli/companion/CompanionStore") {}
 
-const toSubscription = (row: typeof SubscriptionRow.Type): Subscription => ({
+const toWait = (row: typeof WaitRow.Type): StoredWait => ({
   id: row.id,
-  subscriber: { environment: row.subscriber_env, threadId: row.subscriber_thread },
-  source: {
-    environment: row.source_env,
-    threadId: row.source_thread,
-    projectId: row.source_project,
-  },
-  events: row.events,
-  wake: row.wake === 1,
-  follow: row.follow === 1,
-  armed: row.armed === 1,
-  priorities: row.priorities,
+  owner: { environment: row.owner_env, threadId: row.owner_thread },
+  label: row.label,
+  condition: row.condition,
+  wake: row.wake,
+  repeat: row.repeat === 1,
+  deadlineAt: row.deadline_at,
   createdAt: row.created_at,
+  status: row.status,
+  baselines: row.baselines,
+  armed: row.armed === 1,
+  ephemeral: row.ephemeral === 1,
 });
 
-const toInboxEvent = (row: typeof InboxRow.Type): InboxEvent => ({
-  id: row.id,
-  subscriptionId: row.subscription_id,
-  subscriber: { environment: row.subscriber_env, threadId: row.subscriber_thread },
-  event: row.event,
-  priority: row.priority,
-  passive: row.passive === 1,
-  deliveredAt: row.delivered_at,
-  snoozedUntil: row.snoozed_until,
-  redelivered: row.redelivered,
-  resolvedAt: row.resolved_at,
-  disposition: row.disposition,
+const toFire = (row: typeof FireRow.Type): StoredFire => ({
+  fireId: row.fire_id,
+  wait: toWait(row),
+  summary: row.summary,
+  result: row.result,
 });
 
 const storeError =
@@ -220,8 +151,6 @@ const storeError =
       cause,
     });
 
-const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
-
 export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
   const sql = yield* SqlClient.SqlClient;
 
@@ -229,13 +158,11 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
     yield* sql`PRAGMA journal_mode = WAL`;
     yield* sql`PRAGMA busy_timeout = 5000`;
     const [stored] = yield* sql<{ readonly user_version: number }>`PRAGMA user_version`;
-    const inbox = yield* sql`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'inbox'`;
-    // Without an inbox the database is new, whatever its version says.
-    return inbox.length === 0 ? null : (stored?.user_version ?? 0);
+    return stored?.user_version ?? 0;
   }).pipe(Effect.mapError(storeError("migrate")));
-  if (version !== null && (version < oldestUpgradableVersion || version > schemaVersion)) {
+  if (version > schemaVersion) {
     return yield* new CompanionStoreError({
-      message: `companion database has inbox version ${version}, and this t3cli reads versions ${oldestUpgradableVersion} to ${schemaVersion}; run the t3cli that wrote it, or move the database aside to start empty`,
+      message: `companion database has version ${version}, newer than this t3cli reads (${schemaVersion}); run the t3cli that wrote it, or move the database aside to start empty`,
       operation: "migrate",
       cause: null,
     });
@@ -244,462 +171,205 @@ export const makeCompanionStore = Effect.fn("makeCompanionStore")(function* () {
   yield* sql
     .withTransaction(
       Effect.gen(function* () {
+        if (version < schemaVersion) {
+          // Subscriptions and inbox items have no meaning as waits; nothing is carried over.
+          yield* sql`DROP TABLE IF EXISTS inbox`;
+          yield* sql`DROP TABLE IF EXISTS subscriptions`;
+          yield* sql`DROP TABLE IF EXISTS pr_checks`;
+        }
         yield* sql`
-          CREATE TABLE IF NOT EXISTS subscriptions (
+          CREATE TABLE IF NOT EXISTS waits (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            subscriber_env TEXT NOT NULL,
-            subscriber_thread TEXT NOT NULL,
-            source_env TEXT NOT NULL,
-            source_thread TEXT,
-            source_project TEXT,
-            events TEXT NOT NULL,
-            wake INTEGER NOT NULL,
-            priorities TEXT NOT NULL DEFAULT '{}',
-            follow INTEGER NOT NULL DEFAULT 0,
-            armed INTEGER NOT NULL DEFAULT 1,
+            owner_env TEXT NOT NULL,
+            owner_thread TEXT NOT NULL,
+            label TEXT,
+            condition TEXT NOT NULL,
+            wake TEXT NOT NULL,
+            repeat INTEGER NOT NULL,
+            ephemeral INTEGER NOT NULL,
+            deadline_at TEXT,
             created_at TEXT NOT NULL,
-            CHECK ((source_thread IS NULL) <> (source_project IS NULL))
-          )
-        `;
-        // `wake` copies the subscription's flag: whether digests carry the item at all. A
-        // `passive` item never starts one.
-        yield* sql`
-          CREATE TABLE IF NOT EXISTS inbox (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            subscription_id INTEGER NOT NULL,
-            subscriber_env TEXT NOT NULL,
-            subscriber_thread TEXT NOT NULL,
-            event_id TEXT NOT NULL,
-            kind TEXT NOT NULL,
-            source_env TEXT NOT NULL,
-            source_thread TEXT,
-            event TEXT NOT NULL,
-            priority TEXT NOT NULL,
-            wake INTEGER NOT NULL,
-            passive INTEGER NOT NULL DEFAULT 0,
-            delivered_at TEXT NOT NULL,
-            woken_at TEXT,
-            snoozed_until TEXT,
-            redelivered INTEGER NOT NULL DEFAULT 0,
-            resolved_at TEXT,
-            disposition TEXT,
-            UNIQUE (subscriber_env, subscriber_thread, event_id)
+            baselines TEXT NOT NULL,
+            status TEXT NOT NULL,
+            armed INTEGER NOT NULL DEFAULT 1
           )
         `;
         yield* sql`
-          CREATE INDEX IF NOT EXISTS inbox_subscriber
-          ON inbox (subscriber_env, subscriber_thread, resolved_at, id)
-        `;
-        yield* sql`
-          CREATE TABLE IF NOT EXISTS pr_checks (
-            environment TEXT NOT NULL,
-            thread_id TEXT NOT NULL,
-            pr_key TEXT NOT NULL,
-            head TEXT,
-            state TEXT,
-            cycle TEXT NOT NULL,
-            PRIMARY KEY (environment, thread_id, pr_key)
+          CREATE TABLE IF NOT EXISTS fires (
+            fire_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            wait_id INTEGER NOT NULL,
+            at TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            result TEXT NOT NULL,
+            delivered_at TEXT
           )
         `;
-        if (version === 4) {
-          // Version 5 turned `wakes` around into `passive`.
-          yield* sql`ALTER TABLE inbox ADD COLUMN passive INTEGER NOT NULL DEFAULT 0`;
-          yield* sql`UPDATE inbox SET passive = 1 - wakes`;
-          yield* sql`ALTER TABLE inbox DROP COLUMN wakes`;
-        }
-        if (version !== null && version < 6) {
-          // Version 6 split approvals out of needs-input; subscriptions that took them keep them.
-          yield* sql`
-            UPDATE subscriptions SET events = json_insert(events, '$[#]', 'needs-approval')
-            WHERE EXISTS (SELECT 1 FROM json_each(subscriptions.events) WHERE value = 'needs-input')
-              AND NOT EXISTS (
-                SELECT 1 FROM json_each(subscriptions.events) WHERE value = 'needs-approval'
-              )
-          `;
-        }
-        if (version !== null && version < 7) {
-          // Version 7 added stalled; whoever hears a thread go idle hears it get stuck too.
-          yield* sql`
-            UPDATE subscriptions SET events = json_insert(events, '$[#]', 'stalled')
-            WHERE EXISTS (SELECT 1 FROM json_each(subscriptions.events) WHERE value = 'idle')
-              AND NOT EXISTS (SELECT 1 FROM json_each(subscriptions.events) WHERE value = 'stalled')
-          `;
-        }
+        yield* sql`CREATE INDEX IF NOT EXISTS fires_wait ON fires (wait_id, fire_id)`;
         yield* sql`PRAGMA user_version = ${sql.literal(String(schemaVersion))}`;
       }),
     )
     .pipe(Effect.mapError(storeError("migrate")));
 
-  const cache = yield* Ref.make<ReadonlyArray<Subscription>>([]);
-  const reload = Effect.gen(function* () {
-    const rows = yield* decodeSubscriptionRows(yield* sql`SELECT * FROM subscriptions ORDER BY id`);
-    yield* Ref.set(cache, rows.map(toSubscription));
-  });
-  yield* reload.pipe(Effect.mapError(storeError("loadSubscriptions")));
+  const ownedBy = (owner: ThreadRef) =>
+    sql`waits.owner_env = ${owner.environment} AND waits.owner_thread = ${owner.threadId}`;
 
-  const writing = yield* Semaphore.make(1);
-  // One write at a time, each followed by a reload, so the list in memory never trails the table.
-  const writeSubscriptions = <A, E, R>(write: Effect.Effect<A, E, R>) =>
-    write.pipe(
-      Effect.tap(() => reload),
-      Semaphore.withPermits(writing, 1),
-    );
-
-  const ofSubscriber = (ref: ThreadRef) =>
-    sql`subscriber_env = ${ref.environment} AND subscriber_thread = ${ref.threadId}`;
-  // Open and never announced: what digests still owe the subscriber.
-  const unannounced = sql`woken_at IS NULL AND resolved_at IS NULL AND snoozed_until IS NULL`;
-
-  const upsertSubscription = Effect.fn("CompanionStore.upsertSubscription")(
-    function* (input: SubscriptionInput) {
-      const createdAt = yield* nowIso;
-      const events = yield* encodeEvents(input.events);
-      const priorities = yield* encodePriorities(input.priorities);
-      const rows = yield* writeSubscriptions(
-        sql.withTransaction(
-          Effect.gen(function* () {
-            const [existing] = yield* sql<{ readonly id: number }>`
-              SELECT id FROM subscriptions
-              WHERE ${ofSubscriber(input.subscriber)}
-                AND source_env = ${input.source.environment}
-                AND source_thread IS ${input.source.threadId}
-                AND source_project IS ${input.source.projectId}
-                AND follow = ${input.follow ? 1 : 0}
-              ORDER BY id
-              LIMIT 1
-            `;
-            if (existing !== undefined) {
-              return yield* sql`
-                UPDATE subscriptions
-                SET events = ${events}, wake = ${input.wake ? 1 : 0}, priorities = ${priorities},
-                  armed = 1
-                WHERE id = ${existing.id}
-                RETURNING *
-              `;
-            }
-            return yield* sql`
-              INSERT INTO subscriptions
-                (subscriber_env, subscriber_thread, source_env, source_thread, source_project,
-                 events, wake, priorities, follow, created_at)
-              VALUES (
-                ${input.subscriber.environment},
-                ${input.subscriber.threadId},
-                ${input.source.environment},
-                ${input.source.threadId},
-                ${input.source.projectId},
-                ${events},
-                ${input.wake ? 1 : 0},
-                ${priorities},
-                ${input.follow ? 1 : 0},
-                ${createdAt}
-              )
-              RETURNING *
-            `;
-          }),
-        ),
-      );
-      const [row] = yield* decodeSubscriptionRows(rows);
-      if (row === undefined) {
-        return yield* Effect.die("a subscription write returned no row");
-      }
-      return toSubscription(row);
-    },
-    Effect.mapError(storeError("upsertSubscription")),
-  );
-
-  const removeSubscriptions = Effect.fn("CompanionStore.removeSubscriptions")(
-    function* (input: InboxSelection) {
-      if (input.ids.length === 0) {
-        return 0;
-      }
-      const rows = yield* writeSubscriptions(sql`
-        DELETE FROM subscriptions
-        WHERE ${ofSubscriber(input.subscriber)} AND ${sql.in("id", input.ids)}
-        RETURNING id
-      `);
-      return rows.length;
-    },
-    Effect.mapError(storeError("removeSubscriptions")),
-  );
-
-  const setArmed = Effect.fn("CompanionStore.setArmed")(
-    function* (input: {
-      readonly ids: ReadonlyArray<number>;
-      readonly armed: boolean;
-      readonly subscriber?: ThreadRef | undefined;
-    }) {
-      if (input.ids.length === 0) {
-        return 0;
-      }
-      const rows = yield* writeSubscriptions(sql`
-        UPDATE subscriptions SET armed = ${input.armed ? 1 : 0}
-        WHERE ${sql.and([
-          sql.in("id", input.ids),
-          ...(input.subscriber === undefined ? [] : [ofSubscriber(input.subscriber)]),
-        ])}
-        RETURNING id
-      `);
-      return rows.length;
-    },
-    Effect.mapError(storeError("setArmed")),
-  );
-
-  const deliver = Effect.fn("CompanionStore.deliver")(
-    function* (
-      subscription: Subscription,
-      event: ThreadEvent,
-      priority: DeliveryPriority,
-      passive: boolean,
-    ) {
-      const deliveredAt = yield* nowIso;
-      const encoded = yield* encodeEvent(event);
+  const createWait = Effect.fn("CompanionStore.createWait")(
+    function* (input: NewWait) {
       const rows = yield* sql`
-        INSERT OR IGNORE INTO inbox
-          (subscription_id, subscriber_env, subscriber_thread, event_id, kind, source_env,
-           source_thread, event, priority, wake, passive, delivered_at)
+        INSERT INTO waits
+          (owner_env, owner_thread, label, condition, wake, repeat, ephemeral, deadline_at,
+           created_at, baselines, status)
         VALUES (
-          ${subscription.id},
-          ${subscription.subscriber.environment},
-          ${subscription.subscriber.threadId},
-          ${event.eventId},
-          ${event.kind},
-          ${event.environment},
-          ${event.threadId},
-          ${encoded},
-          ${priority},
-          ${subscription.wake ? 1 : 0},
-          ${passive ? 1 : 0},
-          ${deliveredAt}
+          ${input.owner.environment},
+          ${input.owner.threadId},
+          ${input.label},
+          ${yield* encodeCondition(input.condition)},
+          ${input.wake},
+          ${input.repeat ? 1 : 0},
+          ${input.ephemeral ? 1 : 0},
+          ${input.deadlineAt},
+          ${input.createdAt},
+          ${yield* encodeBaselines(input.baselines)},
+          'pending'
         )
         RETURNING *
       `;
-      const [row] = yield* decodeInboxRows(rows);
-      return row === undefined ? null : toInboxEvent(row);
-    },
-    Effect.mapError(storeError("deliver")),
-  );
-
-  const deliveredTo = Effect.fn("CompanionStore.deliveredTo")(
-    function* (eventId: string) {
-      return yield* sql<ThreadRef>`
-      SELECT subscriber_env AS environment, subscriber_thread AS "threadId"
-      FROM inbox WHERE event_id = ${eventId}
-    `;
-    },
-    Effect.mapError(storeError("deliveredTo")),
-  );
-
-  const listInbox = Effect.fn("CompanionStore.listInbox")(
-    function* (query: InboxQuery) {
-      const rows = yield* sql`
-        SELECT * FROM inbox
-        WHERE ${ofSubscriber(query.subscriber)}
-          AND id > ${query.afterId}
-          AND (${query.includeResolved ? 1 : 0} = 1 OR (resolved_at IS NULL AND snoozed_until IS NULL))
-        ORDER BY id
-        LIMIT ${query.limit}
-      `;
-      return (yield* decodeInboxRows(rows)).map(toInboxEvent);
-    },
-    Effect.mapError(storeError("listInbox")),
-  );
-
-  const resolve = Effect.fn("CompanionStore.resolve")(
-    function* (input: ResolveInput) {
-      if ("ids" in input && input.ids.length === 0) {
-        return 0;
+      const [row] = yield* decodeWaitRows(rows);
+      if (row === undefined) {
+        return yield* Effect.die("INSERT ... RETURNING produced no row");
       }
-      const resolvedAt = yield* nowIso;
-      const rows = yield* sql`
-        UPDATE inbox SET resolved_at = ${resolvedAt}, disposition = ${input.disposition},
-          snoozed_until = NULL
-        WHERE ${ofSubscriber(input.subscriber)}
-          AND resolved_at IS NULL
-          AND ${"ids" in input ? sql.in("id", input.ids) : sql`event_id = ${input.eventId}`}
-        RETURNING id
-      `;
-      return rows.length;
+      return toWait(row);
     },
-    Effect.mapError(storeError("resolve")),
+    Effect.mapError(storeError("createWait")),
   );
 
-  const snooze = Effect.fn("CompanionStore.snooze")(
-    function* (input: InboxSelection & { readonly until: string }) {
-      if (input.ids.length === 0) {
-        return 0;
-      }
-      const rows = yield* sql`
-        UPDATE inbox SET snoozed_until = ${input.until}
-        WHERE ${ofSubscriber(input.subscriber)}
-          AND resolved_at IS NULL
-          AND ${sql.in("id", input.ids)}
-        RETURNING id
-      `;
-      return rows.length;
-    },
-    Effect.mapError(storeError("snooze")),
-  );
-
-  const dueSnoozes = Effect.fn("CompanionStore.dueSnoozes")(
-    function* (now: string) {
-      const rows = yield* sql`
-        SELECT * FROM inbox
-        WHERE snoozed_until IS NOT NULL AND snoozed_until <= ${now} AND resolved_at IS NULL
-        ORDER BY id
-      `;
-      return (yield* decodeInboxRows(rows)).map(toInboxEvent);
-    },
-    Effect.mapError(storeError("dueSnoozes")),
-  );
-
-  const redeliver = Effect.fn("CompanionStore.redeliver")(
-    function* (id: number) {
-      const rows = yield* sql`
-        UPDATE inbox
-        SET snoozed_until = NULL, redelivered = redelivered + 1, woken_at = NULL, priority = 'low',
-          passive = 0
-        WHERE id = ${id} AND snoozed_until IS NOT NULL AND resolved_at IS NULL
-        RETURNING *
-      `;
-      const [row] = yield* decodeInboxRows(rows);
-      return row === undefined ? null : toInboxEvent(row);
-    },
-    Effect.mapError(storeError("redeliver")),
-  );
-
-  const pendingDigest = Effect.fn("CompanionStore.pendingDigest")(
-    function* (subscriber: ThreadRef) {
-      const rows = yield* sql`
-        SELECT * FROM inbox
-        WHERE ${ofSubscriber(subscriber)} AND wake = 1 AND ${unannounced}
-        ORDER BY id
-      `;
-      return (yield* decodeInboxRows(rows)).map(toInboxEvent);
-    },
-    Effect.mapError(storeError("pendingDigest")),
-  );
-
-  const openPassive = Effect.fn("CompanionStore.openPassive")(
-    function* (subscriber: ThreadRef) {
-      const rows = yield* sql`
-        SELECT * FROM inbox
-        WHERE ${ofSubscriber(subscriber)} AND wake = 1 AND passive = 1
-          AND resolved_at IS NULL AND snoozed_until IS NULL
-        ORDER BY id
-      `;
-      return (yield* decodeInboxRows(rows)).map(toInboxEvent);
-    },
-    Effect.mapError(storeError("openPassive")),
-  );
-
-  const subscribersToWake = Effect.fn("CompanionStore.subscribersToWake")(
+  const pendingWaits = Effect.fn("CompanionStore.pendingWaits")(
     function* () {
-      return yield* sql<ThreadRef>`
-      SELECT DISTINCT subscriber_env AS environment, subscriber_thread AS "threadId"
-      FROM inbox WHERE wake = 1 AND passive = 0 AND ${unannounced}
-    `;
+      const rows = yield* sql`SELECT * FROM waits WHERE status = 'pending' ORDER BY id`;
+      return (yield* decodeWaitRows(rows)).map(toWait);
     },
-    Effect.mapError(storeError("subscribersToWake")),
+    Effect.mapError(storeError("pendingWaits")),
   );
 
-  const markWoken = Effect.fn("CompanionStore.markWoken")(
-    function* (ids: ReadonlyArray<number>) {
-      if (ids.length === 0) {
-        return;
+  const updateWait = Effect.fn("CompanionStore.updateWait")(
+    function* (
+      id: number,
+      patch: {
+        readonly status?: Wait["status"];
+        readonly armed?: boolean;
+        readonly baselines?: Baselines;
+      },
+    ) {
+      if (patch.status !== undefined) {
+        yield* sql`UPDATE waits SET status = ${patch.status} WHERE id = ${id}`;
       }
-      const wokenAt = yield* nowIso;
-      yield* sql`UPDATE inbox SET woken_at = ${wokenAt} WHERE ${sql.in("id", ids)}`;
-    },
-    Effect.mapError(storeError("markWoken")),
-  );
-
-  const updateEvent = Effect.fn("CompanionStore.updateEvent")(
-    function* (id: number, event: ThreadEvent) {
-      yield* sql`UPDATE inbox SET event = ${yield* encodeEvent(event)} WHERE id = ${id}`;
-    },
-    Effect.mapError(storeError("updateEvent")),
-  );
-
-  const makeWaking = Effect.fn("CompanionStore.makeWaking")(
-    function* (id: number) {
-      yield* sql`UPDATE inbox SET passive = 0 WHERE id = ${id}`;
-    },
-    Effect.mapError(storeError("makeWaking")),
-  );
-
-  const hasDeliveredMessage = Effect.fn("CompanionStore.hasDeliveredMessage")(
-    function* (input: {
-      readonly subscriber: ThreadRef;
-      readonly threadId: string;
-      readonly message: string;
-      readonly exceptEventId: string;
-    }) {
-      const rows = yield* sql`
-        SELECT 1 FROM inbox
-        WHERE ${ofSubscriber(input.subscriber)}
-          AND source_thread = ${input.threadId}
-          AND event_id <> ${input.exceptEventId}
-          AND json_extract(event, '$.lastMessage') = ${input.message}
-        LIMIT 1
-      `;
-      return rows.length > 0;
-    },
-    Effect.mapError(storeError("hasDeliveredMessage")),
-  );
-
-  const loadChecks = Effect.fn("CompanionStore.loadChecks")(
-    function* (environment: string, threadId: string) {
-      const rows = yield* decodeChecksRows(
+      if (patch.armed !== undefined) {
+        yield* sql`UPDATE waits SET armed = ${patch.armed ? 1 : 0} WHERE id = ${id}`;
+      }
+      if (patch.baselines !== undefined) {
         yield* sql`
-          SELECT pr_key, head, state, cycle FROM pr_checks
-          WHERE environment = ${environment} AND thread_id = ${threadId}
-        `,
-      );
-      return new Map(
-        rows.map((row) => [
-          row.pr_key,
-          { key: row.pr_key, head: row.head, state: row.state, cycle: row.cycle },
-        ]),
-      );
-    },
-    Effect.mapError(storeError("loadChecks")),
-  );
-
-  const saveChecks = Effect.fn("CompanionStore.saveChecks")(
-    function* (environment: string, threadId: string, records: ReadonlyArray<ChecksRecord>) {
-      for (const record of records) {
-        yield* sql`
-          INSERT INTO pr_checks (environment, thread_id, pr_key, head, state, cycle)
-          VALUES (${environment}, ${threadId}, ${record.key}, ${record.head}, ${record.state}, ${record.cycle})
-          ON CONFLICT (environment, thread_id, pr_key)
-          DO UPDATE SET head = excluded.head, state = excluded.state, cycle = excluded.cycle
+          UPDATE waits SET baselines = ${yield* encodeBaselines(patch.baselines)} WHERE id = ${id}
         `;
       }
     },
-    Effect.mapError(storeError("saveChecks")),
+    Effect.mapError(storeError("updateWait")),
+  );
+
+  const recordFire = Effect.fn("CompanionStore.recordFire")(
+    function* (input: {
+      readonly waitId: number;
+      readonly at: string;
+      readonly summary: string;
+      readonly result: WaitResult;
+    }) {
+      const rows = yield* sql<{ readonly fire_id: number }>`
+        INSERT INTO fires (wait_id, at, summary, result)
+        VALUES (${input.waitId}, ${input.at}, ${input.summary}, ${yield* encodeResult(input.result)})
+        RETURNING fire_id
+      `;
+      const [row] = rows;
+      if (row === undefined) {
+        return yield* Effect.die("INSERT ... RETURNING produced no row");
+      }
+      return row.fire_id;
+    },
+    Effect.mapError(storeError("recordFire")),
+  );
+
+  const undelivered = Effect.fn("CompanionStore.undelivered")(
+    function* (owner: ThreadRef | null, kind: "woken" | "silent") {
+      const rows = yield* sql`
+        SELECT waits.*, fires.fire_id, fires.summary, fires.result
+        FROM fires JOIN waits ON waits.id = fires.wait_id
+        WHERE fires.delivered_at IS NULL
+          AND waits.ephemeral = 0
+          AND ${kind === "silent" ? sql`waits.wake = 'none'` : sql`waits.wake <> 'none'`}
+          AND ${owner === null ? sql`1 = 1` : ownedBy(owner)}
+        ORDER BY fires.fire_id
+      `;
+      return (yield* decodeFireRows(rows)).map(toFire);
+    },
+    Effect.mapError(storeError("undelivered")),
+  );
+
+  const markDelivered = Effect.fn("CompanionStore.markDelivered")(
+    function* (fireIds: ReadonlyArray<number>, at: string) {
+      if (fireIds.length > 0) {
+        yield* sql`UPDATE fires SET delivered_at = ${at} WHERE ${sql.in("fire_id", fireIds)}`;
+      }
+    },
+    Effect.mapError(storeError("markDelivered")),
+  );
+
+  const latestFire = Effect.fn("CompanionStore.latestFire")(
+    function* (owner: ThreadRef, waitId: number) {
+      const rows = yield* sql`
+        SELECT waits.*, fires.fire_id, fires.summary, fires.result
+        FROM fires JOIN waits ON waits.id = fires.wait_id
+        WHERE waits.id = ${waitId} AND ${ownedBy(owner)}
+        ORDER BY fires.fire_id DESC
+        LIMIT 1
+      `;
+      const [row] = yield* decodeFireRows(rows);
+      return row === undefined ? null : toFire(row);
+    },
+    Effect.mapError(storeError("latestFire")),
+  );
+
+  const removeWait = Effect.fn("CompanionStore.removeWait")(
+    function* (id: number) {
+      yield* sql`DELETE FROM fires WHERE wait_id = ${id}`;
+      yield* sql`DELETE FROM waits WHERE id = ${id}`;
+    },
+    Effect.mapError(storeError("removeWait")),
+  );
+
+  const prune = Effect.fn("CompanionStore.prune")(
+    function* (before: string) {
+      yield* sql`
+        DELETE FROM waits
+        WHERE status <> 'pending' AND created_at < ${before}
+          AND NOT EXISTS (SELECT 1 FROM fires WHERE wait_id = waits.id AND at >= ${before})
+      `;
+      yield* sql`
+        DELETE FROM fires
+        WHERE NOT EXISTS (SELECT 1 FROM waits WHERE id = fires.wait_id)
+          OR (at < ${before} AND delivered_at IS NOT NULL)
+      `;
+    },
+    Effect.mapError(storeError("prune")),
   );
 
   return CompanionStore.of({
-    subscriptions: Ref.get(cache),
-    upsertSubscription,
-    removeSubscriptions,
-    setArmed,
-    deliver,
-    deliveredTo,
-    listInbox,
-    resolve,
-    snooze,
-    dueSnoozes,
-    redeliver,
-    pendingDigest,
-    openPassive,
-    subscribersToWake,
-    markWoken,
-    updateEvent,
-    makeWaking,
-    hasDeliveredMessage,
-    loadChecks,
-    saveChecks,
+    createWait,
+    pendingWaits,
+    updateWait,
+    recordFire,
+    undelivered,
+    markDelivered,
+    latestFire,
+    removeWait,
+    prune,
   });
 });
 

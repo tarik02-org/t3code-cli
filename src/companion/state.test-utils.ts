@@ -26,6 +26,7 @@ export function makeShell(
     pendingGuestMessageCount: 0,
     pendingBackgroundTasks: [],
     latestUserMessageAt: null,
+    latestVisibleMessage: null,
     lastError: null,
     pullRequests: [],
     settledOverride: null,
