@@ -148,7 +148,7 @@ describe("CompanionWaits", () => {
         assert.equal(made.fired?.result.threads[0]?.lastMessage, "final report\nand its details");
         assert.equal(
           made.fired?.summary,
-          'thread "thread-a" (local/thread-a) is idle: final report',
+          'thread "thread-a" (local/thread-a) is idle: final report and its details',
         );
 
         // The call handed it over, so no wake follows and nothing stays pending.

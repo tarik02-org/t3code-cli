@@ -25,11 +25,18 @@ const query = `query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
       url title state isDraft mergeable headRefOid
-      commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
-        kind: __typename
-        ... on CheckRun { name status conclusion }
-        ... on StatusContext { context state }
-      } } } } } }
+      commits(last: 1) { nodes { commit {
+        checkSuites(first: 50) { nodes {
+          status
+          workflowRun { workflow { name } }
+          checkRuns(first: 100) { nodes { status } }
+        } }
+        statusCheckRollup { contexts(first: 100) { nodes {
+          kind: __typename
+          ... on CheckRun { name status conclusion }
+          ... on StatusContext { context state }
+        } } }
+      } } }
       comments(last: 30) { nodes { author { kind: __typename login } createdAt bodyText url } }
       reviews(last: 30) { nodes { author { kind: __typename login } submittedAt state bodyText url } }
     }
@@ -65,6 +72,21 @@ const Response = Schema.Struct({
                   nodes: Schema.Array(
                     Schema.Struct({
                       commit: Schema.Struct({
+                        checkSuites: Schema.Struct({
+                          nodes: Schema.Array(
+                            Schema.Struct({
+                              status: Schema.String,
+                              workflowRun: Schema.NullOr(
+                                Schema.Struct({
+                                  workflow: Schema.Struct({ name: Schema.String }),
+                                }),
+                              ),
+                              checkRuns: Schema.Struct({
+                                nodes: Schema.Array(Schema.Struct({ status: Schema.String })),
+                              }),
+                            }),
+                          ),
+                        }),
                         statusCheckRollup: Schema.NullOr(
                           Schema.Struct({
                             contexts: Schema.Struct({ nodes: Schema.Array(CheckContext) }),
@@ -141,11 +163,22 @@ const remarkBy = (
 });
 
 export function toPullRequestView(pr: string, reply: Reply): PullRequestView {
-  const checks = reply.commits.nodes[0]?.commit.statusCheckRollup?.contexts.nodes ?? [];
+  const commit = reply.commits.nodes[0]?.commit;
+  const checks = commit?.statusCheckRollup?.contexts.nodes ?? [];
   const named = (outcome: "fail" | "pending") =>
     checks
       .filter((check) => checkOutcome(check) === outcome)
       .map((check) => check.name ?? check.context ?? "unnamed");
+  // A workflow run registers a job as a check only when the job starts. A run that is still
+  // going while every check it registered has finished therefore has checks yet to come, and
+  // the head's checks are not done. Other apps' suites can stay queued forever with no checks.
+  const unstarted = (commit?.checkSuites.nodes ?? []).flatMap((suite) =>
+    suite.workflowRun !== null &&
+    suite.status !== "COMPLETED" &&
+    suite.checkRuns.nodes.every((run) => run.status === "COMPLETED")
+      ? [`workflow ${suite.workflowRun.workflow.name} (jobs yet to start)`]
+      : [],
+  );
   return {
     pr,
     url: reply.url,
@@ -153,9 +186,9 @@ export function toPullRequestView(pr: string, reply: Reply): PullRequestView {
     state: reply.state === "OPEN" ? "open" : reply.state === "MERGED" ? "merged" : "closed",
     draft: reply.isDraft,
     head: reply.headRefOid,
-    checks: checks.length,
+    checks: checks.length + unstarted.length,
     failing: named("fail"),
-    pending: named("pending"),
+    pending: [...named("pending"), ...unstarted],
     mergeable:
       reply.mergeable === "MERGEABLE"
         ? "mergeable"

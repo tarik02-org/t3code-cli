@@ -57,8 +57,20 @@ export const threadRefOf = (leaf: ThreadLeaf): ThreadRef => ({
   threadId: leaf.thread,
 });
 
-const firstLine = (text: string, length = 160) =>
-  (text.trim().split("\n")[0] ?? "").slice(0, length);
+/** How a text opens: its first paragraph on one line, cut where a sentence ends when long. */
+const opening = (text: string, length = 400) => {
+  const paragraph = (text.trim().split(/\n\s*\n/)[0] ?? "").replaceAll(/\s+/g, " ");
+  if (paragraph.length <= length) {
+    return paragraph;
+  }
+  const head = paragraph.slice(0, length);
+  const sentence = Math.max(head.lastIndexOf(". "), head.lastIndexOf("! "), head.lastIndexOf("? "));
+  if (sentence >= length / 4) {
+    return head.slice(0, sentence + 1);
+  }
+  const word = head.lastIndexOf(" ");
+  return `${word > 0 ? head.slice(0, word) : head}…`;
+};
 
 const statesFor: Record<Exclude<ThreadLeaf["is"], "stalled" | "message">, ReadonlyArray<string>> = {
   idle: ["paused", "idle", "settled"],
@@ -77,7 +89,7 @@ function evaluateThread(leaf: ThreadLeaf, world: World, baselines: Baselines): L
   }
   const who = `thread "${view.shell.title}" (${threadRefKey(ref)})`;
   const message = view.message;
-  const said = message === null || message === undefined ? "" : `: ${firstLine(message.text)}`;
+  const said = message === null || message === undefined ? "" : `: ${opening(message.text)}`;
   const pending = ownTaskLabels(view.shell);
   const standing = `${who} is ${view.state}${pending.length === 0 ? "" : `, waiting on ${pending.join(", ")}`}`;
   if (leaf.is === "message") {
@@ -92,9 +104,9 @@ function evaluateThread(leaf: ThreadLeaf, world: World, baselines: Baselines): L
       detail: fresh ? `${who} wrote${said}` : `${who} has no new message`,
     };
   }
+  const awaited = awaitedTaskLabels(view.shell);
   if (leaf.is === "stalled") {
     const minutes = leaf.minutes ?? defaultStalledMinutes;
-    const awaited = awaitedTaskLabels(view.shell);
     const overdue =
       view.state === "paused" &&
       awaited.length > 0 &&
@@ -107,6 +119,15 @@ function evaluateThread(leaf: ThreadLeaf, world: World, baselines: Baselines): L
         : standing,
     };
   }
+  // A thread that awaits its own work resumes when the work ends: its run ended, but it is not
+  // idle, and each step of a long job would otherwise fire a repeating wait.
+  if (leaf.is === "idle" && view.state === "paused" && awaited.length > 0) {
+    return {
+      leaf: name,
+      state: "false",
+      detail: `${who} is paused and resumes after ${awaited.join(", ")}`,
+    };
+  }
   const holds = statesFor[leaf.is].includes(view.state) && world.nowMs - view.sinceMs >= settleMs;
   return {
     leaf: name,
@@ -117,15 +138,29 @@ function evaluateThread(leaf: ThreadLeaf, world: World, baselines: Baselines): L
 
 const shortHead = (view: PullRequestView) => view.head.slice(0, 7);
 
-/** A pull request's checks in words. */
-export const checksInWords = (view: PullRequestView) =>
-  view.checks === 0
-    ? "no checks yet"
-    : view.failing.length > 0
-      ? `failing ${view.failing.join(", ")}${view.pending.length === 0 ? "" : ` (${view.pending.length} pending)`}`
-      : view.pending.length > 0
-        ? `${view.pending.length} of ${view.checks} checks pending`
-        : `all ${view.checks} checks pass`;
+/**
+ * GitHub runs no `pull_request` workflow for a pull request that conflicts with its base, so
+ * the checks such a head does have are not its whole CI.
+ */
+const conflicts = (view: PullRequestView) =>
+  view.state === "open" && view.mergeable === "conflicting";
+
+/** A pull request's checks on its head, in words. */
+const checksInWords = (view: PullRequestView) => {
+  const checks =
+    view.checks === 0
+      ? "no checks yet"
+      : view.failing.length > 0
+        ? `failing ${view.failing.join(", ")}${view.pending.length === 0 ? "" : ` (${view.pending.length} pending)`}`
+        : view.pending.length > 0
+          ? `${view.pending.length} of ${view.checks} checks pending`
+          : `all ${view.checks} checks pass`;
+  return `${checks} on ${shortHead(view)}${
+    conflicts(view)
+      ? ", but it conflicts with its base, and GitHub runs no pull_request workflows on a conflict"
+      : ""
+  }`;
+};
 
 function evaluatePullRequest(leaf: PullRequestLeaf, world: World, baselines: Baselines): LeafTruth {
   const name = `pr ${leaf.pr} ${leaf.is}`;
@@ -142,17 +177,17 @@ function evaluatePullRequest(leaf: PullRequestLeaf, world: World, baselines: Bas
   });
   switch (leaf.is) {
     case "checks-done":
-      return answer(
-        view.checks > 0 && view.pending.length === 0,
-        `${checksInWords(view)} ${onHead}`,
-      );
+      return answer(view.checks > 0 && view.pending.length === 0, checksInWords(view));
     case "green":
       return answer(
-        view.checks > 0 && view.failing.length === 0 && view.pending.length === 0,
-        `${checksInWords(view)} ${onHead}`,
+        view.checks > 0 &&
+          view.failing.length === 0 &&
+          view.pending.length === 0 &&
+          !conflicts(view),
+        checksInWords(view),
       );
     case "red":
-      return answer(view.failing.length > 0, `${checksInWords(view)} ${onHead}`);
+      return answer(view.failing.length > 0, checksInWords(view));
     case "mergeable":
     case "conflicting":
       return answer(view.mergeable === leaf.is, `is ${view.mergeable} ${onHead}`);
@@ -180,7 +215,7 @@ function evaluatePullRequest(leaf: PullRequestLeaf, world: World, baselines: Bas
         last !== undefined,
         last === undefined
           ? "has no new comment from a person"
-          : `has ${fresh.length === 1 ? "a new comment" : `${fresh.length} new comments`}, the last by ${last.author}: ${firstLine(last.excerpt)}`,
+          : `has ${fresh.length === 1 ? "a new comment" : `${fresh.length} new comments`}, the last by ${last.author}: ${opening(last.excerpt)}`,
       );
     }
   }

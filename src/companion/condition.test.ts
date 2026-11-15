@@ -114,8 +114,13 @@ describe("evaluate", () => {
         { kind: "monitor", taskId: "pull-request-watch:github.com/acme/repo#9" },
       ],
     });
+    const awaiting = makeShell({
+      pendingBackgroundTasks: [{ kind: "command", taskId: "task-9", awaited: true }],
+    });
     assert.equal(truthOf(thread("idle"), worldOf(10_000, [paused])), "true");
     assert.equal(truthOf(thread("finished"), worldOf(10_000, [paused])), "false");
+    // Work the thread awaits resumes it, so its run ending is a step, not the end.
+    assert.equal(truthOf(thread("idle"), worldOf(10_000, [awaiting])), "false");
     assert.equal(truthOf(thread("finished"), worldOf(10_000, [watching])), "true");
     assert.equal(truthOf(thread("idle"), worldOf(10_000, [running])), "false");
   });
@@ -198,6 +203,26 @@ describe("evaluate", () => {
       evaluate(pull("red"), of({ failing: ["lint"] }), none).leaves[0]?.detail ?? "",
       "failing lint on aaaaaaa",
     );
+    // A conflict keeps pull_request workflows from running: what passed is not the whole CI.
+    const conflicting = of({ checks: 2, mergeable: "conflicting" });
+    assert.equal(truthOf(pull("checks-done"), conflicting), "true");
+    assert.equal(truthOf(pull("green"), conflicting), "false");
+    assert.include(
+      evaluate(pull("green"), conflicting, none).leaves[0]?.detail ?? "",
+      "all 2 checks pass on aaaaaaa, but it conflicts with its base",
+    );
+  });
+
+  it("opens a long message with whole sentences of its first paragraph", () => {
+    const long = `${"One sentence here. ".repeat(30)}\n\nSecond paragraph.`;
+    const world: World = {
+      ...worldOf(10_000, [idle]),
+      thread: () => ({ shell: idle, state: "idle", sinceMs: 0, message: { id: "m", text: long } }),
+    };
+    const detail = evaluate(thread("idle"), world, none).leaves[0]?.detail ?? "";
+    assert.isTrue(detail.endsWith("One sentence here."));
+    assert.notInclude(detail, "Second paragraph");
+    assert.isBelow(detail.length, 500);
   });
 
   it("counts time from when the wait was made", () => {
@@ -235,7 +260,10 @@ describe("conditions", () => {
   it("are summarized by what matched, or by everything when they timed out", () => {
     const world = worldOf(10_000, [idle], [pr({ pending: ["build"] })]);
     const { leaves } = evaluate({ any: [thread("idle"), pull("green")] }, world, none);
-    assert.equal(summarize("matched", leaves), 'thread "Thread A" (local/thread-a) is idle: Done.');
+    assert.equal(
+      summarize("matched", leaves),
+      'thread "Thread A" (local/thread-a) is idle: Done. Details follow.',
+    );
     assert.include(summarize("timeout", leaves), "1 of 3 checks pending on aaaaaaa");
   });
 });
