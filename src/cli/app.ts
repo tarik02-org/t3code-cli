@@ -2,6 +2,7 @@ import { Command } from "effect/cli";
 
 import { createActionCommand } from "./action.ts";
 import { askCommand } from "./ask.ts";
+import { createCompanionCommand } from "./companion.ts";
 import { createAuthCommand } from "./auth.ts";
 import { createEnvCommand } from "./env.ts";
 import { cliEnvironmentSetting } from "./env/flag.ts";
@@ -16,6 +17,7 @@ import { showThreadCommand } from "./threads/show.ts";
 import { startThreadCommand } from "./threads/start.ts";
 import { getThreadTranscriptCommand } from "./threads/messages.ts";
 import { waitForThreadCommand } from "./threads/wait.ts";
+import { waitsCommand } from "./waits.ts";
 
 export function createCliCommand() {
   return Command.make("t3cli").pipe(
@@ -25,6 +27,7 @@ export function createCliCommand() {
       createActionCommand(),
       askCommand,
       createAuthCommand(),
+      createCompanionCommand(),
       createEnvCommand(),
       listThreadsCommand,
       createModelCommand(),
@@ -36,6 +39,7 @@ export function createCliCommand() {
       showThreadCommand,
       getThreadTranscriptCommand,
       waitForThreadCommand,
+      waitsCommand,
       createThreadCommand(),
     ]),
   );

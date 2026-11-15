@@ -1,5 +1,6 @@
 import {
   AuthStandardClientScopes,
+  type RuntimeMode,
   AuthSessionId,
   type AuthEnvironmentScope,
 } from "@t3tools/contracts";
@@ -170,6 +171,7 @@ export const makeT3LocalAuthToken = Effect.fn("makeT3LocalAuthToken")(function* 
       sub: input.subject,
       scopes,
       method: "bearer-access-token",
+      ...(input.runtimeModeCeiling === undefined ? {} : { rtc: input.runtimeModeCeiling }),
       iat: DateTime.toEpochMillis(issuedAt),
       exp: DateTime.toEpochMillis(expiresAt),
     };
@@ -224,6 +226,7 @@ export const makeT3LocalAuthToken = Effect.fn("makeT3LocalAuthToken")(function* 
       role: input.role,
       label: input.label,
       subject: input.subject,
+      runtimeModeCeiling: input.runtimeModeCeiling,
     }).pipe(
       Effect.mapError(
         (error) =>
@@ -301,6 +304,7 @@ type LocalSessionClaims = {
   readonly sub: string;
   readonly scopes: ReadonlyArray<AuthEnvironmentScope>;
   readonly method: "bearer-access-token";
+  readonly rtc?: RuntimeMode;
   readonly iat: number;
   readonly exp: number;
 };
@@ -311,6 +315,7 @@ type LocalDatabaseSessionInput = {
   readonly role: LocalAuthTokenInput["role"];
   readonly label: string;
   readonly subject: string;
+  readonly runtimeModeCeiling: RuntimeMode | undefined;
 };
 
 type InsertAuthSessionInput = {

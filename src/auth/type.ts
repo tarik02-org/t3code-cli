@@ -1,3 +1,4 @@
+import type { RuntimeMode } from "@t3tools/contracts";
 import type { AuthClientPresentationMetadata } from "../contracts/index.ts";
 import type { AuthBearerBootstrapResult } from "./schema.ts";
 import type { AuthSessionState } from "./schema.ts";
@@ -70,7 +71,10 @@ export type LocalAuthInput = {
   readonly subject: string;
 };
 
-export type LocalAuthTokenInput = Omit<LocalAuthInput, "origin">;
+export type LocalAuthTokenInput = Omit<LocalAuthInput, "origin"> & {
+  /** The broadest runtime mode the session may act on; an MCP client needs it to reach full-access threads. */
+  readonly runtimeModeCeiling?: RuntimeMode;
+};
 
 export type LocalAuthOriginInput = {
   readonly baseDir?: string;

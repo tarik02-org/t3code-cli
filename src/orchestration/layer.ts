@@ -250,6 +250,7 @@ export const makeT3Orchestration = Effect.fn("makeT3Orchestration")(function* ()
     getThreadBoundedSnapshot,
     getThreadHistoryPage,
     watchShellSequence,
+    watchShell: subscribeShell,
     watchThread,
   });
 });

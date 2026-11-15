@@ -10,6 +10,7 @@ import type {
   OrchestrationV2DispatchCommandResult,
   OrchestrationV2DomainEvent,
   OrchestrationV2ShellSnapshot,
+  OrchestrationV2ShellStreamItem,
   OrchestrationV2ThreadBoundedSnapshot,
   OrchestrationV2ThreadDetailSnapshot,
   OrchestrationV2ThreadHistoryPage,
@@ -64,6 +65,12 @@ export type Orchestration = {
     readonly cursor: string;
   }) => Effect.Effect<OrchestrationV2ThreadHistoryPage, OrchestrationError>;
   readonly watchShellSequence: () => Stream.Stream<number, OrchestrationError, Scope.Scope>;
+  /** The shell stream the web app reads: a snapshot of every thread, then whole-row updates. */
+  readonly watchShell: () => Stream.Stream<
+    OrchestrationV2ShellStreamItem,
+    OrchestrationError,
+    Scope.Scope
+  >;
   readonly watchThread: (
     threadId: string,
   ) => Stream.Stream<ThreadState, OrchestrationError, Scope.Scope>;

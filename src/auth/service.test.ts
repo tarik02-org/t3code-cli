@@ -5,6 +5,7 @@ import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import { AuthConfigError } from "./error.ts";
 import { assert, describe, it } from "@effect/vitest";
 
 import { T3Auth } from "./service.ts";
@@ -175,7 +176,7 @@ describe("T3Auth persistence", () => {
     ),
   );
 
-  it.effect("resolves unpair target from encrypted default metadata", () =>
+  it.effect("does not resolve an unnamed unpair target to the default environment", () =>
     Effect.gen(function* () {
       return yield* makeTempHomeScoped("t3cli-auth-");
     }).pipe(
@@ -189,8 +190,9 @@ describe("T3Auth persistence", () => {
             local: false,
             allowReplace: true,
           });
-          const target = yield* auth.resolveUnpairTarget({});
-          assert.equal(target, "home");
+          const result = yield* Effect.flip(auth.resolveUnpairTarget({}));
+          assert.instanceOf(result, AuthConfigError);
+          assert.equal(yield* auth.resolveUnpairTarget({ name: "home" }), "home");
         }).pipe(Effect.provide(t3AuthDepsLayer(homeDir))),
       ),
       Effect.provide(ConfigPlatformLayer),

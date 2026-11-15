@@ -79,7 +79,7 @@ t3cli auth local [--name <name>] [--replace]                        # Local t3co
 t3cli auth status [--format json]                                   # Check current auth
 t3cli env list [--format json]                                      # List stored environments
 t3cli env use <name> [--format json]                                # Set default environment
-t3cli env remove [--name <name>] [--yes]                            # Remove local credentials
+t3cli env remove (--name <name> | --environment <name>) [--yes]  # Remove local credentials
 t3cli --environment <name> ...                                      # Use a specific environment once
 ```
 
@@ -282,6 +282,46 @@ t3cli terminal destroy [--thread <id>] <terminal-id> [--yes] [--format auto|huma
 `terminal wait` blocks until the terminal emits the requested lifecycle event. `exited` waits for the process to end, `closed` waits for the server-owned terminal session to be removed, and `ended` accepts either.
 
 `terminal write` accepts exactly one payload source: raw argument text, `--stdin`, `--hex`, or `--base64`. Payloads are treated as raw bytes (latin1), not UTF-8 text. `terminal destroy` performs a destructive close with history deletion and requires `--yes` in non-interactive mode.
+
+## Companion (prototype)
+
+```sh
+t3cli companion start [--port <port>] [--env <name>]... [--format auto|human|json]
+t3cli companion status [--format auto|human|json]
+t3cli companion stop
+t3cli companion install [--port <port>] [--env <name>]... [--format auto|human|json]
+t3cli companion uninstall [--format auto|human|json]
+t3cli companion run [--port <port>] [--env <name>]... [--log-file <path>]
+t3cli waits [--thread <owner>] [--caller-env <env>] [--all] [--cancel <id>]... [--format auto|human|json]
+```
+
+The companion is a background daemon that lets an agent wait for threads and pull requests instead of polling them. It keeps one shell-stream connection per stored environment (all of them by default; names sharing a URL share one connection) and reads pull requests from GitHub through the `gh` CLI, which must be installed and signed in on the daemon's machine. It stores waits in SQLite under `%LOCALAPPDATA%\t3cli` on Windows or `$XDG_STATE_HOME/t3cli` (default `~/.local/state/t3cli`) elsewhere, and logs to `companion.log` there. It reloads environments when `t3cli env` or `auth` changes the config. `companion install` starts it at login (a hidden Windows scheduled task, a systemd user unit, or a launchd agent) and starts it now; re-run it after upgrading node or t3cli, since the entry pins both paths. A second `run` exits when a companion already answers, `stop` clears a stale runtime file left by a crashed daemon, and a busy port is retried for 30 seconds.
+
+Agents use the MCP endpoint at `http://127.0.0.1:47731/mcp`, identifying themselves with `callerThreadId` (their `T3CODE_THREAD_ID`) and optionally `callerEnvironment`:
+
+| Tool          | What it does                                                                                                                                                                    |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `wait`        | Makes a wait: `condition`, and optionally `deadline` (seconds), `wake`, `label`, `repeat`. Returns its id; when the condition already holds, the result comes back in the call. |
+| `wait_now`    | Blocks inside the turn until `condition` holds or `timeout` seconds pass (at most 600).                                                                                         |
+| `waits`       | Lists the caller's pending waits, each with where every part of its condition stands, and hands over the waits that fired with `wake: none`.                                    |
+| `wait_cancel` | Cancels pending waits by id.                                                                                                                                                    |
+| `wait_result` | The whole payload of a wait that fired, kept for 24 hours.                                                                                                                      |
+
+A condition is JSON: a leaf, or leaves combined with `{"any": […]}`, `{"all": […]}` and `{"not": …}`.
+
+| Leaf                                                  | `is`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{"thread": "<id>", "environment": "<env>", "is": …}` | `idle` (the run ended and the thread does not wait to resume on its own background work; one that awaits a background command is paused and goes on by itself), `finished` (idle with no background work of its own left at all; a PR watch alone does not count), `needs-input` (a question for the user), `needs-approval` (a command or tool call awaits approval), `failed`, `stalled` (work the thread awaits is still pending 30 minutes after its run; `minutes` changes that), `message` (a new assistant message) |
+| `{"pr": "owner/repo#123", "is": …}`                   | `checks-done` (every check finished and no workflow run still has jobs to start), `green` (checks-done, none failing, no conflict with the base), `red`, `mergeable`, `conflicting`, `draft`, `ready`, `merged`, `closed`, `comment` (a new comment or review from a person, not a bot), `new-head`                                                                                                                                                                                                                        |
+| `{"after": <seconds>}`                                |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+
+For example, `{"any": [{"thread": "T", "is": "needs-input"}, {"all": [{"thread": "T", "is": "idle"}, {"pr": "acme/app#12", "is": "green"}]}]}` holds when thread `T` asks something, or when it is idle and the pull request's checks pass.
+
+Waits are level-triggered: every leaf is judged against the current state, so a wait on something that already holds fires at once and a missed update cannot lose one. `message`, `comment` and `new-head` mean new since the wait was made, or last fired. Thread state comes from each environment's shell stream, and a whole snapshot is re-read every two minutes for environments with a pending wait; pull requests named by a pending wait are read every 30 seconds, on their current head. A thread's messages are not in that stream, so a `message` leaf reads the thread itself, also every 30 seconds and only when the thread changed. Every pending wait is evaluated again every 2 seconds, and a thread must have held its state for 3 seconds before a leaf counts it. GitHub runs no `pull_request` workflows for a pull request that conflicts with its base, so such a pull request is never `green` and its checks say so; add `conflicting` to a wait for CI. State the companion has not seen is unknown and never decides a wait. Waits survive a restart.
+
+A wait fires once, with outcome `matched`, or `timeout` when its `deadline` passes first. With `repeat` it fires again each time the condition becomes true after having been false. `wake` chooses how a fired wait reaches its owner: `turn-end` (default) holds it until the owner's turn ends, then sends everything that fired as one message; `steer` sends at once, into a running turn; `none` sends nothing, and `waits` hands the result over. The message has one line per fired wait: its id and label, what matched (or, on a timeout, where everything stood), how a thread's last message opens (its first paragraph, cut at the end of a sentence past 400 characters), a pull request's checks on its head. `wait_result` adds each thread's last message up to 10,000 characters and each pull request's whole state. A fired wait is done: there is nothing to resolve, arm or snooze.
+
+For a local environment (stored with `local: true`, served from a T3 home on this machine) wake messages go through T3 Code's MCP `t3_thread_send`, so the owner thread shows them as from an agent; the companion mints its own `mcp-client` session into that home's auth database, like `t3cli auth local`. Wake messages to remote environments show as the user's, since T3 Code restamps every websocket message as user-created. `t3cli waits` lists waits (the owner's, or everyone's with `--all`) and cancels them; it talks to the daemon over Effect RPC at `/rpc`.
 
 ### Environment Variables
 
