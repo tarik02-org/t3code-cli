@@ -19,13 +19,14 @@ what is pending into one message.
 
 ### what is watched
 
-1. **Threads the caller launched or wrote to.** T3 Code does not record the sender of a message
-   sent through the gateway (`senderThreadId` is absent on every such message on a live server),
-   so the companion reads the caller's own transcript instead. Every completed tool call whose
+1. **Threads the caller launched or wrote to.** T3 Code stamps `senderThreadId` only on a
+   message sent with the caller's in-thread tools; a send through the gateway carries none. So
+   the companion reads the caller's own transcript, which shows both. Every completed tool call whose
    name ends in `t3_thread_launch`, `t3_thread_send`, `t3_thread_send_attachments` or
    `create_threads` names the target thread in its input or output. The watch starts at the tool
-   call's `startedAt`. The transcript is read when the caller's row shows new items: at most every
-   10 seconds during a turn, and once when the turn ends. `delegate_task` children are skipped,
+   call's `startedAt`, or when the thread became a caller if that is later. The transcript is
+   read when the caller's row shows new items: at most every 10 seconds during a turn, and once
+   when the turn ends. `delegate_task` children are skipped,
    because T3 Code already reports them to their parent.
 2. **Pull requests linked to those threads and to the caller's own thread**: every entry of
    `shell.pullRequests` that is not `stack-dismissed` and whose snapshot is open or unknown.
@@ -56,8 +57,10 @@ task has `awaited: true` or is a subagent.
 
 - `done` carries the whole last assistant message (up to 10,000 characters), the run's outcome
   (`completed`, `interrupted`, `cancelled`), the thread's linked pull requests with their heads,
-  own work left running without `awaited` (a dev server), and `question: true` when the message's
-  last paragraph holds a question mark. A thread that asks in prose is a `done` that says so.
+  and `question: true` when the message's last paragraph holds a question mark. A thread that
+  asks in prose is a `done` that says so.
+- A thread that ends its turn with work it did not mark as awaited (a dev server) is `done` at
+  once, and the event lists what it left running.
 - `asks` says whether it is a question (`user_input`, `auth_refresh`) or an approval.
 - For a subagent task, `stuck` counts only time in which its child thread is not busy either.
 - Nothing is emitted for a pause on awaited work, for `settled`, or for a run that a queued
@@ -86,7 +89,9 @@ something changed in the last 10 minutes, every 2 minutes otherwise, up to four 
 query also reads the GraphQL rate limit; below 500 points every interval is four times longer.
 
 An explicit `watch` returns the object's current state in the call, and records it as already
-seen. A pull request picked up from a thread link reports what its first read shows.
+seen. A pull request picked up from a thread link reports what its first read shows, unless the
+link is older than the caller: then the caller already knows it, and the first read only
+records.
 
 Agents usually comment through the owner's `gh` login, so the companion cannot tell the owner's
 comment from an agent's. It reports every comment that is not a bot's.
@@ -119,8 +124,10 @@ caller, the companion decides for each caller with pending events:
 | in a turn     | an urgent one  | send after 5 s as a steer                 |
 | in a turn     | none urgent    | hold                                      |
 
-Urgent: `asks`, and `red` on a pull request that is not a draft. Because the decision is taken
-from the current state on a clock, no edge can be missed: a turn end seen only by a snapshot
+Urgent: `asks`, `failed`, a `done` whose last message closes on a question, and `red` on a pull
+request that is not a draft. A digest held for 30 minutes is steered in too, so a long turn does
+not starve its caller. Because the decision is taken from the current state on a clock, no edge
+can be missed: a turn end seen only by a snapshot
 re-read, or a queued-turn grace that runs out, releases the digest on the next tick.
 
 A send is made once:
@@ -129,8 +136,10 @@ A send is made once:
 2. It goes through T3 Code's `/mcp` `t3_thread_send` with `clientRequestId` set to the digest's
    id, so a retry cannot add a second message.
 3. A refusal is definite: the digest falls back to `application.sendThread`. A failure that leaves
-   the outcome unknown (a timeout, a dropped connection) is not retried blindly. The next tick
-   reads the caller's last messages for the digest's tag and resends only when it is absent.
+   the outcome unknown (a timeout, a dropped connection) is not retried blindly. After a pause
+   that grows from 10 seconds, the companion reads the caller's last messages for the digest's
+   tag and resends the same digest, under the same id, only when it is absent. After five such
+   failures the digest is given up and its events go into the next one.
 4. Its events are marked delivered with the digest in one transaction.
 
 A digest opens with `t3 companion digest <id>` and lists objects, each with its link, its events
@@ -153,8 +162,12 @@ SQLite, schema version 9: `callers`, `watches`, `events`, `digests`, `reminders`
 and `fires` tables are dropped. Owners of waits still pending at the upgrade become callers, so
 they keep being told without a new call.
 
-## decisions to confirm
+## decisions
 
-1. Which events steer into a running turn besides `asks` and `red` on a ready pull request.
-2. Whether a thread that ends its turn with background work it did not mark as awaited is `done`
-   at once or only when that work ends.
+Confirmed by the coordinator on 2026-11-23:
+
+1. `failed`, a `done` that closes on a question, and a digest held for 30 minutes steer into a
+   running turn, besides `asks` and `red` on a ready pull request. A false steer from the question
+   heuristic costs a glance; a missed question in prose cost an hour.
+2. A thread that ends its turn with background work it did not mark as awaited is `done` at once,
+   listing what is still running.
