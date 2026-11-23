@@ -11,17 +11,17 @@ import {
   CompanionEnvironments,
   environmentKey,
 } from "./environments.ts";
-import { CompanionWaits } from "./waits.ts";
+import { CompanionWatchlist } from "./watchlist.ts";
 
 const reconnectDelay = Duration.seconds(5);
 
 /**
  * Follows every environment's shell stream until interrupted, handing each thread row to the
- * waits. A (re)connect starts with a full snapshot, which brings every thread up to date.
+ * watchlist. A (re)connect starts with a full snapshot, which brings every thread up to date.
  */
 export const runCompanionWatcher = Effect.fn("runCompanionWatcher")(function* () {
   const environments = yield* CompanionEnvironments;
-  const waits = yield* CompanionWaits;
+  const watchlist = yield* CompanionWatchlist;
 
   const watchEnvironment = Effect.fn("CompanionWatcher.watchEnvironment")(function* (
     environment: CompanionEnvironment,
@@ -33,15 +33,15 @@ export const runCompanionWatcher = Effect.fn("runCompanionWatcher")(function* ()
             Effect.andThen(
               Effect.forEach(
                 item.snapshot.threads,
-                (shell) => waits.ingest(environment.name, shell),
+                (shell) => watchlist.ingest(environment.name, shell),
                 { discard: true },
               ),
             ),
           );
         case "thread.updated":
-          return waits.ingest(environment.name, item.thread);
+          return watchlist.ingest(environment.name, item.thread);
         case "thread.removed":
-          return waits.forget(environment.name, item.threadId);
+          return watchlist.forget(environment.name, item.threadId);
         case "synchronized":
         case "project.updated":
         case "project.removed":

@@ -74,6 +74,8 @@ export class CompanionAgentSendError extends Schema.TaggedError<CompanionAgentSe
   {
     message: Schema.String,
     operation: Schema.String,
+    /** T3 Code answered and said no, so the message did not arrive; otherwise it may have. */
+    refused: Schema.Boolean,
     cause: Schema.Defect(),
   },
 ) {}

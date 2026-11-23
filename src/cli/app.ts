@@ -17,7 +17,6 @@ import { showThreadCommand } from "./threads/show.ts";
 import { startThreadCommand } from "./threads/start.ts";
 import { getThreadTranscriptCommand } from "./threads/messages.ts";
 import { waitForThreadCommand } from "./threads/wait.ts";
-import { waitsCommand } from "./waits.ts";
 
 export function createCliCommand() {
   return Command.make("t3cli").pipe(
@@ -39,7 +38,6 @@ export function createCliCommand() {
       showThreadCommand,
       getThreadTranscriptCommand,
       waitForThreadCommand,
-      waitsCommand,
       createThreadCommand(),
     ]),
   );

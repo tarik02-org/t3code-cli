@@ -28,8 +28,8 @@ import { resolveCompanionPaths } from "./paths.ts";
 import { CompanionRpcs, companionRpcPath } from "./rpc.ts";
 import { CompanionRuntimeFile } from "./schema.ts";
 import { CompanionStoreLive } from "./store.ts";
-import { CompanionWaits, CompanionWaitsLive } from "./waits.ts";
 import { runCompanionWatcher } from "./watcher.ts";
+import { CompanionWatchlist, CompanionWatchlistLive } from "./watchlist.ts";
 
 const encodeRuntimeFile = Schema.encodeEffect(Schema.fromJsonString(CompanionRuntimeFile));
 
@@ -38,6 +38,9 @@ export interface CompanionDaemonOptions {
   readonly pid: number;
   readonly version: string;
   readonly environments: ReadonlyArray<string>;
+  /** Check names that never make a pull request red; `*` stands for any run of characters. */
+  readonly ignoreChecks: ReadonlyArray<string>;
+  readonly stuckMinutes: number | undefined;
 }
 
 /**
@@ -66,11 +69,11 @@ export const runCompanionDaemon = Effect.fn("runCompanionDaemon")(function* <E, 
   const url = `http://127.0.0.1:${options.port}`;
   const shutdown = yield* Deferred.make<void>();
 
-  const core = CompanionWaitsLive.pipe(
+  const core = CompanionWatchlistLive({ stuckMinutes: options.stuckMinutes }).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
         CompanionStoreLive,
-        GitHubPullRequestsLive,
+        GitHubPullRequestsLive(options.ignoreChecks),
         CompanionEnvironmentsLive(connect, makeAgentSender, options.environments),
       ),
     ),
@@ -80,7 +83,7 @@ export const runCompanionDaemon = Effect.fn("runCompanionDaemon")(function* <E, 
   const rpcHandlers = CompanionRpcs.toLayer(
     Effect.gen(function* () {
       const environments = yield* CompanionEnvironments;
-      const waits = yield* CompanionWaits;
+      const watchlist = yield* CompanionWatchlist;
       return CompanionRpcs.of({
         health: () =>
           environments.statuses.pipe(
@@ -93,8 +96,7 @@ export const runCompanionDaemon = Effect.fn("runCompanionDaemon")(function* <E, 
             })),
           ),
         shutdown: () => Deferred.succeed(shutdown, undefined).pipe(Effect.asVoid),
-        waits: (input) => waits.list(input),
-        cancel: (input) => waits.cancel(input),
+        watching: (input) => watchlist.watching(input),
       });
     }),
   );
@@ -111,7 +113,7 @@ export const runCompanionDaemon = Effect.fn("runCompanionDaemon")(function* <E, 
     }).pipe(Layer.provideMerge(core)),
   );
   yield* Effect.forkScoped(runCompanionWatcher().pipe(Effect.provide(services)));
-  yield* Effect.forkScoped(Context.get(services, CompanionWaits).run);
+  yield* Effect.forkScoped(Context.get(services, CompanionWatchlist).run);
 
   // `t3cli env` and `auth` rewrite the config file; pick up added and removed environments.
   const path = yield* Path.Path;

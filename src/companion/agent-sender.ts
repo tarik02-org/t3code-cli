@@ -24,6 +24,8 @@ export interface AgentSender {
     readonly threadId: string;
     readonly message: string;
     readonly mode: "auto" | "steer";
+    /** Names this send: T3 Code adds one message for it however often it is repeated. */
+    readonly requestId: string;
   }) => Effect.Effect<void, CompanionAgentSendError>;
 }
 
@@ -65,6 +67,7 @@ const sendError =
       : new CompanionAgentSendError({
           message: `agent send ${operation} failed`,
           operation,
+          refused: false,
           cause,
         });
 
@@ -164,6 +167,7 @@ export const makeLocalAgentSender = Effect.fn("makeLocalAgentSender")(function* 
     readonly threadId: string;
     readonly message: string;
     readonly mode: "auto" | "steer";
+    readonly requestId: string;
   }) {
     const bearer = yield* token;
     const opened = yield* call({
@@ -192,7 +196,12 @@ export const makeLocalAgentSender = Effect.fn("makeLocalAgentSender")(function* 
         method: "tools/call",
         params: {
           name: "t3_thread_send",
-          arguments: { threadId: input.threadId, message: input.message, mode: input.mode },
+          arguments: {
+            threadId: input.threadId,
+            message: input.message,
+            mode: input.mode,
+            clientRequestId: input.requestId,
+          },
         },
       },
     });
@@ -206,6 +215,7 @@ export const makeLocalAgentSender = Effect.fn("makeLocalAgentSender")(function* 
       yield* new CompanionAgentSendError({
         message: `t3_thread_send was refused: ${failure}`,
         operation: "send",
+        refused: true,
         cause: reply,
       });
     }

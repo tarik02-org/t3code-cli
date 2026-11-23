@@ -34,8 +34,8 @@ function hasQueuedTurnStart(shell: OrchestrationV2ThreadShell, nowMs: number): b
   ].every((value) => value === null || value < messageAtMs);
 }
 
-/** Why a thread is in a turn, apart from pending background tasks; empty when it is not. */
-export function busyReasons(shell: OrchestrationV2ThreadShell, nowMs: number): Array<string> {
+/** Why a thread works on something right now; empty when no run is active or about to start. */
+export function runReasons(shell: OrchestrationV2ThreadShell, nowMs: number): Array<string> {
   const reasons: Array<string> = [];
   if (shell.activityRunStatus !== null && shell.activityRunStatus !== undefined) {
     reasons.push(`run ${shell.activityRunStatus}`);
@@ -46,12 +46,6 @@ export function busyReasons(shell: OrchestrationV2ThreadShell, nowMs: number): A
   if (hasQueuedTurnStart(shell, nowMs)) {
     reasons.push("queued turn");
   }
-  if (shell.pendingRuntimeRequest !== null) {
-    reasons.push(`pending ${shell.pendingRuntimeRequest.kind} request`);
-  }
-  if ((shell.pendingGuestMessageCount ?? 0) > 0) {
-    reasons.push("pending guest messages");
-  }
   if (shell.blockedOnThreadWait === true) {
     reasons.push("waiting on another thread");
   }
@@ -59,11 +53,13 @@ export function busyReasons(shell: OrchestrationV2ThreadShell, nowMs: number): A
 }
 
 /**
- * Whether a wait's owner is in a turn. Its own background work does not count: a coordinator
- * usually has delegates running between turns and must still be woken.
+ * Whether a caller is in a turn, so a digest would interrupt it. Its own background work does
+ * not count: a coordinator usually has delegates running between turns and must still be told.
  */
 export const inTurn = (shell: OrchestrationV2ThreadShell, nowMs: number) =>
-  busyReasons(shell, nowMs).length > 0;
+  runReasons(shell, nowMs).length > 0 ||
+  shell.pendingRuntimeRequest !== null ||
+  (shell.pendingGuestMessageCount ?? 0) > 0;
 
 type PendingTask = NonNullable<OrchestrationV2ThreadShell["pendingBackgroundTasks"]>[number];
 
@@ -79,52 +75,90 @@ const ownWork = (shell: OrchestrationV2ThreadShell) =>
     (task) => !task.taskId.startsWith("pull-request-watch:"),
   );
 
-export const ownTaskLabels = (shell: OrchestrationV2ThreadShell): Array<string> =>
-  ownWork(shell).map(taskLabel);
+/**
+ * Work the thread resumes after: the agent marked it so, or it is a subagent, whose result
+ * T3 Code hands back by starting the next run.
+ */
+const isAwaited = (task: PendingTask) => task.awaited === true || task.kind === "subagent";
 
-/** Own work the agent declared it resumes after; T3 Code starts the next run when it ends. */
+export const awaitedTasks = (shell: OrchestrationV2ThreadShell) => ownWork(shell).filter(isAwaited);
+
 export const awaitedTaskLabels = (shell: OrchestrationV2ThreadShell): Array<string> =>
+  awaitedTasks(shell).map(taskLabel);
+
+/** Work the thread started and left running without saying it waits for it, like a dev server. */
+export const leftRunningLabels = (shell: OrchestrationV2ThreadShell): Array<string> =>
   ownWork(shell)
-    .filter((task) => task.awaited === true)
+    .filter((task) => !isAwaited(task))
     .map(taskLabel);
 
-export type ThreadState =
-  | "running"
-  /** The run ended with the thread's own background work still pending. */
-  | "paused"
-  | "idle"
-  | "settled"
-  | "failed"
-  | "needs-input"
-  | "needs-approval"
-  | "archived";
+/** The threads of the subagents this thread waits on. */
+export const awaitedChildThreadIds = (shell: OrchestrationV2ThreadShell): Array<string> =>
+  awaitedTasks(shell).flatMap((task) =>
+    task.kind === "subagent" && task.childThreadId !== undefined ? [task.childThreadId] : [],
+  );
 
-/**
- * Where a thread stands. A pending request is an approval unless it asks the user a question or
- * to sign in again, which is how T3 Code's own waiting states split them.
- */
-export function threadState(shell: OrchestrationV2ThreadShell, nowMs: number): ThreadState {
+export type ThreadPhase =
+  /** Archived or deleted. */
+  | "gone"
+  /** A question or an approval waits for an answer. */
+  | "asks"
+  | "failed"
+  | "busy"
+  /** The run ended and the thread resumes when work it awaits ends. */
+  | "waiting"
+  /** The run ended with nothing the thread resumes on. */
+  | "done"
+  /** No run yet. */
+  | "new";
+
+export function threadPhase(shell: OrchestrationV2ThreadShell, nowMs: number): ThreadPhase {
   if (shell.archivedAt !== null || shell.deletedAt !== null) {
-    return "archived";
+    return "gone";
   }
-  const request = shell.pendingRuntimeRequest;
-  if (request !== null) {
-    return request.kind === "user_input" || request.kind === "auth_refresh"
-      ? "needs-input"
-      : "needs-approval";
+  if (shell.pendingRuntimeRequest !== null) {
+    return "asks";
   }
   if (shell.status === "failed") {
     return "failed";
   }
-  if (busyReasons(shell, nowMs).length > 0) {
-    return "running";
+  if (runReasons(shell, nowMs).length > 0) {
+    return "busy";
   }
-  if (ownWork(shell).length > 0) {
-    return "paused";
+  if (awaitedTasks(shell).length > 0) {
+    return "waiting";
   }
-  return shell.settledOverride === "settled" ? "settled" : "idle";
+  return shell.latestRunId === null ? "new" : "done";
 }
 
 /** When the thread's latest run ended, as epoch milliseconds. */
 export const runEndedMs = (shell: OrchestrationV2ThreadShell) =>
   DateTime.toEpochMillis(shell.latestRunCompletedAt ?? shell.updatedAt);
+
+/** A pending request is an approval unless it asks the user a question or to sign in again. */
+export const isQuestion = (kind: string) => kind === "user_input" || kind === "auth_refresh";
+
+/** A thread's standing in a few words, for a watch listing. */
+export function describeThread(shell: OrchestrationV2ThreadShell, nowMs: number): string {
+  const phase = threadPhase(shell, nowMs);
+  switch (phase) {
+    case "gone":
+      return "archived";
+    case "asks":
+      return isQuestion(shell.pendingRuntimeRequest?.kind ?? "")
+        ? "asks a question"
+        : "asks for an approval";
+    case "failed":
+      return `failed${shell.lastError === null || shell.lastError === undefined ? "" : `: ${shell.lastError.slice(0, 200)}`}`;
+    case "busy":
+      return `busy (${runReasons(shell, nowMs).join(", ")})`;
+    case "waiting":
+      return `waiting on ${awaitedTaskLabels(shell).join(", ")}`;
+    case "done": {
+      const left = leftRunningLabels(shell);
+      return `done (${shell.status})${left.length === 0 ? "" : `, left running ${left.join(", ")}`}`;
+    }
+    default:
+      return "has not run";
+  }
+}

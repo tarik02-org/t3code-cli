@@ -3,16 +3,19 @@ import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
 
 import { CompanionInvalidRequestError, CompanionStoreError } from "./error.ts";
-import { CompanionHealth, WaitSelection, WaitsListing, WaitsRequest } from "./schema.ts";
+import { CallerWatching, CompanionHealth, WatchingRequest } from "./schema.ts";
 
 const RequestError = Schema.Union([CompanionInvalidRequestError, CompanionStoreError]);
 
 export const companionRpcPath = "/rpc";
 
-/** The CLI's typed channel to the daemon; agents use the MCP tools over the same waits. */
+/** The CLI's typed channel to the daemon; agents use the MCP tools over the same watchlist. */
 export class CompanionRpcs extends RpcGroup.make(
   Rpc.make("health", { success: CompanionHealth }),
   Rpc.make("shutdown"),
-  Rpc.make("waits", { payload: WaitsRequest, success: WaitsListing, error: RequestError }),
-  Rpc.make("cancel", { payload: WaitSelection, success: Schema.Int, error: RequestError }),
+  Rpc.make("watching", {
+    payload: WatchingRequest,
+    success: Schema.Array(CallerWatching),
+    error: RequestError,
+  }),
 ) {}

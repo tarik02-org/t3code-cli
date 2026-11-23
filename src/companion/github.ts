@@ -8,9 +8,21 @@ import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 
-import { parsePullRequest } from "./condition.ts";
 import { CompanionPullRequestError } from "./error.ts";
-import type { PullRequestRemark, PullRequestView } from "./schema.ts";
+import type { PullRequestCheck, PullRequestRemark, PullRequestView } from "./schema.ts";
+
+/** `owner/repo#123` from that form or from a pull request's URL; null for anything else. */
+export function parsePullRequest(
+  text: string,
+): { owner: string; name: string; number: number } | null {
+  const match =
+    /^([\w.-]+)\/([\w.-]+)#(\d+)$/.exec(text.trim()) ??
+    /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)(?:[/?#].*)?$/.exec(text.trim());
+  const [, owner, name, number] = match ?? [];
+  return owner === undefined || name === undefined || number === undefined
+    ? null
+    : { owner, name, number: Number(number) };
+}
 
 /** Reads a pull request's current state from where it lives, for any repository. */
 export class CompanionPullRequests extends Context.Service<
@@ -22,6 +34,7 @@ export class CompanionPullRequests extends Context.Service<
 >()("t3cli/companion/CompanionPullRequests") {}
 
 const query = `query($owner: String!, $name: String!, $number: Int!) {
+  rateLimit { remaining }
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
       url title state isDraft mergeable headRefOid
@@ -33,8 +46,8 @@ const query = `query($owner: String!, $name: String!, $number: Int!) {
         } }
         statusCheckRollup { contexts(first: 100) { nodes {
           kind: __typename
-          ... on CheckRun { name status conclusion }
-          ... on StatusContext { context state }
+          ... on CheckRun { name status conclusion url: detailsUrl }
+          ... on StatusContext { context state url: targetUrl }
         } } }
       } } }
       comments(last: 30) { nodes { author { kind: __typename login } createdAt bodyText url } }
@@ -52,12 +65,14 @@ const CheckContext = Schema.Struct({
   conclusion: Schema.optional(Schema.NullOr(Schema.String)),
   context: Schema.optional(Schema.String),
   state: Schema.optional(Schema.String),
+  url: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
 const Response = Schema.Struct({
   data: Schema.optional(
     Schema.NullOr(
       Schema.Struct({
+        rateLimit: Schema.optional(Schema.NullOr(Schema.Struct({ remaining: Schema.Int }))),
         repository: Schema.NullOr(
           Schema.Struct({
             pullRequest: Schema.NullOr(
@@ -132,21 +147,49 @@ type Reply = NonNullable<
   NonNullable<NonNullable<(typeof Response.Type)["data"]>["repository"]>["pullRequest"]
 >;
 
-const passed: ReadonlySet<string> = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
+/**
+ * How a finished check run ended badly. `CANCELLED` is absent on purpose: a concurrency group
+ * cancels a job by design, and a cancelled job says nothing about the head. `STALE` and
+ * `SKIPPED` say nothing either.
+ */
+const failed: ReadonlySet<string> = new Set([
+  "FAILURE",
+  "TIMED_OUT",
+  "ACTION_REQUIRED",
+  "STARTUP_FAILURE",
+]);
 
 const checkOutcome = (check: typeof CheckContext.Type): "pass" | "fail" | "pending" => {
   if (check.kind === "CheckRun") {
     return check.status !== "COMPLETED"
       ? "pending"
-      : passed.has(check.conclusion ?? "")
-        ? "pass"
-        : "fail";
+      : failed.has(check.conclusion ?? "")
+        ? "fail"
+        : "pass";
   }
-  return check.state === "SUCCESS"
-    ? "pass"
+  return check.state === "FAILURE" || check.state === "ERROR"
+    ? "fail"
     : check.state === "PENDING" || check.state === "EXPECTED"
       ? "pending"
-      : "fail";
+      : "pass";
+};
+
+const checkName = (check: typeof CheckContext.Type) => check.name ?? check.context ?? "unnamed";
+
+/** A check name pattern as a test: case-insensitive, `*` standing for any run of characters. */
+export const checkMatcher = (patterns: ReadonlyArray<string>) => {
+  const tests = patterns.map(
+    (pattern) =>
+      new RegExp(
+        `^${pattern
+          .trim()
+          .split("*")
+          .map((part) => part.replaceAll(/[.+?^${}()|[\]\\]/g, String.raw`\$&`))
+          .join(".*")}$`,
+        "i",
+      ),
+  );
+  return (name: string) => tests.some((test) => test.test(name));
 };
 
 const remarkBy = (
@@ -162,13 +205,25 @@ const remarkBy = (
   url,
 });
 
-export function toPullRequestView(pr: string, reply: Reply): PullRequestView {
+/**
+ * `ignored` names checks that never count: the caller's repository runs them for their side
+ * effect, and they fail or hang for reasons that are not the change's.
+ */
+export function toPullRequestView(
+  pr: string,
+  reply: Reply,
+  options: {
+    readonly ignored?: (name: string) => boolean;
+    readonly rateLimitRemaining?: number | null;
+  } = {},
+): PullRequestView {
   const commit = reply.commits.nodes[0]?.commit;
-  const checks = commit?.statusCheckRollup?.contexts.nodes ?? [];
-  const named = (outcome: "fail" | "pending") =>
-    checks
-      .filter((check) => checkOutcome(check) === outcome)
-      .map((check) => check.name ?? check.context ?? "unnamed");
+  const all = commit?.statusCheckRollup?.contexts.nodes ?? [];
+  const checks = all.filter((check) => options.ignored?.(checkName(check)) !== true);
+  const failing: Array<PullRequestCheck> = checks
+    .filter((check) => checkOutcome(check) === "fail")
+    .map((check) => ({ name: checkName(check), url: check.url ?? null }));
+  const pending = checks.filter((check) => checkOutcome(check) === "pending").map(checkName);
   // A workflow run registers a job as a check only when the job starts. A run that is still
   // going while every check it registered has finished therefore has checks yet to come, and
   // the head's checks are not done. Other apps' suites can stay queued forever with no checks.
@@ -186,9 +241,9 @@ export function toPullRequestView(pr: string, reply: Reply): PullRequestView {
     state: reply.state === "OPEN" ? "open" : reply.state === "MERGED" ? "merged" : "closed",
     draft: reply.isDraft,
     head: reply.headRefOid,
-    checks: checks.length + unstarted.length,
-    failing: named("fail"),
-    pending: [...named("pending"), ...unstarted],
+    checks: all.length + unstarted.length,
+    failing,
+    pending: [...pending, ...unstarted],
     mergeable:
       reply.mergeable === "MERGEABLE"
         ? "mergeable"
@@ -214,12 +269,16 @@ export function toPullRequestView(pr: string, reply: Reply): PullRequestView {
             ],
       ),
     ].toSorted((left, right) => left.at.localeCompare(right.at)),
+    rateLimitRemaining: options.rateLimitRemaining ?? null,
   };
 }
 
 /** Reads pull requests through the GitHub CLI, which already holds the user's sign-in. */
-export const makeGitHubPullRequests = Effect.fn("makeGitHubPullRequests")(function* () {
+export const makeGitHubPullRequests = Effect.fn("makeGitHubPullRequests")(function* (
+  ignoreChecks: ReadonlyArray<string>,
+) {
   const spawner = yield* ChildProcessSpawner;
+  const ignored = checkMatcher(ignoreChecks);
 
   const read = Effect.fn("CompanionPullRequests.read")(function* (pr: string) {
     const parsed = parsePullRequest(pr);
@@ -261,7 +320,10 @@ export const makeGitHubPullRequests = Effect.fn("makeGitHubPullRequests")(functi
         cause: null,
       });
     }
-    return toPullRequestView(`${parsed.owner}/${parsed.name}#${parsed.number}`, found);
+    return toPullRequestView(`${parsed.owner}/${parsed.name}#${parsed.number}`, found, {
+      ignored,
+      rateLimitRemaining: reply?.data?.rateLimit?.remaining ?? null,
+    });
   }, Effect.scoped);
 
   return CompanionPullRequests.of({
@@ -279,4 +341,5 @@ export const makeGitHubPullRequests = Effect.fn("makeGitHubPullRequests")(functi
   });
 });
 
-export const GitHubPullRequestsLive = Layer.effect(CompanionPullRequests, makeGitHubPullRequests());
+export const GitHubPullRequestsLive = (ignoreChecks: ReadonlyArray<string>) =>
+  Layer.effect(CompanionPullRequests, makeGitHubPullRequests(ignoreChecks));
