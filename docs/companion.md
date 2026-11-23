@@ -47,12 +47,12 @@ grace, as T3 Code judges it), or it is blocked on another thread. Its **own work
 `pendingBackgroundTasks` without `pull-request-watch:*` entries. Own work is **awaited** when the
 task has `awaited: true` or is a subagent.
 
-| event    | holds when                                                                                                    | key                  | acts |
-| -------- | ------------------------------------------------------------------------------------------------------------- | -------------------- | ---- |
-| `asks`   | `pendingRuntimeRequest` is set and was created after `since`                                                    | request id           | yes  |
-| `done`   | not busy for 5 s, no pending request, status not `failed`, no awaited own work, latest run ended after `since` | latest run id        | yes  |
-| `failed` | status `failed`, not busy for 5 s, latest run ended after `since`                                              | latest run id        | yes  |
-| `stuck`  | not busy, awaited own work pending, and nothing changed for N minutes (default 30) since the run ended          | latest run id        | yes  |
+| event    | holds when                                                                                                     | key           | acts |
+| -------- | -------------------------------------------------------------------------------------------------------------- | ------------- | ---- |
+| `asks`   | `pendingRuntimeRequest` is set and was created after `since`                                                   | request id    | yes  |
+| `done`   | not busy for 5 s, no pending request, status not `failed`, no awaited own work, latest run ended after `since` | latest run id | yes  |
+| `failed` | status `failed`, not busy for 5 s, latest run ended after `since`                                              | latest run id | yes  |
+| `stuck`  | not busy, awaited own work pending, and nothing changed for N minutes (default 30) since the run ended         | latest run id | yes  |
 
 - `done` carries the whole last assistant message (up to 10,000 characters), the run's outcome
   (`completed`, `interrupted`, `cancelled`), the thread's linked pull requests with their heads,
@@ -71,14 +71,14 @@ with `FAILURE`, `TIMED_OUT`, `ACTION_REQUIRED` or `STARTUP_FAILURE`, or a status
 a check whose name is on the ignore list (`--ignore-check`, repeatable, case-insensitive, `*`
 wildcard).
 
-| event      | holds when                                                              | key           | acts |
-| ---------- | ----------------------------------------------------------------------- | ------------- | ---- |
-| `red`      | open, at least one failing check on the head                             | head sha      | yes  |
-| `conflict` | open and `mergeable` is `CONFLICTING`                                    | head sha      | yes  |
-| `comment`  | a comment or review by a person, created after `since`                   | its URL       | yes  |
-| `merged`   | state `MERGED`; ends the watch                                           | `merged`      | yes  |
-| `closed`   | state `CLOSED`; ends the watch                                           | `closed`      | yes  |
-| `green`    | asked for with `watch { pr, green: true }`: every check finished, none failing, no workflow with jobs yet to start, no conflict | head sha | no |
+| event      | holds when                                                                                                                      | key      | acts |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------- | -------- | ---- |
+| `red`      | open, at least one failing check on the head                                                                                    | head sha | yes  |
+| `conflict` | open and `mergeable` is `CONFLICTING`                                                                                           | head sha | yes  |
+| `comment`  | a comment or review by a person, created after `since`                                                                          | its URL  | yes  |
+| `merged`   | state `MERGED`; ends the watch                                                                                                  | `merged` | yes  |
+| `closed`   | state `CLOSED`; ends the watch                                                                                                  | `closed` | yes  |
+| `green`    | asked for with `watch { pr, green: true }`: every check finished, none failing, no workflow with jobs yet to start, no conflict | head sha | no   |
 
 `red` fires on the first failing check, without waiting for the rest, and names the failing
 checks with their URLs. A pull request is polled every 30 seconds while a check is pending or
@@ -113,11 +113,11 @@ A dropped event keeps its key, so it is not emitted again.
 Delivery is level-triggered. Every 2 seconds, and at once on a new event or a new row of the
 caller, the companion decides for each caller with pending events:
 
-| caller          | pending events        | action                                   |
-| --------------- | --------------------- | ---------------------------------------- |
-| not in a turn   | any                   | send after the oldest is 5 s old (`auto`) |
-| in a turn       | an urgent one         | send after 5 s as a steer                |
-| in a turn       | none urgent           | hold                                     |
+| caller        | pending events | action                                    |
+| ------------- | -------------- | ----------------------------------------- |
+| not in a turn | any            | send after the oldest is 5 s old (`auto`) |
+| in a turn     | an urgent one  | send after 5 s as a steer                 |
+| in a turn     | none urgent    | hold                                      |
 
 Urgent: `asks`, and `red` on a pull request that is not a draft. Because the decision is taken
 from the current state on a clock, no edge can be missed: a turn end seen only by a snapshot
@@ -139,13 +139,13 @@ whole payload.
 
 ## MCP tools (server `t3-companion`)
 
-| tool       | does                                                                                          |
-| ---------- | --------------------------------------------------------------------------------------------- |
+| tool       | does                                                                                                             |
+| ---------- | ---------------------------------------------------------------------------------------------------------------- |
 | `watch`    | with no target: makes the caller a caller. With `thread` or `pr` (and `green`): watches it and returns its state |
-| `unwatch`  | ends a watch (`thread`, `pr`), cancels a reminder (`reminder`), or stops everything (`all`)    |
-| `watching` | the caller's watches with their current state, its reminders, and its pending events           |
-| `remind`   | `in` (seconds) or `at` (ISO time), and `text`                                                  |
-| `events`   | hands over pending events now (they will not come in a digest), or one event's payload by `id` |
+| `unwatch`  | ends a watch (`thread`, `pr`), cancels a reminder (`reminder`), or stops everything (`all`)                      |
+| `watching` | the caller's watches with their current state, its reminders, and its pending events                             |
+| `remind`   | `in` (seconds) or `at` (ISO time), and `text`                                                                    |
+| `events`   | hands over pending events now (they will not come in a digest), or one event's payload by `id`                   |
 
 ## storage
 

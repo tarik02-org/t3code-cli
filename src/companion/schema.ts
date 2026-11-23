@@ -15,112 +15,34 @@ export const ThreadRefInput = Schema.Struct({
 });
 export type ThreadRefInput = typeof ThreadRefInput.Type;
 
-/**
- * What a thread leaf waits for. `idle` is a run that ended, with or without the thread's own
- * background work still pending; `finished` is idle with none pending. `stalled` is work the
- * thread awaits still pending long after its run. `message` is an assistant message newer than
- * the wait.
- */
-export const ThreadIs = Schema.Literals([
-  "idle",
-  "finished",
-  "needs-input",
-  "needs-approval",
-  "failed",
-  "stalled",
-  "message",
-]);
-export type ThreadIs = typeof ThreadIs.Type;
+/** What a watch follows, as the key events and watches are stored under. */
+export const threadSubject = (ref: ThreadRef) => `thread:${threadRefKey(ref)}`;
+export const pullRequestSubject = (pr: string) => `pr:${pr}`;
+export const reminderSubject = (id: number) => `reminder:${id}`;
 
 /**
- * What a pull request leaf waits for, on the PR's current head. `comment` and `new-head` are
- * newer than the wait; `comment` counts people's comments and reviews, not bots'.
+ * Everything the companion reports. Thread: `asks` is a pending question or approval, `done` a
+ * turn that ended with nothing the thread resumes on, `failed` a failed run, `stuck` awaited
+ * work that made no progress. Pull request: `red` is a failing check on the head, `green` every
+ * check passed (only when asked for), `comment` a person's comment or review.
  */
-export const PullRequestIs = Schema.Literals([
-  "checks-done",
-  "green",
+export const EventKind = Schema.Literals([
+  "asks",
+  "done",
+  "failed",
+  "stuck",
   "red",
-  "mergeable",
-  "conflicting",
-  "draft",
-  "ready",
+  "conflict",
+  "comment",
   "merged",
   "closed",
-  "comment",
-  "new-head",
+  "green",
+  "reminder",
 ]);
-export type PullRequestIs = typeof PullRequestIs.Type;
+export type EventKind = typeof EventKind.Type;
 
-export const ThreadLeaf = Schema.Struct({
-  thread: Schema.String,
-  environment: Schema.optional(Schema.String),
-  is: ThreadIs,
-  /** For `stalled`: how long after the run the awaited work may stay pending. Default 30. */
-  minutes: Schema.optional(Schema.Number),
-});
-export type ThreadLeaf = typeof ThreadLeaf.Type;
-
-export const PullRequestLeaf = Schema.Struct({
-  /** `owner/repo#123`. */
-  pr: Schema.String,
-  is: PullRequestIs,
-});
-export type PullRequestLeaf = typeof PullRequestLeaf.Type;
-
-/** True once this many seconds have passed since the wait was made, or last fired. */
-export const AfterLeaf = Schema.Struct({ after: Schema.Number });
-export type AfterLeaf = typeof AfterLeaf.Type;
-
-export type Condition =
-  | ThreadLeaf
-  | PullRequestLeaf
-  | AfterLeaf
-  | { readonly any: ReadonlyArray<Condition> }
-  | { readonly all: ReadonlyArray<Condition> }
-  | { readonly not: Condition };
-
-const nested = Schema.suspend((): Schema.Codec<Condition> => Condition);
-
-export const Condition: Schema.Codec<Condition> = Schema.Union([
-  ThreadLeaf,
-  PullRequestLeaf,
-  AfterLeaf,
-  Schema.Struct({ any: Schema.Array(nested) }),
-  Schema.Struct({ all: Schema.Array(nested) }),
-  Schema.Struct({ not: nested }),
-]);
-
-/**
- * How a fired wait reaches its owner: `steer` at once, into a running turn if there is one;
- * `turn-end` once the owner's turn is over, together with whatever else fired; `none` not at
- * all, to be picked up from the list.
- */
-export const WakePolicy = Schema.Literals(["steer", "turn-end", "none"]);
-export type WakePolicy = typeof WakePolicy.Type;
-
-export const Truth = Schema.Literals(["true", "false", "unknown"]);
-export type Truth = typeof Truth.Type;
-
-/** One leaf of a condition against the current state. */
-export const LeafTruth = Schema.Struct({
-  leaf: Schema.String,
-  state: Truth,
-  /** What the state is, in words: enough for a wake message's line. */
-  detail: Schema.String,
-});
-export type LeafTruth = typeof LeafTruth.Type;
-
-export const ThreadPayload = Schema.Struct({
-  environment: Schema.String,
-  threadId: Schema.String,
-  title: Schema.String,
-  state: Schema.String,
-  /** The thread's own background work still pending. */
-  pendingTasks: Schema.Array(Schema.String),
-  /** The last assistant message, up to 10,000 characters. */
-  lastMessage: Schema.NullOr(Schema.String),
-});
-export type ThreadPayload = typeof ThreadPayload.Type;
+/** Every kind asks its caller to act, except the `green` it asked to hear. */
+export const isActionable = (kind: EventKind) => kind !== "green";
 
 export const PullRequestRemark = Schema.Struct({
   author: Schema.String,
@@ -131,6 +53,12 @@ export const PullRequestRemark = Schema.Struct({
 });
 export type PullRequestRemark = typeof PullRequestRemark.Type;
 
+export const PullRequestCheck = Schema.Struct({
+  name: Schema.String,
+  url: Schema.NullOr(Schema.String),
+});
+export type PullRequestCheck = typeof PullRequestCheck.Type;
+
 /** A pull request as GitHub reports it for its current head. */
 export const PullRequestView = Schema.Struct({
   /** `owner/repo#123`. */
@@ -140,116 +68,179 @@ export const PullRequestView = Schema.Struct({
   state: Schema.Literals(["open", "closed", "merged"]),
   draft: Schema.Boolean,
   head: Schema.String,
-  /** Checks on the head: how many there are, and the names of the failing and pending ones. */
+  /** How many checks the head has, cancelled and ignored ones included. */
   checks: Schema.Int,
-  failing: Schema.Array(Schema.String),
+  /** Checks that really failed: not cancelled, skipped or on the ignore list. */
+  failing: Schema.Array(PullRequestCheck),
   pending: Schema.Array(Schema.String),
   mergeable: Schema.Literals(["mergeable", "conflicting", "unknown"]),
   /** Recent comments and reviews, oldest first. */
   remarks: Schema.Array(PullRequestRemark),
+  /** GraphQL points left this hour, when GitHub said. */
+  rateLimitRemaining: Schema.NullOr(Schema.Int),
 });
 export type PullRequestView = typeof PullRequestView.Type;
 
-export const WaitResult = Schema.Struct({
-  outcome: Schema.Literals(["matched", "timeout"]),
-  at: Schema.String,
-  leaves: Schema.Array(LeafTruth),
-  threads: Schema.Array(ThreadPayload),
-  pullRequests: Schema.Array(PullRequestView),
+/** A pull request a thread links, with the head the companion last read for it. */
+export const LinkedPullRequest = Schema.Struct({
+  pr: Schema.String,
+  url: Schema.String,
+  state: Schema.NullOr(Schema.String),
+  head: Schema.NullOr(Schema.String),
 });
-export type WaitResult = typeof WaitResult.Type;
+export type LinkedPullRequest = typeof LinkedPullRequest.Type;
 
-export const Wait = Schema.Struct({
-  id: Schema.Int,
-  owner: ThreadRef,
-  label: Schema.NullOr(Schema.String),
-  condition: Condition,
-  wake: WakePolicy,
-  /** Fires again each time the condition becomes true after having been false. */
-  repeat: Schema.Boolean,
-  deadlineAt: Schema.NullOr(Schema.String),
-  createdAt: Schema.String,
-  status: Schema.Literals(["pending", "fired", "timeout", "cancelled"]),
-});
-export type Wait = typeof Wait.Type;
-
-/** A pending wait as its owner sees it. */
-export const PendingWait = Schema.Struct({
-  id: Schema.Int,
-  label: Schema.NullOr(Schema.String),
-  condition: Schema.String,
-  wake: WakePolicy,
-  repeat: Schema.Boolean,
-  deadlineAt: Schema.NullOr(Schema.String),
-  createdAt: Schema.String,
-  leaves: Schema.Array(LeafTruth),
-});
-export type PendingWait = typeof PendingWait.Type;
-
-/** One firing of a wait. */
-export const FiredWait = Schema.Struct({
-  id: Schema.Int,
-  label: Schema.NullOr(Schema.String),
-  condition: Schema.String,
-  /** The wake message's line for it. */
+/** What an event carries; each kind fills the fields that describe it. */
+export const EventPayload = Schema.Struct({
+  /** The thread's or pull request's title, or the reminder's text. */
+  title: Schema.String,
+  /** A `t3-thread://` link or the pull request's URL. */
+  link: Schema.NullOr(Schema.String),
+  /** The event in one line, as the digest words it. */
   summary: Schema.String,
-  result: WaitResult,
+  runId: Schema.optional(Schema.String),
+  /** How the run ended: `completed`, `interrupted`, `cancelled`, … */
+  outcome: Schema.optional(Schema.String),
+  /** The thread's last assistant message, up to 10,000 characters. */
+  lastMessage: Schema.optional(Schema.NullOr(Schema.String)),
+  /** The last message closes on a question. */
+  question: Schema.optional(Schema.Boolean),
+  /** Background work the thread left running without waiting on it. */
+  leftRunning: Schema.optional(Schema.Array(Schema.String)),
+  /** Work the thread waits on. */
+  awaiting: Schema.optional(Schema.Array(Schema.String)),
+  error: Schema.optional(Schema.NullOr(Schema.String)),
+  requestId: Schema.optional(Schema.String),
+  requestKind: Schema.optional(Schema.String),
+  pullRequests: Schema.optional(Schema.Array(LinkedPullRequest)),
+  head: Schema.optional(Schema.String),
+  draft: Schema.optional(Schema.Boolean),
+  failing: Schema.optional(Schema.Array(PullRequestCheck)),
+  pendingChecks: Schema.optional(Schema.Int),
+  remark: Schema.optional(PullRequestRemark),
+  dueAt: Schema.optional(Schema.String),
 });
-export type FiredWait = typeof FiredWait.Type;
+export type EventPayload = typeof EventPayload.Type;
 
-export const WaitRequest = Schema.Struct({
-  owner: ThreadRefInput,
-  /** Decoded as a {@link Condition} by the daemon, so a bad one is refused with its reason. */
-  condition: Schema.Unknown,
-  /** Seconds from now after which the wait fires with outcome `timeout`. */
-  deadline: Schema.optional(Schema.Number),
-  wake: Schema.optional(WakePolicy),
-  label: Schema.optional(Schema.String),
-  repeat: Schema.optional(Schema.Boolean),
-});
-export type WaitRequest = typeof WaitRequest.Type;
-
-export const WaitCreated = Schema.Struct({
+export const CompanionEvent = Schema.Struct({
   id: Schema.Int,
-  /** Set when the condition already held, so the wait fired on the spot. */
-  fired: Schema.NullOr(FiredWait),
-  leaves: Schema.Array(LeafTruth),
+  caller: ThreadRef,
+  /** `thread:<env>/<id>`, `pr:<owner>/<repo>#<n>` or `reminder:<id>`. */
+  subject: Schema.String,
+  kind: EventKind,
+  /** The transition it reports: a run, a request, a head, a comment. One event per key. */
+  key: Schema.String,
+  /** Steers into the caller's running turn. */
+  urgent: Schema.Boolean,
+  at: Schema.String,
+  /**
+   * `pending` until a digest carries it; `taken` when the caller collected it itself; `dropped`
+   * when it stopped holding before it was sent.
+   */
+  state: Schema.Literals(["pending", "delivered", "taken", "dropped"]),
+  payload: EventPayload,
 });
-export type WaitCreated = typeof WaitCreated.Type;
+export type CompanionEvent = typeof CompanionEvent.Type;
 
-export const WaitNowRequest = Schema.Struct({
-  owner: ThreadRefInput,
-  condition: Schema.Unknown,
-  /** Seconds to block for. */
-  timeout: Schema.Number,
+/** What a watch has already reported, so each transition is reported once. */
+export const WatchMemory = Schema.Struct({
+  asks: Schema.optional(Schema.String),
+  done: Schema.optional(Schema.String),
+  failed: Schema.optional(Schema.String),
+  stuck: Schema.optional(Schema.String),
+  red: Schema.optional(Schema.String),
+  green: Schema.optional(Schema.String),
+  conflict: Schema.optional(Schema.String),
+  /** URLs of the comments and reviews already reported, newest last. */
+  remarks: Schema.optional(Schema.Array(Schema.String)),
+  /** The first read only records what it finds: the caller already knows it. */
+  baseline: Schema.optional(Schema.Boolean),
 });
-export type WaitNowRequest = typeof WaitNowRequest.Type;
+export type WatchMemory = typeof WatchMemory.Type;
 
-export const WaitsRequest = Schema.Struct({
-  /** Every owner's waits when omitted. */
-  owner: Schema.optional(ThreadRefInput),
-  /** Hand over the waits that fired without a wake, so the next call no longer lists them. */
-  collect: Schema.Boolean,
+/** Why a caller watches something: it launched or wrote to it, named it, or a thread links it. */
+export const WatchOrigin = Schema.Literals(["launched", "sent", "explicit", "linked"]);
+export type WatchOrigin = typeof WatchOrigin.Type;
+
+/** One watch as its caller sees it. */
+export const WatchView = Schema.Struct({
+  subject: Schema.String,
+  title: Schema.String,
+  link: Schema.NullOr(Schema.String),
+  origin: WatchOrigin,
+  since: Schema.String,
+  /** Where the thread or pull request stands now, in words. */
+  state: Schema.String,
 });
-export type WaitsRequest = typeof WaitsRequest.Type;
+export type WatchView = typeof WatchView.Type;
 
-export const WaitsListing = Schema.Struct({
-  pending: Schema.Array(Schema.Struct({ owner: ThreadRef, ...PendingWait.fields })),
-  fired: Schema.Array(FiredWait),
-});
-export type WaitsListing = typeof WaitsListing.Type;
-
-export const WaitSelection = Schema.Struct({
-  owner: ThreadRefInput,
-  ids: Schema.Array(Schema.Int),
-});
-export type WaitSelection = typeof WaitSelection.Type;
-
-export const WaitResultRequest = Schema.Struct({
-  owner: ThreadRefInput,
+export const Reminder = Schema.Struct({
   id: Schema.Int,
+  dueAt: Schema.String,
+  text: Schema.String,
 });
-export type WaitResultRequest = typeof WaitResultRequest.Type;
+export type Reminder = typeof Reminder.Type;
+
+export const WatchRequest = Schema.Struct({
+  caller: ThreadRefInput,
+  /** A thread to watch; with neither this nor `pr` the call only makes the caller known. */
+  thread: Schema.optional(ThreadRefInput),
+  /** `owner/repo#123` or the pull request's URL. */
+  pr: Schema.optional(Schema.String),
+  green: Schema.optional(Schema.Boolean),
+});
+export type WatchRequest = typeof WatchRequest.Type;
+
+export const WatchResult = Schema.Struct({
+  /** Null when the call named nothing to watch. */
+  watch: Schema.NullOr(WatchView),
+  threads: Schema.Int,
+  pullRequests: Schema.Int,
+});
+export type WatchResult = typeof WatchResult.Type;
+
+export const UnwatchRequest = Schema.Struct({
+  caller: ThreadRefInput,
+  thread: Schema.optional(ThreadRefInput),
+  pr: Schema.optional(Schema.String),
+  reminder: Schema.optional(Schema.Int),
+  /** Stop everything: the caller is forgotten with its watches, reminders and pending events. */
+  all: Schema.optional(Schema.Boolean),
+});
+export type UnwatchRequest = typeof UnwatchRequest.Type;
+
+export const WatchingRequest = Schema.Struct({
+  /** Every caller when omitted. */
+  caller: Schema.optional(ThreadRefInput),
+});
+export type WatchingRequest = typeof WatchingRequest.Type;
+
+export const CallerWatching = Schema.Struct({
+  caller: ThreadRef,
+  threads: Schema.Array(WatchView),
+  pullRequests: Schema.Array(WatchView),
+  reminders: Schema.Array(Reminder),
+  /** Events no digest has carried yet. */
+  pending: Schema.Array(CompanionEvent),
+});
+export type CallerWatching = typeof CallerWatching.Type;
+
+export const RemindRequest = Schema.Struct({
+  caller: ThreadRefInput,
+  /** Seconds from now. */
+  in: Schema.optional(Schema.Number),
+  /** An ISO 8601 time. */
+  at: Schema.optional(Schema.String),
+  text: Schema.String,
+});
+export type RemindRequest = typeof RemindRequest.Type;
+
+export const EventsRequest = Schema.Struct({
+  caller: ThreadRefInput,
+  /** One event's whole payload, whatever its state; otherwise the pending ones are handed over. */
+  id: Schema.optional(Schema.Int),
+});
+export type EventsRequest = typeof EventsRequest.Type;
 
 export const CompanionEnvironmentStatus = Schema.Struct({
   name: Schema.String,

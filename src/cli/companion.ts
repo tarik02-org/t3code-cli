@@ -10,7 +10,11 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { Command, Flag } from "effect/cli";
 
 import { loadT3CliEnv } from "../config/env/env.ts";
-import { readCompanionRuntime, withCompanionClient } from "../companion/client.ts";
+import {
+  readCompanionRuntime,
+  withCompanionClient,
+  withRunningCompanion,
+} from "../companion/client.ts";
 import { installAutostart, uninstallAutostart } from "../companion/autostart.ts";
 import { runCompanionDaemon } from "../companion/daemon.ts";
 import { CompanionNotRunningError } from "../companion/error.ts";
@@ -24,10 +28,10 @@ import {
   makeCompanionAgentSender,
   spawnDetachedCompanion,
 } from "../companion/runtime.ts";
-import type { CompanionHealth } from "../companion/schema.ts";
+import type { CallerWatching, CompanionHealth } from "../companion/schema.ts";
 import { T3Version } from "../version/service.ts";
 import { extraArgsConfig } from "./extra-args.ts";
-import { formatFlag } from "./flags.ts";
+import { formatFlag, threadFlag } from "./flags.ts";
 import { resolveOutputFormat } from "./format/output.ts";
 import { T3Output } from "./output/service.ts";
 import { CliRuntime } from "./runtime/service.ts";
@@ -44,14 +48,48 @@ const envsFlag = Flag.String("env").pipe(
   Flag.atLeast(0),
 );
 
-const runArguments = (port: number, env: ReadonlyArray<string>, logFile: string) => [
+const ignoreChecksFlag = Flag.String("ignore-check").pipe(
+  Flag.withDescription(
+    "Check name that never makes a pull request red; * matches any characters; repeat for several",
+  ),
+  Flag.atLeast(0),
+);
+
+const stuckMinutesFlag = Flag.Int("stuck-minutes").pipe(
+  Flag.withDescription(
+    "Minutes a thread may wait on its own background work with no progress (default 30)",
+  ),
+  Flag.optional,
+);
+
+const daemonFlags = {
+  port: portFlag,
+  env: envsFlag,
+  ignoreCheck: ignoreChecksFlag,
+  stuckMinutes: stuckMinutesFlag,
+};
+
+const runArguments = (
+  input: {
+    readonly port: number;
+    readonly env: ReadonlyArray<string>;
+    readonly ignoreCheck: ReadonlyArray<string>;
+    readonly stuckMinutes: Option.Option<number>;
+  },
+  logFile: string,
+) => [
   "companion",
   "run",
   "--port",
-  String(port),
+  String(input.port),
   "--log-file",
   logFile,
-  ...env.flatMap((name) => ["--env", name]),
+  ...input.env.flatMap((name) => ["--env", name]),
+  ...input.ignoreCheck.flatMap((name) => ["--ignore-check", name]),
+  ...Option.match(input.stuckMinutes, {
+    onNone: () => [],
+    onSome: (minutes) => ["--stuck-minutes", String(minutes)],
+  }),
 ];
 
 const startupRetry = { schedule: Schedule.spaced(Duration.millis(250)), times: 60 };
@@ -90,15 +128,14 @@ const runningHealth = readCompanionRuntime().pipe(
 const runCommand = Command.make(
   "run",
   {
-    port: portFlag,
-    env: envsFlag,
+    ...daemonFlags,
     logFile: Flag.String("log-file").pipe(
       Flag.withDescription("Append logs to this file instead of stderr"),
       Flag.optional,
     ),
     ...extraArgsConfig,
   },
-  ({ port, env, logFile }) => {
+  ({ port, env, ignoreCheck, stuckMinutes, logFile }) => {
     const program = Effect.gen(function* () {
       const version = yield* T3Version;
       // Autostart and a manual start can race; the second one leaves the running daemon alone.
@@ -114,6 +151,8 @@ const runCommand = Command.make(
           pid: companionProcessId(),
           version: version.version,
           environments: env,
+          ignoreChecks: ignoreCheck,
+          stuckMinutes: Option.getOrUndefined(stuckMinutes),
         },
         connectStoredEnvironment,
         makeCompanionAgentSender,
@@ -140,8 +179,8 @@ const runCommand = Command.make(
 
 const startCommand = Command.make(
   "start",
-  { port: portFlag, env: envsFlag, format: formatFlag, ...extraArgsConfig },
-  ({ port, env, format }) =>
+  { ...daemonFlags, format: formatFlag, ...extraArgsConfig },
+  ({ format, ...daemon }) =>
     Effect.gen(function* () {
       const output = yield* T3Output;
       const cliRuntime = yield* CliRuntime;
@@ -155,7 +194,7 @@ const startCommand = Command.make(
       }
       const paths = yield* resolveCompanionPaths();
       yield* (yield* FileSystem.FileSystem).makeDirectory(paths.stateDir, { recursive: true });
-      yield* spawnDetachedCompanion(runArguments(port, env, paths.logFile));
+      yield* spawnDetachedCompanion(runArguments(daemon, paths.logFile));
       const health = yield* runningHealth.pipe(
         Effect.retry(startupRetry),
         Effect.mapError(
@@ -224,15 +263,15 @@ const stopCommand = Command.make("stop", { ...extraArgsConfig }, () =>
 
 const installCommand = Command.make(
   "install",
-  { port: portFlag, env: envsFlag, format: formatFlag, ...extraArgsConfig },
-  ({ port, env, format }) =>
+  { ...daemonFlags, format: formatFlag, ...extraArgsConfig },
+  ({ format, ...daemon }) =>
     Effect.gen(function* () {
       const output = yield* T3Output;
       const cliRuntime = yield* CliRuntime;
       const t3CliEnv = yield* loadT3CliEnv;
       const paths = yield* resolveCompanionPaths();
       yield* (yield* FileSystem.FileSystem).makeDirectory(paths.stateDir, { recursive: true });
-      const target = yield* companionAutostartTarget(runArguments(port, env, paths.logFile));
+      const target = yield* companionAutostartTarget(runArguments(daemon, paths.logFile));
       const result = yield* installAutostart(target);
       if (resolveOutputFormat(format, cliRuntime, t3CliEnv, "json") === "json") {
         return yield* output.printJson({ ...result, command: target.command });
@@ -265,14 +304,70 @@ const uninstallCommand = Command.make(
     }),
 ).pipe(Command.withDescription("stop starting the companion at login"));
 
+function formatWatching(callers: ReadonlyArray<CallerWatching>): string {
+  if (callers.length === 0) {
+    return "no callers";
+  }
+  return callers
+    .flatMap((caller) => [
+      `${caller.caller.environment}/${caller.caller.threadId}`,
+      ...[...caller.threads, ...caller.pullRequests].map(
+        (watch) => `  ${watch.subject} "${watch.title}" (${watch.origin}): ${watch.state}`,
+      ),
+      ...caller.reminders.map(
+        (reminder) => `  reminder ${reminder.id} at ${reminder.dueAt}: ${reminder.text}`,
+      ),
+      ...caller.pending.map(
+        (event) =>
+          `  pending [${event.id}] ${event.kind} ${event.subject}: ${event.payload.summary}`,
+      ),
+    ])
+    .join("\n");
+}
+
+const watchingCommand = Command.make(
+  "watching",
+  {
+    thread: threadFlag,
+    callerEnv: Flag.String("caller-env").pipe(
+      Flag.withDescription("Environment of the caller thread (default: the default environment)"),
+      Flag.optional,
+    ),
+    format: formatFlag,
+    ...extraArgsConfig,
+  },
+  ({ thread, callerEnv, format }) =>
+    Effect.gen(function* () {
+      const output = yield* T3Output;
+      const cliRuntime = yield* CliRuntime;
+      const t3CliEnv = yield* loadT3CliEnv;
+      const callers = yield* withRunningCompanion((client) =>
+        client.watching({
+          caller: Option.match(thread, {
+            onNone: () => undefined,
+            onSome: (threadId) => ({ threadId, environment: Option.getOrUndefined(callerEnv) }),
+          }),
+        }),
+      );
+      return yield* resolveOutputFormat(format, cliRuntime, t3CliEnv, "json") === "json"
+        ? output.printJson(callers)
+        : output.printInfo(formatWatching(callers));
+    }).pipe(withHttp),
+).pipe(
+  Command.withDescription(
+    "list what the companion watches for each caller, or for one with --thread",
+  ),
+);
+
 export function createCompanionCommand() {
   return Command.make("companion").pipe(
     Command.withDescription(
-      "long-lived daemon that watches threads and serves an inbox over MCP (http://127.0.0.1:<port>/mcp)",
+      "long-lived daemon that tells a coordinating agent what needs it in its threads and pull requests, over MCP (http://127.0.0.1:<port>/mcp)",
     ),
     Command.withSubcommands([
       startCommand,
       statusCommand,
+      watchingCommand,
       stopCommand,
       installCommand,
       uninstallCommand,

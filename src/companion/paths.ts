@@ -4,15 +4,23 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 
 const StateDirConfig = Config.all({
+  stateDir: Config.String("T3CLI_COMPANION_STATE_DIR").pipe(Config.option),
   localAppData: Config.String("LOCALAPPDATA").pipe(Config.option),
   xdgStateHome: Config.String("XDG_STATE_HOME").pipe(Config.option),
   home: Config.String("HOME").pipe(Config.option),
 });
 
-/** `%LOCALAPPDATA%\t3cli` on Windows, `$XDG_STATE_HOME/t3cli` (default `~/.local/state`) elsewhere. */
+/**
+ * `T3CLI_COMPANION_STATE_DIR` when set, which is how a second companion runs beside the first.
+ * Otherwise `%LOCALAPPDATA%\t3cli` on Windows, `$XDG_STATE_HOME/t3cli` (default
+ * `~/.local/state`) elsewhere.
+ */
 export const resolveCompanionStateDir = Effect.fn("resolveCompanionStateDir")(function* () {
   const path = yield* Path.Path;
   const config = yield* StateDirConfig;
+  if (Option.isSome(config.stateDir)) {
+    return config.stateDir.value;
+  }
   if (Option.isSome(config.localAppData)) {
     return path.join(config.localAppData.value, "t3cli");
   }

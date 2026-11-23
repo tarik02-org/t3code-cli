@@ -4,7 +4,7 @@ import { fromPartial } from "@total-typescript/shoehorn";
 
 type Shell = OrchestrationV2ThreadShell;
 
-/** An idle thread whose run `run-1` completed at `completedAtMs`. */
+/** A thread whose run `run-1` completed at `completedAtMs` and left nothing pending. */
 export function makeShell(
   overrides: Partial<Shell> & { readonly completedAtMs?: number } = {},
 ): Shell {
@@ -29,6 +29,8 @@ export function makeShell(
     latestVisibleMessage: null,
     lastError: null,
     pullRequests: [],
+    lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: "thread-a" },
+    itemCount: 0,
     settledOverride: null,
     settledAt: null,
     archivedAt: null,
@@ -44,30 +46,3 @@ export const monitorTask = {
   taskId: "task-1",
   description: "Watching CI",
 };
-
-export function makePullRequest(input: {
-  readonly number: number;
-  readonly isDraft: boolean;
-  readonly checksState: "passing" | "failing" | "pending" | null;
-  readonly state?: "open" | "closed" | "merged";
-  readonly headSha?: string;
-  readonly failedChecks?: ReadonlyArray<string>;
-}): NonNullable<Shell["pullRequests"]>[number] {
-  return fromPartial({
-    ...(input.headSha === undefined
-      ? {}
-      : { watch: { headSha: input.headSha, failedChecks: input.failedChecks ?? [] } }),
-    host: "github.com",
-    repository: "acme/repo",
-    number: input.number,
-    url: `https://github.com/acme/repo/pull/${input.number}`,
-    source: "agent",
-    snapshot: {
-      state: input.state ?? "open",
-      headBranch: "feature",
-      isDraft: input.isDraft,
-      checksState: input.checksState,
-      mergeability: "mergeable",
-    },
-  });
-}
